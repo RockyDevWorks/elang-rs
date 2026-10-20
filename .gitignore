@@ -1,0 +1,23 @@
+# Rust build output
+/target
+**/*.rs.bk
+
+# Keep Cargo.lock committed: this repo ships binaries and requires reproducible,
+# pinned dependency builds (see SECURITY.md). Do NOT ignore Cargo.lock.
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Local scratch logs used during development
+/*.log
+build_*.log
+test_*.log
+clippy_*.log
+
+# Fuzzing artifacts
+/fuzz/target
+/fuzz/corpus
+/fuzz/artifacts

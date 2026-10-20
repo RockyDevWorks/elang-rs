@@ -1,0 +1,15 @@
+[package]
+name = "elang-kdl"
+description = "ELANG constrained KDL 2.0 parsing and canonical emission."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+elang-core.workspace = true

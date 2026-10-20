@@ -1,0 +1,10 @@
+# ELANG is a byte-exact format; keep line endings deterministic across platforms.
+* text=auto eol=lf
+
+# Treat known binary / fixture artifacts as binary so Git never rewrites bytes.
+*.elang   binary
+*.eld     binary
+*.epf     binary
+*.bin     binary
+*.sha256  text eol=lf
+fixtures/**/golden/** binary

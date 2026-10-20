@@ -1,0 +1,15 @@
+[package]
+name = "elang-container"
+description = "ELANG binary container: header, index, footer, frame I/O and reader/writer."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+elang-core.workspace = true

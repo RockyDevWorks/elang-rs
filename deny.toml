@@ -1,0 +1,32 @@
+# cargo-deny configuration (REQ-GOV-SUPPLY-001). See docs/supply-chain.md.
+
+[advisories]
+# Fail CI on known security advisories for any dependency.
+yanked = "deny"
+
+[licenses]
+# Permissive licenses compatible with Apache-2.0. Adding a copyleft dependency
+# requires an ADR and an explicit exception here.
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "ISC",
+    "Zlib",
+]
+confidence-threshold = 0.9
+
+[bans]
+# Reproducibility: avoid accidental multiple versions of the same crate.
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+# Only crates.io and the project's own git sources are allowed.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

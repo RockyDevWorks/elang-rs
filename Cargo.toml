@@ -1,0 +1,71 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/elang-core",
+    "crates/elang-container",
+    "crates/elang-kdl",
+    "crates/elang-epf",
+    "crates/elang-eld",
+    "crates/elang-repertoire",
+    "crates/elang-integrity",
+    "crates/elang-conformance",
+    "crates/elang-cli",
+]
+
+# Centralized package metadata inherited by every crate via `package.workspace = true`.
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+license = "Apache-2.0"
+repository = "https://github.com/elang-lang/elang-rs"
+authors = ["ELANG Project"]
+
+# Centralized, pinned dependency versions (T0012). Individual crates opt in with
+# `dep.workspace = true`. Keep these exact; supply-chain policy is in SECURITY.md.
+[workspace.dependencies]
+# Internal crates
+elang-core = { path = "crates/elang-core", version = "0.1.0" }
+elang-container = { path = "crates/elang-container", version = "0.1.0" }
+elang-kdl = { path = "crates/elang-kdl", version = "0.1.0" }
+elang-epf = { path = "crates/elang-epf", version = "0.1.0" }
+elang-eld = { path = "crates/elang-eld", version = "0.1.0" }
+elang-repertoire = { path = "crates/elang-repertoire", version = "0.1.0" }
+elang-integrity = { path = "crates/elang-integrity", version = "0.1.0" }
+elang-conformance = { path = "crates/elang-conformance", version = "0.1.0" }
+
+# External crates (pinned). These are introduced only as the phases that need
+# them land; declaring the pinned version here keeps it reviewable in one place.
+sha2 = "=0.10.8"
+
+# Workspace-wide lint policy (T0215). Untrusted-input safety is enforced by
+# denying panic-prone constructs. These are inherited via `[lints] workspace = true`.
+[workspace.lints.rust]
+unsafe_code = "warn"          # allowed only at audited FFI boundaries (libzstd), see SECURITY.md
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+# Deny panic-prone operations on untrusted data.
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+indexing_slicing = "warn"
+# Catches unchecked integer math on untrusted input; explicit `checked_*` helpers
+# (Phase 2) are the sanctioned alternative.
+arithmetic_side_effects = "warn"
+cast_possible_truncation = "warn"
+cast_sign_loss = "warn"
+cast_possible_wrap = "warn"
+
+[profile.release]
+# Deterministic, reproducible release builds (T1615).
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+overflow-checks = true
+
+[profile.dev]
+# Keep overflow checks on in dev too: the spec requires checked arithmetic on
+# untrusted input, and this catches accidental unchecked math early.
+overflow-checks = true

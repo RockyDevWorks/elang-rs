@@ -1,0 +1,25 @@
+[package]
+name = "elang-cli"
+description = "ELANG command-line interface: inspect, verify, validate, pack, unpack, canonicalize."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "elang"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+elang-core.workspace = true
+elang-container.workspace = true
+elang-epf.workspace = true
+elang-eld.workspace = true
+elang-integrity.workspace = true
+elang-repertoire.workspace = true
+elang-conformance.workspace = true

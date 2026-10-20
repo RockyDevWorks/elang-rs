@@ -1,0 +1,9 @@
+# Pinned toolchain for reproducible ELANG builds.
+#
+# MSRV policy: ELANG targets a minimum supported Rust version (MSRV) documented
+# in README.md. CI runs both the pinned `channel` below and the MSRV to catch
+# accidental use of newer language features. Bump this channel only via an ADR.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
+profile = "default"

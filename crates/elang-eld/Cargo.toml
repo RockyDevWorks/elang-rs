@@ -1,0 +1,17 @@
+[package]
+name = "elang-eld"
+description = "ELANG phoneme model, IPA validation, `when` AST and canonical ELD serialization."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+elang-core.workspace = true
+elang-kdl.workspace = true
+elang-repertoire.workspace = true
