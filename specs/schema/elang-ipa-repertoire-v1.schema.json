@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://elang.dev/specs/schema/elang-ipa-repertoire-v1.schema.json",
+  "title": "ELANG IPA Repertoire v1",
+  "description": "Strict JSON Schema for the ELANG IPA repertoire v1. This schema defines the SHAPE only. The approved symbol inventories themselves are an OPEN ARTIFACT (T0106-T0110) and MUST be produced from the pinned 2026 IPA chart and reviewed before use; this schema embeds no symbols. See docs/open-artifacts.md and ADR 0003.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "repertoire_version",
+    "unicode_version",
+    "ipa_chart",
+    "base_symbols",
+    "combining_diacritics",
+    "spacing_modifiers"
+  ],
+  "properties": {
+    "repertoire_version": {
+      "description": "Repertoire schema/content version. Fixed at 1 for this schema.",
+      "const": 1
+    },
+    "unicode_version": {
+      "description": "Pinned Unicode Standard version the data was validated against.",
+      "const": "18.0.0"
+    },
+    "ipa_chart": {
+      "description": "Pinned IPA chart issue the inventory derives from.",
+      "const": "2026"
+    },
+    "base_symbols": {
+      "description": "Approved IPA base symbols. Unique and sorted (see json-encoding-policy.md). Empty until the inventory is ratified.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/symbolEntry" },
+      "uniqueItems": true
+    },
+    "combining_diacritics": {
+      "description": "Approved IPA combining diacritics. Unique and sorted.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/symbolEntry" },
+      "uniqueItems": true
+    },
+    "spacing_modifiers": {
+      "description": "Approved IPA spacing modifier letters. Unique and sorted.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/symbolEntry" },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "symbolEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["symbol", "codepoints"],
+      "properties": {
+        "symbol": {
+          "description": "The NFC string form of the symbol (one or more Unicode scalar values).",
+          "type": "string",
+          "minLength": 1
+        },
+        "codepoints": {
+          "description": "Ordered list of Unicode scalar values composing the NFC symbol, as U+XXXX uppercase-hex strings.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^U\\+[0-9A-F]{4,6}$"
+          }
+        },
+        "name": {
+          "description": "Optional Unicode character name or IPA description for human review.",
+          "type": "string"
+        }
+      }
+    }
+  }
+}

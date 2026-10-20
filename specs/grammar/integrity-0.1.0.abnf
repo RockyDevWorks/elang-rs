@@ -1,0 +1,33 @@
+; ELANG META-INF/integrity.kdl v0.1.0 grammar
+; Tasks: T0103, T0105. Ratified by ADR 0004. Source: steering §2, §3.3, §12.3.
+;
+; Semantic grammar over a conforming KDL 2.0 parse tree. Counts, coverage and
+; uniqueness that ABNF cannot express are the [C-nn] constraints in
+; integrity-0.1.0.md and are normative.
+;
+; KDL node shape: name (SP arg)* (SP key "=" value)* (SP "{" children "}")?
+
+; Exactly one top-level `integrity` node: zero args/props, nonempty block.
+integrity-document = node-integrity
+node-integrity = %s"integrity" block-open integ-body block-close
+
+; algorithm first (exactly once), then one or more resource entries.
+integ-body   = node-algorithm 1*node-resource          ; order per canonical; [C-01]
+
+node-algorithm = %s"algorithm" SP algo-value no-block  ; "sha-256" only [C-02]
+algo-value   = %s"sha-256"
+
+; resource: one path arg + exactly one `sha256` property; no block.
+node-resource = %s"resource" SP path-value SP sha256-prop no-block   ; [C-03]
+path-value   = kdl-string          ; steering §3.4 resource path
+sha256-prop  = %s"sha256" "=" hex64-value
+hex64-value  = 64HEXLOWER          ; [0-9a-f]{64}
+HEXLOWER     = %x30-39 / %x61-66   ; 0-9 a-f
+
+; Shared terminals
+kdl-string   = %s"<KDL-2.0 string value>"
+no-block     = ""
+block-open   = SP "{"
+block-close  = "}"
+SP           = 1*WSP
+WSP          = %x09 / %x20         ; illustrative; KDL 2.0 defines the set

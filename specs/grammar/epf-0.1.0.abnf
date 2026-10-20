@@ -1,0 +1,75 @@
+; ELANG EPF (package.epf) v0.1.0 grammar
+; Task: T0101. Normative source: steering .kiro/steering/elang.md §5 (LOCKED).
+;
+; This ABNF describes the *semantic* shape of a package.epf document on top of
+; a conforming KDL 2.0 parse tree. The surface syntax (whitespace, string
+; escapes, comments, line endings) is governed by KDL 2.0 itself and, for
+; canonical output, by specs/canonical/epf-canonical-serialization.md (T0104).
+;
+; Reading guide:
+;   node<Name>  = one KDL node whose name is <Name>.
+;   A KDL node is:  name (SP arg)* (SP key "=" value)* (SP "{" children "}")?
+; The rules below constrain, for each ELANG node: its name, the exact count and
+; type of arguments, that it has zero properties, and whether a child block is
+; required/forbidden. Counts and cross-field equalities that ABNF cannot express
+; are stated as [C-nn] constraints in epf-0.1.0.md and are normative.
+
+; ---------------------------------------------------------------------------
+; Document
+; ---------------------------------------------------------------------------
+; Exactly five top-level nodes, each present exactly once, in any source order.
+; Unknown top-level nodes, duplicates, top-level args/properties are rejected.
+epf-document   = top-node-set            ; see [C-01] exactly-once, any order
+
+top-node-set   = node-epf
+                 node-eld
+                 node-language-version
+                 node-metadata
+                 node-manifest           ; set semantics: order-free, each once
+
+; ---------------------------------------------------------------------------
+; Version nodes: one string arg, zero properties, no child block.
+; ---------------------------------------------------------------------------
+node-epf              = %s"epf"              SP version-value       no-block
+node-eld              = %s"eld"              SP version-value       no-block
+node-language-version = %s"language-version" SP semver-value        no-block
+
+; `epf` and `eld` values are fixed for this implementation; see [C-02].
+version-value  = kdl-string                  ; MUST equal "0.1.0" for epf/eld
+semver-value   = kdl-string                  ; strict MAJOR.MINOR.PATCH, [C-05]
+
+; ---------------------------------------------------------------------------
+; metadata block: zero args, zero properties, mandatory nonempty child block.
+; ---------------------------------------------------------------------------
+node-metadata  = %s"metadata" block-open metadata-body block-close
+
+; identifier required once; name required once; description optional (<=1).
+; Unknown child nodes, duplicate singletons, extra args, nested blocks: reject.
+metadata-body  = md-identifier md-name [ md-description ]   ; order-free, [C-06]
+
+md-identifier  = %s"identifier"  SP urn-value   no-block
+md-name        = %s"name"        SP name-value  no-block
+md-description = %s"description"  SP desc-value  no-block
+
+urn-value      = kdl-string      ; urn:elang:language:<ns>:<name>:<ver>, [C-07]
+name-value     = kdl-string      ; nonempty, <=256 UTF-8 bytes, [C-08]
+desc-value     = kdl-string      ; <=4096 UTF-8 bytes, may be empty, [C-09]
+
+; ---------------------------------------------------------------------------
+; manifest block: zero args, zero properties, mandatory nonempty child block.
+; Exactly one `phonemes` entry; no `modules`; no other entries.
+; ---------------------------------------------------------------------------
+node-manifest  = %s"manifest" block-open manifest-body block-close
+manifest-body  = mf-phonemes                                 ; exactly one [C-10]
+mf-phonemes    = %s"phonemes" SP eld-path-value no-block
+eld-path-value = kdl-string    ; nonempty, safe rel. path, ".eld", indexed [C-11]
+
+; ---------------------------------------------------------------------------
+; Shared terminals (semantic; KDL 2.0 defines the concrete lexical forms)
+; ---------------------------------------------------------------------------
+kdl-string     = %s"<KDL-2.0 string value>"  ; a single KDL string-typed value
+no-block       = ""                          ; node MUST NOT have a child block
+block-open     = SP "{"
+block-close    = "}"
+SP             = 1*WSP                        ; KDL 2.0 whitespace
+WSP            = %x09 / %x20                  ; illustrative; KDL defines the set

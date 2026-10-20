@@ -1,6 +1,6 @@
 [package]
 name = "elang-repertoire"
-description = "ELANG pinned Unicode 18.0.0 and IPA repertoire allowlist with verification."
+description = "ELANG IPA Repertoire v1 allowlist and identifier validation (Unicode 18.0.0 via elang-unicode)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,3 +13,7 @@ workspace = true
 
 [dependencies]
 elang-core.workspace = true
+elang-unicode.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true

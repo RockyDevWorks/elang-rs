@@ -1,0 +1,726 @@
+{
+  "repertoire_version": 1,
+  "unicode_version": "18.0.0",
+  "ipa_chart": "2026",
+  "base_symbols": [
+    {
+      "symbol": "a",
+      "codepoints": ["U+0061"],
+      "name": "LATIN SMALL LETTER A"
+    },
+    {
+      "symbol": "b",
+      "codepoints": ["U+0062"],
+      "name": "LATIN SMALL LETTER B"
+    },
+    {
+      "symbol": "c",
+      "codepoints": ["U+0063"],
+      "name": "LATIN SMALL LETTER C"
+    },
+    {
+      "symbol": "d",
+      "codepoints": ["U+0064"],
+      "name": "LATIN SMALL LETTER D"
+    },
+    {
+      "symbol": "e",
+      "codepoints": ["U+0065"],
+      "name": "LATIN SMALL LETTER E"
+    },
+    {
+      "symbol": "f",
+      "codepoints": ["U+0066"],
+      "name": "LATIN SMALL LETTER F"
+    },
+    {
+      "symbol": "h",
+      "codepoints": ["U+0068"],
+      "name": "LATIN SMALL LETTER H"
+    },
+    {
+      "symbol": "i",
+      "codepoints": ["U+0069"],
+      "name": "LATIN SMALL LETTER I"
+    },
+    {
+      "symbol": "j",
+      "codepoints": ["U+006A"],
+      "name": "LATIN SMALL LETTER J"
+    },
+    {
+      "symbol": "k",
+      "codepoints": ["U+006B"],
+      "name": "LATIN SMALL LETTER K"
+    },
+    {
+      "symbol": "l",
+      "codepoints": ["U+006C"],
+      "name": "LATIN SMALL LETTER L"
+    },
+    {
+      "symbol": "m",
+      "codepoints": ["U+006D"],
+      "name": "LATIN SMALL LETTER M"
+    },
+    {
+      "symbol": "n",
+      "codepoints": ["U+006E"],
+      "name": "LATIN SMALL LETTER N"
+    },
+    {
+      "symbol": "o",
+      "codepoints": ["U+006F"],
+      "name": "LATIN SMALL LETTER O"
+    },
+    {
+      "symbol": "p",
+      "codepoints": ["U+0070"],
+      "name": "LATIN SMALL LETTER P"
+    },
+    {
+      "symbol": "q",
+      "codepoints": ["U+0071"],
+      "name": "LATIN SMALL LETTER Q"
+    },
+    {
+      "symbol": "r",
+      "codepoints": ["U+0072"],
+      "name": "LATIN SMALL LETTER R"
+    },
+    {
+      "symbol": "s",
+      "codepoints": ["U+0073"],
+      "name": "LATIN SMALL LETTER S"
+    },
+    {
+      "symbol": "t",
+      "codepoints": ["U+0074"],
+      "name": "LATIN SMALL LETTER T"
+    },
+    {
+      "symbol": "u",
+      "codepoints": ["U+0075"],
+      "name": "LATIN SMALL LETTER U"
+    },
+    {
+      "symbol": "v",
+      "codepoints": ["U+0076"],
+      "name": "LATIN SMALL LETTER V"
+    },
+    {
+      "symbol": "w",
+      "codepoints": ["U+0077"],
+      "name": "LATIN SMALL LETTER W"
+    },
+    {
+      "symbol": "x",
+      "codepoints": ["U+0078"],
+      "name": "LATIN SMALL LETTER X"
+    },
+    {
+      "symbol": "y",
+      "codepoints": ["U+0079"],
+      "name": "LATIN SMALL LETTER Y"
+    },
+    {
+      "symbol": "z",
+      "codepoints": ["U+007A"],
+      "name": "LATIN SMALL LETTER Z"
+    },
+    {
+      "symbol": "æ",
+      "codepoints": ["U+00E6"],
+      "name": "LATIN SMALL LETTER AE"
+    },
+    {
+      "symbol": "ç",
+      "codepoints": ["U+00E7"],
+      "name": "LATIN SMALL LETTER C WITH CEDILLA"
+    },
+    {
+      "symbol": "ð",
+      "codepoints": ["U+00F0"],
+      "name": "LATIN SMALL LETTER ETH"
+    },
+    {
+      "symbol": "ø",
+      "codepoints": ["U+00F8"],
+      "name": "LATIN SMALL LETTER O WITH STROKE"
+    },
+    {
+      "symbol": "ħ",
+      "codepoints": ["U+0127"],
+      "name": "LATIN SMALL LETTER H WITH STROKE"
+    },
+    {
+      "symbol": "ŋ",
+      "codepoints": ["U+014B"],
+      "name": "LATIN SMALL LETTER ENG"
+    },
+    {
+      "symbol": "œ",
+      "codepoints": ["U+0153"],
+      "name": "LATIN SMALL LIGATURE OE"
+    },
+    {
+      "symbol": "ǀ",
+      "codepoints": ["U+01C0"],
+      "name": "LATIN LETTER DENTAL CLICK"
+    },
+    {
+      "symbol": "ǁ",
+      "codepoints": ["U+01C1"],
+      "name": "LATIN LETTER LATERAL CLICK"
+    },
+    {
+      "symbol": "ǂ",
+      "codepoints": ["U+01C2"],
+      "name": "LATIN LETTER ALVEOLAR CLICK"
+    },
+    {
+      "symbol": "ǃ",
+      "codepoints": ["U+01C3"],
+      "name": "LATIN LETTER RETROFLEX CLICK"
+    },
+    {
+      "symbol": "ɐ",
+      "codepoints": ["U+0250"],
+      "name": "LATIN SMALL LETTER TURNED A"
+    },
+    {
+      "symbol": "ɑ",
+      "codepoints": ["U+0251"],
+      "name": "LATIN SMALL LETTER ALPHA"
+    },
+    {
+      "symbol": "ɒ",
+      "codepoints": ["U+0252"],
+      "name": "LATIN SMALL LETTER TURNED ALPHA"
+    },
+    {
+      "symbol": "ɓ",
+      "codepoints": ["U+0253"],
+      "name": "LATIN SMALL LETTER B WITH HOOK"
+    },
+    {
+      "symbol": "ɔ",
+      "codepoints": ["U+0254"],
+      "name": "LATIN SMALL LETTER OPEN O"
+    },
+    {
+      "symbol": "ɕ",
+      "codepoints": ["U+0255"],
+      "name": "LATIN SMALL LETTER C WITH CURL"
+    },
+    {
+      "symbol": "ɖ",
+      "codepoints": ["U+0256"],
+      "name": "LATIN SMALL LETTER D WITH TAIL"
+    },
+    {
+      "symbol": "ɗ",
+      "codepoints": ["U+0257"],
+      "name": "LATIN SMALL LETTER D WITH HOOK"
+    },
+    {
+      "symbol": "ɘ",
+      "codepoints": ["U+0258"],
+      "name": "LATIN SMALL LETTER REVERSED E"
+    },
+    {
+      "symbol": "ə",
+      "codepoints": ["U+0259"],
+      "name": "LATIN SMALL LETTER SCHWA"
+    },
+    {
+      "symbol": "ɛ",
+      "codepoints": ["U+025B"],
+      "name": "LATIN SMALL LETTER OPEN E"
+    },
+    {
+      "symbol": "ɜ",
+      "codepoints": ["U+025C"],
+      "name": "LATIN SMALL LETTER REVERSED OPEN E"
+    },
+    {
+      "symbol": "ɞ",
+      "codepoints": ["U+025E"],
+      "name": "LATIN SMALL LETTER CLOSED REVERSED OPEN E"
+    },
+    {
+      "symbol": "ɟ",
+      "codepoints": ["U+025F"],
+      "name": "LATIN SMALL LETTER DOTLESS J WITH STROKE"
+    },
+    {
+      "symbol": "ɠ",
+      "codepoints": ["U+0260"],
+      "name": "LATIN SMALL LETTER G WITH HOOK"
+    },
+    {
+      "symbol": "ɡ",
+      "codepoints": ["U+0261"],
+      "name": "LATIN SMALL LETTER SCRIPT G"
+    },
+    {
+      "symbol": "ɢ",
+      "codepoints": ["U+0262"],
+      "name": "LATIN LETTER SMALL CAPITAL G"
+    },
+    {
+      "symbol": "ɣ",
+      "codepoints": ["U+0263"],
+      "name": "LATIN SMALL LETTER GAMMA"
+    },
+    {
+      "symbol": "ɤ",
+      "codepoints": ["U+0264"],
+      "name": "LATIN SMALL LETTER RAMS HORN"
+    },
+    {
+      "symbol": "ɥ",
+      "codepoints": ["U+0265"],
+      "name": "LATIN SMALL LETTER TURNED H"
+    },
+    {
+      "symbol": "ɦ",
+      "codepoints": ["U+0266"],
+      "name": "LATIN SMALL LETTER H WITH HOOK"
+    },
+    {
+      "symbol": "ɧ",
+      "codepoints": ["U+0267"],
+      "name": "LATIN SMALL LETTER HENG WITH HOOK"
+    },
+    {
+      "symbol": "ɨ",
+      "codepoints": ["U+0268"],
+      "name": "LATIN SMALL LETTER I WITH STROKE"
+    },
+    {
+      "symbol": "ɪ",
+      "codepoints": ["U+026A"],
+      "name": "LATIN LETTER SMALL CAPITAL I"
+    },
+    {
+      "symbol": "ɬ",
+      "codepoints": ["U+026C"],
+      "name": "LATIN SMALL LETTER L WITH BELT"
+    },
+    {
+      "symbol": "ɭ",
+      "codepoints": ["U+026D"],
+      "name": "LATIN SMALL LETTER L WITH RETROFLEX HOOK"
+    },
+    {
+      "symbol": "ɮ",
+      "codepoints": ["U+026E"],
+      "name": "LATIN SMALL LETTER LEZH"
+    },
+    {
+      "symbol": "ɯ",
+      "codepoints": ["U+026F"],
+      "name": "LATIN SMALL LETTER TURNED M"
+    },
+    {
+      "symbol": "ɰ",
+      "codepoints": ["U+0270"],
+      "name": "LATIN SMALL LETTER TURNED M WITH LONG LEG"
+    },
+    {
+      "symbol": "ɱ",
+      "codepoints": ["U+0271"],
+      "name": "LATIN SMALL LETTER M WITH HOOK"
+    },
+    {
+      "symbol": "ɲ",
+      "codepoints": ["U+0272"],
+      "name": "LATIN SMALL LETTER N WITH LEFT HOOK"
+    },
+    {
+      "symbol": "ɳ",
+      "codepoints": ["U+0273"],
+      "name": "LATIN SMALL LETTER N WITH RETROFLEX HOOK"
+    },
+    {
+      "symbol": "ɴ",
+      "codepoints": ["U+0274"],
+      "name": "LATIN LETTER SMALL CAPITAL N"
+    },
+    {
+      "symbol": "ɵ",
+      "codepoints": ["U+0275"],
+      "name": "LATIN SMALL LETTER BARRED O"
+    },
+    {
+      "symbol": "ɶ",
+      "codepoints": ["U+0276"],
+      "name": "LATIN LETTER SMALL CAPITAL OE"
+    },
+    {
+      "symbol": "ɸ",
+      "codepoints": ["U+0278"],
+      "name": "LATIN SMALL LETTER PHI"
+    },
+    {
+      "symbol": "ɹ",
+      "codepoints": ["U+0279"],
+      "name": "LATIN SMALL LETTER TURNED R"
+    },
+    {
+      "symbol": "ɺ",
+      "codepoints": ["U+027A"],
+      "name": "LATIN SMALL LETTER TURNED R WITH LONG LEG"
+    },
+    {
+      "symbol": "ɻ",
+      "codepoints": ["U+027B"],
+      "name": "LATIN SMALL LETTER TURNED R WITH HOOK"
+    },
+    {
+      "symbol": "ɽ",
+      "codepoints": ["U+027D"],
+      "name": "LATIN SMALL LETTER R WITH TAIL"
+    },
+    {
+      "symbol": "ɾ",
+      "codepoints": ["U+027E"],
+      "name": "LATIN SMALL LETTER R WITH FISHHOOK"
+    },
+    {
+      "symbol": "ʀ",
+      "codepoints": ["U+0280"],
+      "name": "LATIN LETTER SMALL CAPITAL R"
+    },
+    {
+      "symbol": "ʁ",
+      "codepoints": ["U+0281"],
+      "name": "LATIN LETTER SMALL CAPITAL INVERTED R"
+    },
+    {
+      "symbol": "ʂ",
+      "codepoints": ["U+0282"],
+      "name": "LATIN SMALL LETTER S WITH HOOK"
+    },
+    {
+      "symbol": "ʃ",
+      "codepoints": ["U+0283"],
+      "name": "LATIN SMALL LETTER ESH"
+    },
+    {
+      "symbol": "ʄ",
+      "codepoints": ["U+0284"],
+      "name": "LATIN SMALL LETTER DOTLESS J WITH STROKE AND HOOK"
+    },
+    {
+      "symbol": "ʈ",
+      "codepoints": ["U+0288"],
+      "name": "LATIN SMALL LETTER T WITH RETROFLEX HOOK"
+    },
+    {
+      "symbol": "ʉ",
+      "codepoints": ["U+0289"],
+      "name": "LATIN SMALL LETTER U BAR"
+    },
+    {
+      "symbol": "ʊ",
+      "codepoints": ["U+028A"],
+      "name": "LATIN SMALL LETTER UPSILON"
+    },
+    {
+      "symbol": "ʋ",
+      "codepoints": ["U+028B"],
+      "name": "LATIN SMALL LETTER V WITH HOOK"
+    },
+    {
+      "symbol": "ʌ",
+      "codepoints": ["U+028C"],
+      "name": "LATIN SMALL LETTER TURNED V"
+    },
+    {
+      "symbol": "ʍ",
+      "codepoints": ["U+028D"],
+      "name": "LATIN SMALL LETTER TURNED W"
+    },
+    {
+      "symbol": "ʎ",
+      "codepoints": ["U+028E"],
+      "name": "LATIN SMALL LETTER TURNED Y"
+    },
+    {
+      "symbol": "ʏ",
+      "codepoints": ["U+028F"],
+      "name": "LATIN LETTER SMALL CAPITAL Y"
+    },
+    {
+      "symbol": "ʐ",
+      "codepoints": ["U+0290"],
+      "name": "LATIN SMALL LETTER Z WITH RETROFLEX HOOK"
+    },
+    {
+      "symbol": "ʑ",
+      "codepoints": ["U+0291"],
+      "name": "LATIN SMALL LETTER Z WITH CURL"
+    },
+    {
+      "symbol": "ʒ",
+      "codepoints": ["U+0292"],
+      "name": "LATIN SMALL LETTER EZH"
+    },
+    {
+      "symbol": "ʔ",
+      "codepoints": ["U+0294"],
+      "name": "LATIN LETTER GLOTTAL STOP"
+    },
+    {
+      "symbol": "ʕ",
+      "codepoints": ["U+0295"],
+      "name": "LATIN LETTER PHARYNGEAL VOICED FRICATIVE"
+    },
+    {
+      "symbol": "ʘ",
+      "codepoints": ["U+0298"],
+      "name": "LATIN LETTER BILABIAL CLICK"
+    },
+    {
+      "symbol": "ʙ",
+      "codepoints": ["U+0299"],
+      "name": "LATIN LETTER SMALL CAPITAL B"
+    },
+    {
+      "symbol": "ʛ",
+      "codepoints": ["U+029B"],
+      "name": "LATIN LETTER SMALL CAPITAL G WITH HOOK"
+    },
+    {
+      "symbol": "ʜ",
+      "codepoints": ["U+029C"],
+      "name": "LATIN LETTER SMALL CAPITAL H"
+    },
+    {
+      "symbol": "ʝ",
+      "codepoints": ["U+029D"],
+      "name": "LATIN SMALL LETTER J WITH CROSSED-TAIL"
+    },
+    {
+      "symbol": "ʟ",
+      "codepoints": ["U+029F"],
+      "name": "LATIN LETTER SMALL CAPITAL L"
+    },
+    {
+      "symbol": "ʡ",
+      "codepoints": ["U+02A1"],
+      "name": "LATIN LETTER GLOTTAL STOP WITH STROKE"
+    },
+    {
+      "symbol": "ʢ",
+      "codepoints": ["U+02A2"],
+      "name": "LATIN LETTER REVERSED GLOTTAL STOP WITH STROKE"
+    },
+    {
+      "symbol": "β",
+      "codepoints": ["U+03B2"],
+      "name": "GREEK SMALL LETTER BETA"
+    },
+    {
+      "symbol": "θ",
+      "codepoints": ["U+03B8"],
+      "name": "GREEK SMALL LETTER THETA"
+    },
+    {
+      "symbol": "χ",
+      "codepoints": ["U+03C7"],
+      "name": "GREEK SMALL LETTER CHI"
+    },
+    {
+      "symbol": "ⱱ",
+      "codepoints": ["U+2C71"],
+      "name": "LATIN SMALL LETTER V WITH RIGHT HOOK"
+    }
+  ],
+  "combining_diacritics": [
+    {
+      "symbol": "̃",
+      "codepoints": ["U+0303"],
+      "name": "COMBINING TILDE (nasalized)"
+    },
+    {
+      "symbol": "̈",
+      "codepoints": ["U+0308"],
+      "name": "COMBINING DIAERESIS (centralized)"
+    },
+    {
+      "symbol": "̊",
+      "codepoints": ["U+030A"],
+      "name": "COMBINING RING ABOVE (voiceless, above)"
+    },
+    {
+      "symbol": "̘",
+      "codepoints": ["U+0318"],
+      "name": "COMBINING LEFT TACK BELOW (advanced tongue root)"
+    },
+    {
+      "symbol": "̙",
+      "codepoints": ["U+0319"],
+      "name": "COMBINING RIGHT TACK BELOW (retracted tongue root)"
+    },
+    {
+      "symbol": "̚",
+      "codepoints": ["U+031A"],
+      "name": "COMBINING LEFT ANGLE ABOVE (no audible release)"
+    },
+    {
+      "symbol": "̜",
+      "codepoints": ["U+031C"],
+      "name": "COMBINING LEFT HALF RING BELOW (less rounded)"
+    },
+    {
+      "symbol": "̝",
+      "codepoints": ["U+031D"],
+      "name": "COMBINING UP TACK BELOW (raised)"
+    },
+    {
+      "symbol": "̞",
+      "codepoints": ["U+031E"],
+      "name": "COMBINING DOWN TACK BELOW (lowered)"
+    },
+    {
+      "symbol": "̟",
+      "codepoints": ["U+031F"],
+      "name": "COMBINING PLUS SIGN BELOW (advanced)"
+    },
+    {
+      "symbol": "̠",
+      "codepoints": ["U+0320"],
+      "name": "COMBINING MINUS SIGN BELOW (retracted)"
+    },
+    {
+      "symbol": "̤",
+      "codepoints": ["U+0324"],
+      "name": "COMBINING DIAERESIS BELOW (breathy voiced)"
+    },
+    {
+      "symbol": "̥",
+      "codepoints": ["U+0325"],
+      "name": "COMBINING RING BELOW (voiceless)"
+    },
+    {
+      "symbol": "̩",
+      "codepoints": ["U+0329"],
+      "name": "COMBINING VERTICAL LINE BELOW (syllabic)"
+    },
+    {
+      "symbol": "̪",
+      "codepoints": ["U+032A"],
+      "name": "COMBINING BRIDGE BELOW (dental)"
+    },
+    {
+      "symbol": "̫",
+      "codepoints": ["U+032B"],
+      "name": "COMBINING INVERTED DOUBLE ARCH BELOW (labialized, w-variant below)"
+    },
+    {
+      "symbol": "̬",
+      "codepoints": ["U+032C"],
+      "name": "COMBINING CARON BELOW (voiced)"
+    },
+    {
+      "symbol": "̯",
+      "codepoints": ["U+032F"],
+      "name": "COMBINING INVERTED BREVE BELOW (non-syllabic)"
+    },
+    {
+      "symbol": "̰",
+      "codepoints": ["U+0330"],
+      "name": "COMBINING TILDE BELOW (creaky voiced)"
+    },
+    {
+      "symbol": "̴",
+      "codepoints": ["U+0334"],
+      "name": "COMBINING TILDE OVERLAY (velarized or pharyngealized)"
+    },
+    {
+      "symbol": "̹",
+      "codepoints": ["U+0339"],
+      "name": "COMBINING RIGHT HALF RING BELOW (more rounded)"
+    },
+    {
+      "symbol": "̺",
+      "codepoints": ["U+033A"],
+      "name": "COMBINING INVERTED BRIDGE BELOW (apical)"
+    },
+    {
+      "symbol": "̻",
+      "codepoints": ["U+033B"],
+      "name": "COMBINING SQUARE BELOW (laminal)"
+    },
+    {
+      "symbol": "̼",
+      "codepoints": ["U+033C"],
+      "name": "COMBINING SEAGULL BELOW (linguolabial)"
+    },
+    {
+      "symbol": "̽",
+      "codepoints": ["U+033D"],
+      "name": "COMBINING X ABOVE (mid-centralized)"
+    },
+    {
+      "symbol": "͆",
+      "codepoints": ["U+0346"],
+      "name": "COMBINING BRIDGE ABOVE (dental/raised variant)"
+    },
+    {
+      "symbol": "͈",
+      "codepoints": ["U+0348"],
+      "name": "COMBINING DOUBLE VERTICAL LINE BELOW (strong articulation)"
+    }
+  ],
+  "spacing_modifiers": [
+    {
+      "symbol": "ʰ",
+      "codepoints": ["U+02B0"],
+      "name": "MODIFIER LETTER SMALL H (aspirated)"
+    },
+    {
+      "symbol": "ʲ",
+      "codepoints": ["U+02B2"],
+      "name": "MODIFIER LETTER SMALL Y (palatalized)"
+    },
+    {
+      "symbol": "ʷ",
+      "codepoints": ["U+02B7"],
+      "name": "MODIFIER LETTER SMALL W (labialized)"
+    },
+    {
+      "symbol": "ʼ",
+      "codepoints": ["U+02BC"],
+      "name": "MODIFIER LETTER APOSTROPHE (ejective)"
+    },
+    {
+      "symbol": "˞",
+      "codepoints": ["U+02DE"],
+      "name": "MODIFIER LETTER RHOTIC HOOK (rhoticity)"
+    },
+    {
+      "symbol": "ˠ",
+      "codepoints": ["U+02E0"],
+      "name": "MODIFIER LETTER SMALL GAMMA (velarized)"
+    },
+    {
+      "symbol": "ˡ",
+      "codepoints": ["U+02E1"],
+      "name": "MODIFIER LETTER SMALL L (lateral release)"
+    },
+    {
+      "symbol": "ˤ",
+      "codepoints": ["U+02E4"],
+      "name": "MODIFIER LETTER SMALL REVERSED GLOTTAL STOP (pharyngealized)"
+    },
+    {
+      "symbol": "ⁿ",
+      "codepoints": ["U+207F"],
+      "name": "SUPERSCRIPT LATIN SMALL LETTER N (nasal release)"
+    }
+  ]
+}

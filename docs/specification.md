@@ -37,21 +37,34 @@ IPA tie-bar/modifier/length rules, the `when` grammar and semantics, the
 canonical ELD serialization and the Canonical Condition Sorting Key v1.
 
 **Open artifacts** (must be produced and reviewed before the conformance freeze;
-see [ADR 0003](decisions/0003-open-normative-artifacts.md)):
+see [ADR 0003](decisions/0003-open-normative-artifacts.md) and the live tracker
+in [`open-artifacts.md`](open-artifacts.md)). Machine-checkable artifacts land
+under the top-level [`specs/`](../specs/) directory.
+
+Still open — **blocked on external pinned source data**, must not be fabricated:
 
 1. Exact approved IPA allowlist (base symbols, combining diacritics, spacing
    modifiers) for the pinned 2026 IPA chart, with classification and
    canonical-decomposition handling.
-2. The canonical (RFC 8785 JCS) SHA-256 digest of the IPA repertoire JSON.
-3. The complete `META-INF/integrity.kdl` normative grammar and its canonical
-   serialization.
-4. The canonical EPF and integrity KDL serializer profiles.
-5. Machine-checkable ELD/EPF grammars and JSON Schema.
-6. Reference golden fixtures, reproducibility hashes and the error-code
-   registry.
+2. The canonical (RFC 8785 JCS) SHA-256 digest of the IPA repertoire JSON (the
+   *method* is published in `specs/schema/json-encoding-policy.md`; the digest
+   itself awaits the reviewed inventory).
 
-Until each is ratified, the corresponding code path must not embed guessed
-inventories or fabricated hashes.
+Ratified in Phase 1 (decision-only / contract-derived artifacts):
+
+3. The complete `META-INF/integrity.kdl` grammar and canonical serialization —
+   ADR 0004, `specs/grammar/integrity-0.1.0.md`.
+4. The canonical EPF serializer profile — ADR 0005,
+   `specs/canonical/epf-canonical-serialization.md`.
+5. Machine-checkable ELD/EPF grammars and the repertoire JSON Schema —
+   `specs/grammar/{epf,eld}-0.1.0.md` and
+   `specs/schema/elang-ipa-repertoire-v1.schema.json`.
+6. The error-code registry — `specs/registry/error-codes.md`. Reference golden
+   fixtures and reproducibility hashes still depend on the IPA/Unicode data and
+   remain open.
+
+Until each open item is ratified, the corresponding code path must not embed
+guessed inventories or fabricated hashes.
 
 ## Reproducibility and pinning
 

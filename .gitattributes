@@ -8,3 +8,10 @@
 *.bin     binary
 *.sha256  text eol=lf
 fixtures/**/golden/** binary
+
+# Pinned normative source documents: never rewrite bytes (their SHA-256 is
+# recorded in specs/sources/SOURCES.md).
+specs/sources/*.pdf   binary
+specs/sources/*.html  binary
+# UCD source files: keep exact bytes so their pinned SHA-256 stays stable.
+specs/sources/ucd-18.0.0/*.txt binary

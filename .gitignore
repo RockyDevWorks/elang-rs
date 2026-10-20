@@ -11,8 +11,10 @@ Thumbs.db
 *.swp
 *~
 
-# Local scratch logs used during development
+# Local scratch logs / command-capture files used during development.
+# Root-anchored so they never match tracked data files (e.g. specs/sources/**/*.txt).
 /*.log
+/*.txt
 build_*.log
 test_*.log
 clippy_*.log

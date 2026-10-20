@@ -15,8 +15,13 @@ Implements REQ-GOV-SUPPLY-001 (steering §13; T0012). Complements
   builds).
 - **libzstd:** pinned to **1.5.7** for canonical frame reproducibility; see
   Phase 4 tasks.
-- **Unicode:** pinned to **18.0.0** data vendored into `elang-repertoire`, not
-  resolved from the host.
+- **Unicode:** pinned to **18.0.0**, implemented in the first-party
+  `elang-unicode` crate from the official UCD 18.0.0 files (hashes in
+  `specs/sources/ucd-18.0.0/SOURCES.md`). General_Category and NFC tables are
+  generated from those pinned inputs; NFC passes the official 18.0.0
+  `NormalizationTest.txt` (20,171 rows). No third-party Unicode data crate and
+  no host-OS Unicode behavior. See
+  [ADR 0007](decisions/0007-unicode-engine-icu4x.md).
 
 ## Update process
 

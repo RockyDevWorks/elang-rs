@@ -1,0 +1,86 @@
+; ELANG ELD (phoneme inventory) v0.1.0 grammar
+; Task: T0102. Normative source: steering .kiro/steering/elang.md §6, §8 (LOCKED).
+;
+; Semantic grammar over a conforming KDL 2.0 parse tree. Surface syntax is KDL
+; 2.0; canonical serialization is steering §9 (locked). Counts, uniqueness and
+; cross-references that ABNF cannot express are the [C-nn] constraints in
+; eld-0.1.0.md and are normative.
+;
+; KDL node shape:  name (SP arg)* (SP key "=" value)* (SP "{" children "}")?
+; IPA identifier values (ipa-value) must additionally satisfy the IPA parsing
+; grammar bound to the approved repertoire (T0106-T0110, OPEN ARTIFACT). A
+; validator MUST NOT accept IPA values until that allowlist is ratified.
+
+; ---------------------------------------------------------------------------
+; Document: exactly one top-level `phonemes` node, nonempty explicit block.
+; Empty / whitespace-only / comment-only files are rejected.
+; ---------------------------------------------------------------------------
+eld-document = node-phonemes             ; and nothing else at top level, [C-01]
+
+node-phonemes = %s"phonemes" block-open 1*group block-close   ; zero args/props
+
+; ---------------------------------------------------------------------------
+; Groups
+; ---------------------------------------------------------------------------
+; consonants and vowels are mandatory (each >=1 root); custom groups optional.
+group        = group-consonants / group-vowels / group-custom
+group-consonants = %s"consonants" block-open 1*root block-close
+group-vowels     = %s"vowels"     block-open 1*root block-close
+group-custom     = custom-name    block-open 1*root block-close  ; [C-04]
+custom-name  = %s"<[a-z]+(?:-[a-z]+)*, 1..32 ASCII>"             ; [C-04]
+
+; ---------------------------------------------------------------------------
+; Root phoneme: one IPA string arg, zero properties, mandatory nonempty block.
+; Children: exactly one `roman`, optional one `when`, 0..16 `allophone`.
+; ---------------------------------------------------------------------------
+root         = %s"phoneme" SP ipa-value block-open root-body block-close
+root-body    = node-roman [ node-when ] *allophone               ; order-free [C-07]
+
+; ---------------------------------------------------------------------------
+; Allophone: one IPA string arg, zero properties, direct child of root only.
+; Bare leaf when no fields; nonempty block when a field is present.
+; "allophone X {}" (empty block) is INVALID.
+; ---------------------------------------------------------------------------
+allophone    = allophone-bare / allophone-block
+allophone-bare  = %s"allophone" SP ipa-value no-block            ; [C-10]
+allophone-block = %s"allophone" SP ipa-value block-open allo-body block-close
+allo-body    = [ node-roman ] [ node-when ]                      ; >=1 present [C-11]
+
+; ---------------------------------------------------------------------------
+; roman: scalar leaf, exactly one string arg, no properties, no block.
+; ---------------------------------------------------------------------------
+node-roman   = %s"roman" SP roman-value no-block                 ; [A-Za-z]{1,8} [C-12]
+roman-value  = kdl-string
+
+; ---------------------------------------------------------------------------
+; when: zero or one per root/allophone; explicit braces; >=1 child expression;
+; zero args/properties. No inheritance between root and allophone `when`.
+; ---------------------------------------------------------------------------
+node-when    = %s"when" block-open 1*expr block-close
+expr         = atomic / node-group / node-or
+
+; group: implicit AND of >=2 direct children. or: exactly 2 direct children.
+node-group   = %s"group" block-open 2*expr block-close           ; >=2 [C-14]
+node-or      = %s"or"    block-open expr expr block-close        ; exactly 2 [C-15]
+
+; Four atomic predicates: exactly one string arg, zero properties, no block.
+atomic       = p-word-position / p-syllable-position
+             / p-previous-phoneme / p-next-phoneme
+p-word-position     = %s"word-position"     SP word-pos-value     no-block
+p-syllable-position = %s"syllable-position" SP syll-pos-value     no-block
+p-previous-phoneme  = %s"previous-phoneme"  SP ipa-value          no-block
+p-next-phoneme      = %s"next-phoneme"      SP ipa-value          no-block
+
+word-pos-value = %s"initial" / %s"medial" / %s"final"
+syll-pos-value = %s"onset"   / %s"nucleus" / %s"coda"
+
+; ---------------------------------------------------------------------------
+; Shared terminals
+; ---------------------------------------------------------------------------
+ipa-value    = kdl-string    ; validated IPA identifier (repertoire-bound, OPEN)
+kdl-string   = %s"<KDL-2.0 string value>"
+no-block     = ""            ; node MUST NOT have a child block
+block-open   = SP "{"
+block-close  = "}"
+SP           = 1*WSP
+WSP          = %x09 / %x20   ; illustrative; KDL 2.0 defines the whitespace set

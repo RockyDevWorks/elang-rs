@@ -26,7 +26,28 @@
 | REQ-GOV-OPENART-001 | `docs/open-artifacts.md`, ADR 0003 | files present | Done |
 | REQ-CORE-VERSION-001 (partial) | `elang-core::version_domains` | `version_domains_are_locked` test passes | Done |
 
-## Phases 1–16 — Planned / Blocked
+## Phase 1 (normative artifacts) — partial
+
+| Requirement | Artifact | Evidence | Status |
+|---|---|---|---|
+| REQ-EPF-* (grammar) | `specs/grammar/epf-0.1.0.{abnf,md}` (T0101) | derived from locked §5; JSON-free | Done (artifact) |
+| REQ-ELD-*, REQ-WHEN-* (grammar) | `specs/grammar/eld-0.1.0.{abnf,md}` (T0102) | derived from locked §6/§8 | Done (artifact) |
+| REQ-INTEGRITY-001..008 (grammar) | `specs/grammar/integrity-0.1.0.{abnf,md}`, ADR 0004 (T0103/T0105) | OA-6 ratified | Done (artifact) |
+| REQ-EPF-013, REQ-CANON-001 | `specs/canonical/epf-canonical-serialization.md`, ADR 0005 (T0104) | OA-7 ratified | Done (artifact) |
+| REQ-IPA-004/005 (schema shape) | `specs/schema/elang-ipa-repertoire-v1.schema.json` (T0111) | valid JSON; no symbols | Done (shape only) |
+| REQ-IPA-004/005 (encoding) | `specs/schema/json-encoding-policy.md` (T0112) | JCS method documented | Done (artifact) |
+| REQ-ERR-001..003 | `specs/registry/error-codes.{md,json}` (T0119) | valid JSON; categories+codes | Done (artifact) |
+| REQ-PKG-005 | `specs/registry/resource-policy-v0.1.0.md`, ADR 0006 (T0121) | OA-15 ratified | Done (artifact) |
+| REQ-UNICODE-001..004 | `elang-unicode` (NFC + General_Category + noncharacter) | `elang-unicode` unit tests + NFC conformance (20,171 rows); `elang-repertoire::unicode` adapter tests | Done — Unicode **18.0.0** from pinned UCD (ADR 0007) |
+| T0116 (Unicode reference data) | pinned UCD 18.0.0 (`specs/sources/ucd-18.0.0/`), generated `gc_tables.rs`/`nfc_tables.rs` | official `NormalizationTest.txt` 18.0.0 passes | Done (OA-13 ratified) |
+| REQ-IPA-001..014 (inventory + parser) | `elang-repertoire::repertoire`, `::ipa`; `specs/schema/ipa-v1.json` | `repertoire::tests::*`, `ipa::tests::*`, `chart_crosscheck.rs` (30 tests pass); pinned JCS digest asserted | Done (generated & validated) — ADR 0008; freeze pending Unicode 18.0 + 2nd review |
+| REQ-IPA (digest) | `PINNED_JCS_SHA256` + `canonical_jcs_sha256` | `pinned_digest_matches`, `jcs_digest_is_stable_and_nonempty` | Done |
+
+> "Done (artifact)" means the normative document exists and is ratified; the
+> corresponding Rust validator and its tests move it to a crate section as later
+> phases implement and test against these artifacts.
+
+## Phases 2–16 — Planned / Blocked
 
 The following requirement groups are tracked to their tasks and will move to
 **Scaffolded**/**Done** as each phase lands. None are implemented yet beyond the
@@ -34,9 +55,18 @@ version-domain constants above.
 
 | Requirement group | Owner crate | Tasks | Status |
 |---|---|---|---|
-| REQ-CORE-VERSION-002..004 | elang-core / elang-container | T0202, T1204, T0301 | Planned |
-| REQ-CORE-MODEL-001..008 | elang-core | T0203–T0215 | Planned |
-| REQ-LIMIT-001..010 | elang-kdl / elang-core | T0503–T0515, T0211 | Planned |
+| REQ-CORE-VERSION-001/002 | `elang-core::version` (`SemVer`, `domains`) | `version::tests::*` (strict parse, no leading zeros) | Done |
+| REQ-CORE-VERSION-003/004 | elang-container | T1204, T0301 | Planned (Phase 3) |
+| REQ-CORE-MODEL-001/002 | `elang-core::ids` (`ResourcePath`, `GroupName`, `Romanization`, `IpaIdentifierText`) | `ids::tests::*` | Done |
+| REQ-CORE-MODEL-004 | `elang-core::limits` | `limits::tests::*` | Done |
+| REQ-CORE-MODEL-005 | `elang-core::checked` | `checked::tests::*` (overflow/underflow/OOB) | Done |
+| REQ-CORE-MODEL-006 | `elang-core::bounded` (`ByteBudget`, `BoundedCounter`) | `bounded::tests::*` | Done |
+| REQ-CORE-MODEL-007 | `elang-core::modes` (`Inspected`/`Verified`/`Validated`) | `modes::tests::*` | Done |
+| REQ-CORE-MODEL-008 | workspace lints (`unwrap`/`panic`/`indexing_slicing`/arith) | `cargo clippy -D warnings` clean | Done (enforced) |
+| REQ-CORE-MODEL-003 | elang-epf / elang-eld validated models | T0205 | Planned (Phases 6/9) |
+| REQ-ERR-001/002 | `elang-core::error` (`Category`, `Error`, `Diagnostic`, `KdlSpan`) | `error::tests::*` | Done |
+| REQ-LIMIT-009 | `elang-core::error::Diagnostics` (cap 100, no masking) | `diagnostics_cap_does_not_mask_failure` | Done |
+| REQ-LIMIT-001..008,010 | elang-kdl / elang-eld | T0503–T0515, T0510 | Planned (Phase 5/10) |
 | REQ-BIN-001..018 | elang-container | T0301–T0324 | Planned |
 | REQ-FRAME-001..012 | elang-container | T0401–T0422 | Planned |
 | REQ-READER-001..006 | elang-container | T1201–T1208 | Planned |
@@ -50,7 +80,7 @@ version-domain constants above.
 | REQ-CANON-001..009 | elang-eld | T1101–T1121 | Planned |
 | REQ-WRITER-001..005 | elang-container | T1301–T1309 | Planned |
 | REQ-CLI-001..003 | elang-cli | T1310–T1320 | Planned |
-| REQ-ERR-001..003 | elang-core | T0209, T0210, T0119 | Planned |
+| REQ-ERR-003 (registry artifact) | `specs/registry/error-codes.{md,json}` | present | Done (see Phase 1/2 rows above) |
 | REQ-CONF-001..005 | elang-conformance / ci | T1401–T1420 | Planned |
 | REQ-SEC-001 | all | T1501–T1520 | Planned |
 

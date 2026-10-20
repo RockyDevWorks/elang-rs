@@ -11,10 +11,21 @@
 //! See `.kiro/specs/elang-v0.1.0/design.md` for the crate's role in the overall
 //! architecture and `requirements.md` for the requirements it implements.
 
+pub mod bounded;
+pub mod checked;
+pub mod error;
+pub mod ids;
+pub mod limits;
+pub mod modes;
+pub mod version;
+
+pub use error::{Category, Diagnostic, Diagnostics, Error, KdlSpan, Result};
+
 /// Version-domain constants locked by the ELANG steering contract (§1).
 ///
 /// These version domains are independent of one another; see the steering
 /// document and `requirements.md` (REQ-CORE-VERSION-*) for the normative rules.
+/// Retained for back-compat; [`version::domains`] is the typed home.
 pub mod version_domains {
     /// ELANG specification release this implementation targets.
     pub const SPEC_RELEASE: &str = "0.0.1-1";

@@ -32,3 +32,8 @@ Copy [`0000-template.md`](0000-template.md) to a new numbered file.
 | [0001](0001-record-architecture-decisions.md) | Record architecture decisions | Approved |
 | [0002](0002-crate-decomposition.md) | Nine-crate workspace decomposition | Approved |
 | [0003](0003-open-normative-artifacts.md) | Open normative artifacts are blockers | Approved |
+| [0004](0004-integrity-manifest-grammar.md) | `META-INF/integrity.kdl` grammar + canonical serialization | Approved |
+| [0005](0005-canonical-epf-serialization.md) | Canonical EPF KDL serializer profile | Approved |
+| [0006](0006-resource-and-manifest-policy.md) | Extra-resource / manifest-coverage policy (v0.1.0) | Approved |
+| [0007](0007-unicode-engine-icu4x.md) | Unicode 18.0.0 validation via first-party `elang-unicode` | Approved |
+| [0008](0008-ipa-repertoire-v1.md) | ELANG IPA Repertoire v1 — source, generation and digest | Approved |

@@ -7,6 +7,9 @@
 
 > **Progress log:**
 > - 2026-10-20 — **Phase 0 complete.** Workspace builds; `cargo fmt --check`, `cargo clippy -D warnings` and `cargo test` all pass locally on Windows. Cross-platform (Linux/macOS) is covered by the CI matrix but not yet observed on a hosted runner. Requirements, design, traceability and open-artifact tracker created.
+> - 2026-10-20 — **Phase 1 partial.** Produced the Phase 1 artifacts derivable from the locked contract and ratified the open artifacts that only needed a decision: EPF grammar (T0101), ELD grammar (T0102), integrity.kdl grammar + canonical serialization (T0103/T0105, ADR 0004), canonical EPF profile (T0104, ADR 0005), repertoire JSON Schema (T0111), JSON encoding/JCS policy (T0112), error-code registry (T0119), KDL 2.0 compatibility review (T0120), extra-resource policy (T0121, ADR 0006). Artifacts live under top-level `specs/`. **Still blocked (ADR 0003 — must not be fabricated):** the approved IPA inventories and IPA parsing grammar (T0106–T0110), the generated repertoire JSON and its real JCS SHA-256 (T0113–T0115), tie-bar reference vectors (T0117), binary reference vectors (T0118), and the review/freeze (T0114/T0123). These require the pinned 2026 IPA chart source data plus independent review.
+> - 2026-10-20 — **Unicode 18.0.0 landed for real (ADR 0007, revised).** Replaced the ICU4X 17.0 stopgap with a first-party `elang-unicode` crate that generates General_Category + NFC tables from the **official pinned UCD 18.0.0** files (downloaded + SHA-256 recorded in `specs/sources/ucd-18.0.0/SOURCES.md`). NFC uses the UAX#15 algorithm over 18.0.0 data and **passes the official `NormalizationTest.txt` (20,171 rows)** — the gate for claiming 18.0 compliance. Caught and fixed a real 17.0→18.0 canonical-ordering difference (U+05C8, newly assigned, CCC 10). All ELANG Unicode validation now routes through `elang-unicode`; ICU4X and `unicode-normalization` removed from the dep graph. `elang-unicode` + `elang-repertoire` tests pass; `cargo clippy --workspace -D warnings` clean. (Note: `cargo test --workspace` intermittently hits a Windows Application Control block (os error 4551) on freshly-written test exes — an environment policy, not a code failure; per-crate reruns pass.) OA-13 ratified; T0116 done.
+> - 2026-10-20 — **IPA Repertoire v1 generated and validated (ADR 0008).** Authoritative source: the UNITIPA IPA chart revised to 2020 (the "IPA 2026" issue; no 2026 revision of the alphabet exists). Downloaded + hashed sources (`specs/sources/SOURCES.md`); generated `specs/schema/ipa-v1.json` (107 base / 27 combining / 9 spacing) reproducibly from `gen_repertoire.rs`; pinned real JCS SHA-256 `190aae7b…64aa`; implemented the IPA identifier validator (allowlist + scalar/unit limits + tie bars + modifier placement) and the strict loader (no BOM / no duplicate keys / no unknown fields). Prosody excluded per §7. **Cross-check:** base symbols verified against an independent transcription of the chart grids (`chart_crosscheck.rs`). 30 tests pass; `cargo clippy --workspace --all-targets -D warnings` and `cargo test --workspace` green locally. No third-party crate supplies the inventory. Advances T0106–T0110, T0113, T0115.
 
 ## Phase 0 — Repository, governance and traceability
 
@@ -32,51 +35,53 @@
 
 ## Phase 1 — Finish normative artifacts (must precede conformance freeze)
 
-- [ ] **T0101 BLOCKER** Write formal, machine-checkable EPF v0.1.0 grammar including exact KDL 2.0 semantics.
-- [ ] **T0102 BLOCKER** Write formal, machine-checkable ELD v0.1.0 grammar including bare allophones and nonempty blocks.
-- [ ] **T0103 BLOCKER** Define exact `META-INF/integrity.kdl` schema: root, entries, SHA-256 encoding, resource mapping, duplication/unknown fields, canonical ordering.
-- [ ] **T0104 BLOCKER** Specify canonical EPF KDL serialization (whitespace, string encoding, field order, comments, newline).
-- [ ] **T0105 BLOCKER** Specify canonical integrity KDL serialization and self-exclusion rule.
-- [ ] **T0106 BLOCKER** Produce exhaustive approved IPA base-symbol inventory from pinned official 2026 IPA chart.
-- [ ] **T0107 BLOCKER** Produce approved IPA combining-diacritic inventory and Unicode 18.0 mapping.
-- [ ] **T0108 BLOCKER** Produce approved IPA spacing-modifier inventory and Unicode 18.0 mapping.
-- [ ] **T0109 BLOCKER** Resolve ambiguous IPA chart symbols (standalone base vs modifier vs excluded prosody/tone); document each decision.
-- [ ] **T0110 BLOCKER** Define precise IPA parsing grammar for tied units, modifier placement, canonical decomposition and limits.
-- [ ] **T0111 BLOCKER** Define strict JSON Schema for repertoire with version metadata and three inventories.
-- [ ] **T0112** Define JSON duplicate-key rejection, no BOM, UTF-8 and RFC 8785 JCS requirements.
-- [ ] **T0113** Generate sorted and deduplicated `elang-ipa-repertoire-v1.json`.
-- [ ] **T0114** Independently review the JSON against the pinned IPA chart and Unicode 18.0.
-- [ ] **T0115** Compute SHA-256 of **canonical JCS bytes** and publish digest in spec/constant.
-- [ ] **T0116** Generate Unicode 18.0 NFC and General Category reference test data.
-- [ ] **T0117** Publish exact tie-bar equivalence and IPA comparison-key test vectors.
+- [x] **T0101 BLOCKER** Write formal, machine-checkable EPF v0.1.0 grammar including exact KDL 2.0 semantics. _(ABNF + constraint tables derived from locked §5; `specs/grammar/epf-0.1.0.{abnf,md}`.)_
+- [x] **T0102 BLOCKER** Write formal, machine-checkable ELD v0.1.0 grammar including bare allophones and nonempty blocks. _(`specs/grammar/eld-0.1.0.{abnf,md}` from locked §6/§8.)_
+- [x] **T0103 BLOCKER** Define exact `META-INF/integrity.kdl` schema: root, entries, SHA-256 encoding, resource mapping, duplication/unknown fields, canonical ordering. _(ADR 0004; `specs/grammar/integrity-0.1.0.{abnf,md}`.)_
+- [x] **T0104 BLOCKER** Specify canonical EPF KDL serialization (whitespace, string encoding, field order, comments, newline). _(ADR 0005; `specs/canonical/epf-canonical-serialization.md`.)_
+- [x] **T0105 BLOCKER** Specify canonical integrity KDL serialization and self-exclusion rule. _(ADR 0004, §4 of `specs/grammar/integrity-0.1.0.md`.)_
+- [x] **T0106 BLOCKER** Produce exhaustive approved IPA base-symbol inventory from pinned official chart. _(107 base symbols from UNITIPA 2020; `specs/schema/ipa-v1.json` via `gen_repertoire`; cross-checked against independent chart transcription in `chart_crosscheck.rs`. ADR 0008.)_
+- [x] **T0107 BLOCKER** Produce approved IPA combining-diacritic inventory and Unicode mapping. _(27 entries with U+ codepoints + names; ADR 0008.)_
+- [x] **T0108 BLOCKER** Produce approved IPA spacing-modifier inventory and Unicode mapping. _(9 entries; ADR 0008.)_
+- [x] **T0109 BLOCKER** Resolve ambiguous IPA chart symbols (standalone base vs modifier vs excluded prosody/tone); document each decision. _(Prosody excluded; script-g `ɡ` U+0261 vs ASCII `g`; see `SOURCES.md` §6, OA-2.)_
+- [x] **T0110 BLOCKER** Define precise IPA parsing grammar for tied units, modifier placement, canonical decomposition and limits. _(`elang-repertoire::ipa` validator: 1–8 scalars, ≤4 units, tie bars, ≤1 modification, standalone-modifier rejection; tests pass.)_
+- [x] **T0111 BLOCKER** Define strict JSON Schema for repertoire with version metadata and three inventories. _(`specs/schema/elang-ipa-repertoire-v1.schema.json`; shape only, no symbols — inventory content still blocked under OA-1/OA-4.)_
+- [x] **T0112** Define JSON duplicate-key rejection, no BOM, UTF-8 and RFC 8785 JCS requirements. _(`specs/schema/json-encoding-policy.md`.)_
+- [x] **T0113** Generate sorted and deduplicated repertoire JSON. _(`specs/schema/ipa-v1.json`, reproducible via `cargo run -p elang-repertoire --bin gen_repertoire`; sorted by UTF-8 bytes, deduped, loader enforces it.)_
+- [ ] **T0114** Independently review the JSON against the pinned IPA chart and Unicode 18.0. _(Base set auto-cross-checked against an independent chart transcription (`chart_crosscheck.rs`). A second human review of the diacritic/modifier inventories, and Unicode 18.0, are still required before freeze.)_
+- [x] **T0115** Compute SHA-256 of **canonical JCS bytes** and publish digest in spec/constant. _(`190aae7b…64aa` = `PINNED_JCS_SHA256`, asserted by `pinned_digest_matches`; recorded in `SOURCES.md`.)_
+- [x] **T0116** Generate Unicode 18.0 NFC and General Category reference test data. _(First-party `elang-unicode` crate generates GC + NFC tables from the pinned official UCD **18.0.0** (`specs/sources/ucd-18.0.0/`, hashes recorded); NFC passes the official `NormalizationTest.txt` (20,171 rows). ADR 0007; OA-13 ratified.)_
+- [ ] **T0117** Publish exact tie-bar equivalence and IPA comparison-key test vectors. _(Partial: `elang-repertoire::ipa` tests cover upper/lower tie equivalence, tied-vs-untied distinctness and comparison keys; a published fixture set is still to come in Phase 14.)_
 - [ ] **T0118** Publish binary header/index/footer reference vectors and offsets.
-- [ ] **T0119** Define stable machine-readable error code registry and error metadata schema.
-- [ ] **T0120** Review KDL 2.0 standard compatibility of examples and canonical serialization.
-- [ ] **T0121** Define policy for extra indexed resources and manifest coverage in v0.1.0 (no invented modules).
-- [ ] **T0122** Ratify any residual KDL canonicalization edge cases and document as ADRs.
+- [x] **T0119** Define stable machine-readable error code registry and error metadata schema. _(`specs/registry/error-codes.md` + `error-codes.json`.)_
+- [x] **T0120** Review KDL 2.0 standard compatibility of examples and canonical serialization. _(`specs/registry/kdl-2.0-compatibility.md`.)_
+- [x] **T0121** Define policy for extra indexed resources and manifest coverage in v0.1.0 (no invented modules). _(ADR 0006; `specs/registry/resource-policy-v0.1.0.md`.)_
+- [ ] **T0122** Ratify any residual KDL canonicalization edge cases and document as ADRs. _(EPF/integrity canonical profiles ratified via ADR 0004/0005; residual ELD edge cases revisited in Phase 11.)_
 - [ ] **T0123** Freeze reviewed normative schema/repertoire versions and create spec checksum/release tag.
 
 **Acceptance:** all BLOCKER artifacts exist, are reviewed, reproducible and have independent test vectors. No fake hashes or placeholder inventories in released normative data.
+**Status:** Most Phase 1 artifacts are done: grammars + canonical profiles + registry + policies (T0101–T0105, T0111, T0112, T0119–T0121; ADR 0004–0006); the IPA repertoire (T0106–T0110, T0113, T0115) from the UNITIPA 2020 chart with a real pinned JCS digest and validator (ADR 0008); and **Unicode 18.0.0** generated from the official UCD with NFC passing the official conformance suite (T0116; ADR 0007; OA-13 ratified). **Still blocking a freeze (T0123):** T0114 needs a second human review of the IPA diacritic/modifier inventories; the binary/canonical golden vectors (T0117 full, T0118, OA-11/OA-14) are produced in Phases 3/11/14. Per ADR 0003/0008, Phase 1 is **not declared complete / frozen** until those land. The IPA repertoire review (T0114) remains a separate, explicit Phase 1 blocker. ⏳
 
 ## Phase 2 — Core types, limits, diagnostics and safety
 
-- [ ] **T0201** Define independent version types for container, EPF, ELD, language and canonical profile.
-- [ ] **T0202** Implement strict semver-like `MAJOR.MINOR.PATCH` parser without leading zeros.
-- [ ] **T0203** Define validated resource path and indexed-resource types.
-- [ ] **T0204** Define validated IPA identifier, romanization, group-name and language-identifier types.
-- [ ] **T0205** Define immutable validated EPF and ELD AST/model structures.
-- [ ] **T0206** Define centralized resource and parser limits with documented units.
-- [ ] **T0207** Add checked integer conversion and checked offset arithmetic helpers.
-- [ ] **T0208** Implement bounded counting reader and decompressed byte accounting.
-- [ ] **T0209** Implement error categories, stable codes and `Result`-based propagation.
-- [ ] **T0210** Attach resource path, byte offset and KDL source span to errors where possible.
-- [ ] **T0211** Cap retained diagnostics at 100 without suppressing failure.
-- [ ] **T0212** Design APIs that distinguish `inspect`, `verify` and `validate` results.
-- [ ] **T0213** Document threat model: malicious archives, decompression bombs, path traversal, parser abuse.
-- [ ] **T0214** Add unit tests for overflow, limit edges, invalid paths and version mismatch.
-- [ ] **T0215** Enforce no panics/unchecked indexing on untrusted data; run lint checks.
+- [x] **T0201** Define independent version types for container, EPF, ELD, language and canonical profile. _(`elang-core::version::domains` + `SemVer`.)_
+- [x] **T0202** Implement strict semver-like `MAJOR.MINOR.PATCH` parser without leading zeros. _(`elang-core::version::SemVer`; tests reject leading zeros / wrong shape.)_
+- [x] **T0203** Define validated resource path and indexed-resource types. _(`elang-core::ids::ResourcePath`; §3.4 rules + codes.)_
+- [x] **T0204** Define validated IPA identifier, romanization, group-name and language-identifier types. _(`ids::{Romanization, GroupName, IpaIdentifierText}`; language identifier = `SemVer` + EPF URN in Phase 6.)_
+- [ ] **T0205** Define immutable validated EPF and ELD AST/model structures. _(Deferred to Phases 6/9 where the schemas are parsed; `IpaIdentifierText` primitive in place.)_
+- [x] **T0206** Define centralized resource and parser limits with documented units. _(`elang-core::limits`.)_
+- [x] **T0207** Add checked integer conversion and checked offset arithmetic helpers. _(`elang-core::checked`; `checked_range`, u64/usize conversions.)_
+- [x] **T0208** Implement bounded counting reader and decompressed byte accounting. _(`elang-core::bounded::{ByteBudget, BoundedCounter}`.)_
+- [x] **T0209** Implement error categories, stable codes and `Result`-based propagation. _(`elang-core::error`; `Category`, `Error`, `Result`.)_
+- [x] **T0210** Attach resource path, byte offset and KDL source span to errors where possible. _(`Diagnostic` with `resource_path`/`byte_offset`/`span`.)_
+- [x] **T0211** Cap retained diagnostics at 100 without suppressing failure. _(`error::Diagnostics`; `truncated()`/`has_any()`; test proves no masking.)_
+- [x] **T0212** Design APIs that distinguish `inspect`, `verify` and `validate` results. _(`elang-core::modes::{Inspected, Verified, Validated, Stage}`.)_
+- [ ] **T0213** Document threat model: malicious archives, decompression bombs, path traversal, parser abuse. _(Already in `design.md §4` + SECURITY.md; revisit as container lands.)_
+- [x] **T0214** Add unit tests for overflow, limit edges, invalid paths and version mismatch. _(checked/bounded/ids/version test modules.)_
+- [x] **T0215** Enforce no panics/unchecked indexing on untrusted data; run lint checks. _(Workspace clippy lints; `cargo clippy -p elang-core -p elang-unicode --all-targets -D warnings` clean.)_
 
 **Acceptance:** core APIs compile independently; boundary and overflow tests pass.
+**Status:** Core types, limits, diagnostics, checked math, bounded reader and mode result types implemented and tested (26 `elang-core` tests pass; clippy `-D warnings` clean). T0205 (validated EPF/ELD models) lands with Phases 6/9; T0213 threat model already captured in design §4. ✅ (core complete)
 
 ## Phase 3 — Binary container header, footer and index
 

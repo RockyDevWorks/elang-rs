@@ -1,0 +1,19 @@
+[package]
+name = "elang-unicode"
+description = "ELANG pinned Unicode 18.0.0 General_Category, noncharacter and NFC validation from the official UCD."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# No external Unicode dependency: NFC and General_Category come from tables
+# generated from the pinned UCD 18.0.0 files (see src/bin/gen_tables.rs).
+
+[dev-dependencies]
+# NormalizationTest.txt conformance harness reads the pinned UCD file at test time.

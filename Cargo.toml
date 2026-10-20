@@ -10,6 +10,7 @@ members = [
     "crates/elang-integrity",
     "crates/elang-conformance",
     "crates/elang-cli",
+    "crates/elang-unicode",
 ]
 
 # Centralized package metadata inherited by every crate via `package.workspace = true`.
@@ -33,10 +34,18 @@ elang-eld = { path = "crates/elang-eld", version = "0.1.0" }
 elang-repertoire = { path = "crates/elang-repertoire", version = "0.1.0" }
 elang-integrity = { path = "crates/elang-integrity", version = "0.1.0" }
 elang-conformance = { path = "crates/elang-conformance", version = "0.1.0" }
+elang-unicode = { path = "crates/elang-unicode", version = "0.1.0" }
 
 # External crates (pinned). These are introduced only as the phases that need
 # them land; declaring the pinned version here keeps it reviewable in one place.
 sha2 = "=0.10.8"
+# Unicode 18.0.0 (NFC + General_Category + noncharacters) is implemented in the
+# first-party `elang-unicode` crate from pinned UCD 18.0.0 tables (ADR 0007).
+# No third-party Unicode data dependency.
+# JSON parsing for the pinned IPA repertoire (T0806). serde_json preserves
+# enough structure to enforce no-duplicate-keys and no-unknown-fields.
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.145"
 
 # Workspace-wide lint policy (T0215). Untrusted-input safety is enforced by
 # denying panic-prone constructs. These are inherited via `[lints] workspace = true`.
