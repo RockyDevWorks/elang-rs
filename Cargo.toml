@@ -38,7 +38,7 @@ elang-unicode = { path = "crates/elang-unicode", version = "0.1.0" }
 
 # External crates (pinned). These are introduced only as the phases that need
 # them land; declaring the pinned version here keeps it reviewable in one place.
-sha2 = "=0.10.8"
+sha2 = "=0.11.1"
 # Unicode 18.0.0 (NFC + General_Category + noncharacters) is implemented in the
 # first-party `elang-unicode` crate from pinned UCD 18.0.0 tables (ADR 0007).
 # No third-party Unicode data dependency.
