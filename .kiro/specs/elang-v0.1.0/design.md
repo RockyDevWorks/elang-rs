@@ -112,17 +112,20 @@ streaming.
 
 ## 4. Threat model (steering §3.5, §10; SECURITY.md)
 
-All container bytes, KDL text and compressed frames are **untrusted**.
+All container bytes, KDL text and compressed frames are **untrusted**. This
+table is the authoritative threat model (task T0213, REQ-CORE-MODEL §10/§11); it
+stays consistent with the user-facing summary in
+[`SECURITY.md`](../../../SECURITY.md) and the steering contract (§3.5, §10). Each
+row names the vector, the defense, and the requirement IDs that enforce it.
 
 | Threat | Vector | Defense | Requirements |
 |---|---|---|---|
-| Decompression bomb | Huge declared/real output | Bounded streaming decode; per-resource caps; 8 GiB aggregate budget; declared-size cross-check; window ≤ 128 MiB | REQ-FRAME-004/008, REQ-PKG-004 |
-| Integer overflow | Crafted offsets/sizes | Checked arithmetic helpers; `overflow-checks` on; range validation | REQ-CORE-MODEL-005, REQ-BIN-006/007 |
-| OOB / panic | Truncated/garbage structures | No unchecked indexing; lint-denied `unwrap`/`panic`; fuzzing | REQ-CORE-MODEL-008, REQ-BIN-018 |
-| Path traversal | `..`, absolute, symlink, backslash | Strict NFC relative-path validation; safe unpack policy | REQ-BIN-011/012, REQ-CLI-003 |
-| Parser abuse | Deep nesting, huge tokens/strings/nodes | Budgets enforced during parse | REQ-LIMIT-001..010 |
-| Frame abuse | Dict/skippable/concatenated/trailing | One-frame contract; reject disallowed frame features | REQ-FRAME-002/005/006 |
-| False trust | Treating hash/URN as authorship | Documented non-goal; integrity ≠ signature | REQ-INTEGRITY-008 |
+| Malicious archives | Truncated/garbage structure; forged offsets/sizes; extra or missing bytes | Fail-closed layered validation (header/footer/index/frames); checked offset/size arithmetic with `overflow-checks` on; no unchecked indexing; lint-denied `unwrap`/`panic`; fuzzing | REQ-BIN-018, REQ-CORE-MODEL-008, REQ-CORE-MODEL-005, REQ-BIN-006/007 |
+| Decompression bomb | Huge declared/real output; oversized window | Bounded streaming decode; per-resource caps; 8 GiB aggregate budget; declared-size cross-check; window ≤ 128 MiB | REQ-FRAME-004/008, REQ-PKG-004 |
+| Path traversal | `..`, absolute, drive, backslash, NUL, symlink escape on unpack | Strict NFC relative-path validation; safe unpack policy (no overwrite/traversal/symlink escape) | REQ-BIN-011/012, REQ-CLI-003 |
+| Parser abuse | Deep nesting; huge tokens/strings; excessive nodes/args/properties; comment flooding | Budgets enforced *during* parse, before unbounded allocation | REQ-LIMIT-001..010 |
+| Frame abuse | Dictionary/skippable/concatenated/trailing frames | One-frame contract; reject disallowed frame features | REQ-FRAME-002/005/006 |
+| False trust | Treating SHA-256/URN as publisher authenticity | Documented non-goal; integrity ≠ signature | REQ-INTEGRITY-008 |
 
 ### Memory-safety posture
 

@@ -16,6 +16,7 @@ pub mod checked;
 pub mod error;
 pub mod ids;
 pub mod limits;
+pub mod model;
 pub mod modes;
 pub mod version;
 

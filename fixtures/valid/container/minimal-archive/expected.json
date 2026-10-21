@@ -1,0 +1,14 @@
+{
+  "fixture": "valid/container/minimal-archive",
+  "description": "Minimal valid phoneme-only package layout: byte-exact binary header, index and terminal footer with a real SHA-256 over the serialized index bytes. Resource frame bodies are labelled placeholders standing in for the Phase 4 Zstd frames; the header/index/footer framing is fully normative.",
+  "requirements": ["REQ-BIN-001", "REQ-BIN-003", "REQ-BIN-004", "REQ-BIN-006", "REQ-BIN-007", "REQ-BIN-008", "REQ-BIN-009", "REQ-BIN-010", "REQ-BIN-013", "REQ-BIN-014", "REQ-BIN-015", "REQ-BIN-016"],
+  "input": "archive.elang",
+  "modes": ["inspect"],
+  "outcome": "pass",
+  "golden": [
+    { "path": "header.bin", "sha256": "ee15caa934ffa9220a103c5b83276df6c4e13120d2caa51089febb0c55900bdf" },
+    { "path": "index.bin", "sha256": "a34879d8e4b45c2a9c9f35be47d9c7111340cbe0c535f7cc79d697c1777efa35" },
+    { "path": "footer.bin", "sha256": "bd8239c4b00414ce9e55ea8298e8c78ea5aed2c3332c3a48ebdd4dc48428c61c" },
+    { "path": "archive.elang", "sha256": "4aef5e899ab95179173e26884dc83826b8a2649af8fd88982cda236b76d8b3aa" }
+  ]
+}

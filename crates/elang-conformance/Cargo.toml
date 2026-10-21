@@ -18,3 +18,5 @@ elang-epf.workspace = true
 elang-eld.workspace = true
 elang-integrity.workspace = true
 elang-repertoire.workspace = true
+sha2.workspace = true
+serde_json.workspace = true

@@ -108,7 +108,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Run analysis
-        uses: ossf/scorecard-action@v2
+        # scorecard-action does not publish a floating `v2` tag, so pin to a
+        # full release tag (latest stable at time of writing).
+        uses: ossf/scorecard-action@v2.5.0
         with:
           results_file: results.sarif
           results_format: sarif

@@ -35,8 +35,9 @@ rejected by ELANG:
 
 ## Canonical output is valid KDL 2.0
 
-The three canonical profiles — ELD (locked §9), EPF (ADR 0005) and integrity
-(ADR 0004) — all emit:
+The three canonical profiles — ELD (locked §9, with residual edge cases
+ratified in [ADR 0009](../../docs/decisions/0009-residual-eld-canonicalization-edge-cases.md)),
+EPF (ADR 0005) and integrity (ADR 0004) — all emit:
 
 - standard double-quoted strings with `"`/`\` escaped,
 - 4-space indentation, one node per line, LF endings, single trailing LF,

@@ -69,6 +69,8 @@ dependencies = [
  "elang-epf",
  "elang-integrity",
  "elang-repertoire",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

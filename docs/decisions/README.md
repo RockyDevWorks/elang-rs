@@ -37,3 +37,4 @@ Copy [`0000-template.md`](0000-template.md) to a new numbered file.
 | [0006](0006-resource-and-manifest-policy.md) | Extra-resource / manifest-coverage policy (v0.1.0) | Approved |
 | [0007](0007-unicode-engine-icu4x.md) | Unicode 18.0.0 validation via first-party `elang-unicode` | Approved |
 | [0008](0008-ipa-repertoire-v1.md) | ELANG IPA Repertoire v1 — source, generation and digest | Approved |
+| [0009](0009-residual-eld-canonicalization-edge-cases.md) | Residual ELD canonical serialization edge cases | Approved |
