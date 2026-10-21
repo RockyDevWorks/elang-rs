@@ -4,7 +4,7 @@
 //! not depend on host-OS Unicode behavior:
 //!
 //! - **General_Category** comes from tables generated from the official pinned
-//!   UCD 18.0.0 `DerivedGeneralCategory.txt` ([`gc_tables`]); the categories
+//!   UCD 18.0.0 `DerivedGeneralCategory.txt` (the private `gc_tables` module); the categories
 //!   ELANG forbids (`Cc`/`Cf`/`Cs`/`Co`/`Cn`) are encoded as range tables.
 //! - **Noncharacters** are detected algorithmically (version-independent).
 //! - **NFC** uses the proven UAX#15 implementation in `unicode-normalization`,

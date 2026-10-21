@@ -3,7 +3,7 @@
 //! Implements the UAX#15 algorithm — canonical decomposition, canonical
 //! ordering by Canonical_Combining_Class, then canonical composition — using
 //! the tables generated from the pinned UCD 18.0.0 files
-//! ([`crate::nfc_tables`]). Hangul syllables are handled by the algorithmic
+//! (the private `crate::nfc_tables` module). Hangul syllables are handled by the algorithmic
 //! rules in UAX#15 §3.12 rather than table lookups.
 //!
 //! Correctness is demonstrated by the official Unicode 18.0.0
