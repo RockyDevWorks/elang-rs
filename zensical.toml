@@ -78,15 +78,12 @@ attr_list = {}
 def_list = {}
 footnotes = {}
 md_in_html = {}
-"toc.permalink" = true
-"pymdownx.betterem.smart_enable" = "all"
+toc = { permalink = true }
+"pymdownx.betterem" = { smart_enable = "all" }
 "pymdownx.caret" = {}
 "pymdownx.details" = {}
-"pymdownx.emoji.emoji_generator" = "zensical.extensions.emoji.to_svg"
-"pymdownx.emoji.emoji_index" = "zensical.extensions.emoji.twemoji"
-"pymdownx.highlight.anchor_linenums" = true
-"pymdownx.highlight.line_spans" = "__span"
-"pymdownx.highlight.pygments_lang_class" = true
+"pymdownx.emoji" = { emoji_generator = "zensical.extensions.emoji.to_svg", emoji_index = "zensical.extensions.emoji.twemoji" }
+"pymdownx.highlight" = { anchor_linenums = true, line_spans = "__span", pygments_lang_class = true }
 "pymdownx.inlinehilite" = {}
 "pymdownx.keys" = {}
 "pymdownx.magiclink" = {}
@@ -94,5 +91,5 @@ md_in_html = {}
 "pymdownx.smartsymbols" = {}
 "pymdownx.snippets" = {}
 "pymdownx.superfences" = {}
-"pymdownx.tabbed.alternate_style" = true
+"pymdownx.tabbed" = { alternate_style = true }
 "pymdownx.tilde" = {}
