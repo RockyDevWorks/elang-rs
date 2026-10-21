@@ -1,0 +1,59 @@
+﻿# Dependabot configuration for the ELANG Rust workspace.
+#
+# Supply-chain policy (SECURITY.md, docs/supply-chain.md): external crates are
+# pinned to exact versions in the workspace `Cargo.toml`. Dependabot opens PRs
+# proposing version bumps; every bump is reviewed and, where it touches locked
+# binary/schema semantics, gated by an ADR (docs/locked-rules.md). Dependabot
+# does not auto-merge.
+version: 2
+
+updates:
+  # Rust crate dependencies for the whole Cargo workspace.
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 10
+    # Keep the exact pins in Cargo.toml; allow Dependabot to propose updates to
+    # both direct and indirect dependencies so security fixes surface quickly.
+    versioning-strategy: "increase"
+    labels:
+      - "dependencies"
+      - "rust"
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
+    groups:
+      # Batch low-risk patch/minor bumps to reduce PR noise; majors stay separate
+      # so they get individual review against the locked-rules policy.
+      cargo-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions used by the CI and security workflows.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      actions-all:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
