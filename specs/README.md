@@ -27,6 +27,7 @@ presented as ratified (steering §0.3; [ADR 0003](../docs/decisions/0003-open-no
 | [`registry/error-codes.md`](registry/error-codes.md) | T0119 | Error-code registry + metadata schema | Derived from §11 |
 | [`registry/kdl-2.0-compatibility.md`](registry/kdl-2.0-compatibility.md) | T0120 | KDL 2.0 compatibility review | Review note |
 | [`registry/resource-policy-v0.1.0.md`](registry/resource-policy-v0.1.0.md) | T0121 | Extra-resource / manifest-coverage policy | Ratified by ADR 0006 |
+| [`registry/binary-reference-vectors.json`](registry/binary-reference-vectors.json) | T0118 | Binary header/index/footer reference vectors + offsets (OA-11) | Generated & verified — see below |
 
 ## Generated and validated (ADR 0008)
 
@@ -46,5 +47,28 @@ presented as ratified (steering §0.3; [ADR 0003](../docs/decisions/0003-open-no
   repertoire is validated but not *frozen* until the pin is met.
 - **Second human review** of the combining-diacritic and spacing-modifier
   inventories against the chart's Diacritics block (T0114).
-- **Golden byte vectors:** binary header/index/footer vectors (T0118, OA-11)
-  and canonical ELD goldens (OA-14) are produced in Phases 3/11/14.
+- **Golden byte vectors:** the binary header/index/footer vectors (T0118,
+  OA-11) are **done** (see below); the canonical ELD goldens (OA-14) are
+  produced in Phase 11.
+
+## Binary reference vectors (T0118, OA-11)
+
+- **`registry/binary-reference-vectors.json`** — byte-exact reference vectors
+  for the §3 binary container: field tables (offset / width / little-endian
+  encoding / value) and raw hex for the 32-byte header, 16-byte index header,
+  five worked index entries (27-byte fixed layout + UTF-8 path, strict ascending
+  sort) and the 64-byte terminal footer, plus the
+  `index_offset + index_size == file_size − 64` relation worked out against a
+  concrete minimal archive.
+- **Fixtures** — `fixtures/valid/container/minimal-archive/` holds the raw
+  `header.bin` / `index.bin` / `footer.bin`, the complete `archive.elang`, each
+  with a lowercase-hex `.sha256` sidecar, an `expected.json` (conformance
+  format) and a `layout.json` offset map.
+- **Generator** — `crates/elang-conformance/src/binary_vectors.rs` serializes
+  the exact little-endian layout and computes every offset, size and SHA-256
+  from the real bytes; `cargo run -p elang-conformance --bin gen_binary_vectors`
+  reproduces the artifacts byte-for-byte. No digest or offset is hand-written
+  (steering §0.3; ADR 0003). The real index SHA-256 is
+  `a34879d8e4b45c2a9c9f35be47d9c7111340cbe0c535f7cc79d697c1777efa35`.
+  Resource frame bodies are labelled placeholders standing in for the Phase 4
+  Zstd frames; the header/index/footer framing is fully normative.

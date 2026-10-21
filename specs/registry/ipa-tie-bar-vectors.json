@@ -1,0 +1,157 @@
+{
+  "metadata": {
+    "vector_set": "ipa-tie-bar-vectors",
+    "vector_set_version": 1,
+    "repertoire_version": 1,
+    "unicode_version": "18.0.0",
+    "ipa_chart": "2026",
+    "repertoire_source": "specs/schema/ipa-v1.json",
+    "repertoire_pinned_jcs_sha256_constant": "elang_repertoire::repertoire::PINNED_JCS_SHA256",
+    "provenance": "Byte-exact, independently checkable IPA tie-bar equivalence and comparison-key test vectors. Every row of ELANG steering \u00a77.1 is covered. Only base symbols, combining diacritics and spacing modifiers present in the pinned repertoire (specs/schema/ipa-v1.json) are referenced; no symbols are invented. Tie bars are U+0361 (upper, COMBINING DOUBLE INVERTED BREVE) and U+035C (lower, COMBINING DOUBLE BREVE BELOW). The comparison key normalizes U+035C to U+0361 for uniqueness while the authored tie variant and NFC bytes are preserved verbatim in `original`.",
+    "requirements": [
+      "REQ-IPA-010",
+      "REQ-IPA-011",
+      "REQ-IPA-012",
+      "REQ-IPA-013"
+    ],
+    "steering_reference": "\u00a77 and \u00a77.1 (IPA examples table)"
+  },
+  "positive": [
+    {
+      "name": "untied-two-units",
+      "input": "t\u0283",
+      "input_codepoints": ["U+0074", "U+0283"],
+      "description": "t + \u0283 untied: two separate logical base units.",
+      "requirements": ["REQ-IPA-010", "REQ-IPA-012"],
+      "expected_unit_count": 2,
+      "expected_original_codepoints": ["U+0074", "U+0283"],
+      "expected_comparison_key_codepoints": ["U+0074", "U+0283"],
+      "steering_row": "t\u0283 untied, 2 logical units"
+    },
+    {
+      "name": "tied-upper-one-unit",
+      "input": "t\u0361\u0283",
+      "input_codepoints": ["U+0074", "U+0361", "U+0283"],
+      "description": "t + U+0361 + \u0283 tied by the upper tie bar: one logical base unit.",
+      "requirements": ["REQ-IPA-010", "REQ-IPA-013"],
+      "expected_unit_count": 1,
+      "expected_tie_codepoint": "U+0361",
+      "expected_original_codepoints": ["U+0074", "U+0361", "U+0283"],
+      "expected_comparison_key_codepoints": ["U+0074", "U+0361", "U+0283"],
+      "steering_row": "t\u0361\u0283 (t + U+0361 + \u0283) tied, 1 logical unit"
+    },
+    {
+      "name": "tied-lower-one-unit",
+      "input": "t\u035c\u0283",
+      "input_codepoints": ["U+0074", "U+035C", "U+0283"],
+      "description": "t + U+035C + \u0283 tied by the lower tie bar: one logical base unit; the authored lower tie bar is preserved in `original`.",
+      "requirements": ["REQ-IPA-012", "REQ-IPA-013"],
+      "expected_unit_count": 1,
+      "expected_tie_codepoint": "U+035C",
+      "expected_original_codepoints": ["U+0074", "U+035C", "U+0283"],
+      "expected_comparison_key_codepoints": ["U+0074", "U+0361", "U+0283"],
+      "steering_row": "t\u035c\u0283 (t + U+035C + \u0283) tie-equivalent to the upper form"
+    },
+    {
+      "name": "mixed-tied-then-base",
+      "input": "t\u0361\u0283a",
+      "input_codepoints": ["U+0074", "U+0361", "U+0283", "U+0061"],
+      "description": "Tied unit t\u0361\u0283 followed by the untied base a: mixed, two logical units.",
+      "requirements": ["REQ-IPA-011"],
+      "expected_unit_count": 2,
+      "expected_original_codepoints": ["U+0074", "U+0361", "U+0283", "U+0061"],
+      "expected_comparison_key_codepoints": ["U+0074", "U+0361", "U+0283", "U+0061"],
+      "steering_row": "t\u0361\u0283a mixed, 2 logical units"
+    },
+    {
+      "name": "two-independent-tied-units",
+      "input": "t\u0361\u0283d\u0361\u0292",
+      "input_codepoints": ["U+0074", "U+0361", "U+0283", "U+0064", "U+0361", "U+0292"],
+      "description": "Two independent tied units t\u0361\u0283 and d\u0361\u0292: no chaining, two logical units.",
+      "requirements": ["REQ-IPA-010", "REQ-IPA-011"],
+      "expected_unit_count": 2,
+      "expected_original_codepoints": ["U+0074", "U+0361", "U+0283", "U+0064", "U+0361", "U+0292"],
+      "expected_comparison_key_codepoints": ["U+0074", "U+0361", "U+0283", "U+0064", "U+0361", "U+0292"],
+      "steering_row": "t\u0361\u0283d\u0361\u0292 independent tied units, 2 logical units"
+    },
+    {
+      "name": "tied-unit-modifier-after-second-base",
+      "input": "t\u0361\u0283\u02b0",
+      "input_codepoints": ["U+0074", "U+0361", "U+0283", "U+02B0"],
+      "description": "Tied unit t\u0361\u0283 with the aspiration modifier \u02b0 correctly placed after the second base: one logical unit.",
+      "requirements": ["REQ-IPA-011"],
+      "expected_unit_count": 1,
+      "expected_tie_codepoint": "U+0361",
+      "expected_modifier_codepoint": "U+02B0",
+      "expected_original_codepoints": ["U+0074", "U+0361", "U+0283", "U+02B0"],
+      "expected_comparison_key_codepoints": ["U+0074", "U+0361", "U+0283", "U+02B0"],
+      "steering_row": "t\u0361\u0283\u02b0 modifier correctly after tied second base"
+    }
+  ],
+  "equivalence": [
+    {
+      "name": "upper-lower-tie-equivalent",
+      "description": "Upper (U+0361) and lower (U+035C) tie bars MUST share a comparison key for uniqueness.",
+      "requirements": ["REQ-IPA-012"],
+      "a": "t\u0361\u0283",
+      "a_codepoints": ["U+0074", "U+0361", "U+0283"],
+      "b": "t\u035c\u0283",
+      "b_codepoints": ["U+0074", "U+035C", "U+0283"],
+      "same_comparison_key": true,
+      "steering_row": "t\u035c\u0283 tie-equivalent to t\u0361\u0283"
+    },
+    {
+      "name": "tied-vs-untied-distinct",
+      "description": "Tied t\u0361\u0283 and untied t\u0283 are distinct identities and MUST NOT share a comparison key.",
+      "requirements": ["REQ-IPA-012"],
+      "a": "t\u0361\u0283",
+      "a_codepoints": ["U+0074", "U+0361", "U+0283"],
+      "b": "t\u0283",
+      "b_codepoints": ["U+0074", "U+0283"],
+      "same_comparison_key": false,
+      "steering_row": "t\u0283 untied vs t\u0361\u0283 tied are distinct"
+    }
+  ],
+  "negative": [
+    {
+      "name": "modifier-between-tied-bases",
+      "input": "t\u02b0\u0361\u0283",
+      "input_codepoints": ["U+0074", "U+02B0", "U+0361", "U+0283"],
+      "description": "A modifier \u02b0 sits before the tie bar, so the tie no longer joins two bare bases: invalid placement.",
+      "requirements": ["REQ-IPA-011"],
+      "expected_error": "TieBarInvalid",
+      "expected_error_code": "IPA_TIE_BAR_INVALID",
+      "steering_row": "t\u02b0\u0361\u0283 invalid modifier placement"
+    },
+    {
+      "name": "two-modifications-on-one-base",
+      "input": "t\u02b0\u02b7",
+      "input_codepoints": ["U+0074", "U+02B0", "U+02B7"],
+      "description": "Two spacing modifications (\u02b0 then \u02b7) on a single base unit.",
+      "requirements": ["REQ-IPA-011"],
+      "expected_error": "TooManyModifications",
+      "expected_error_code": "IPA_TOO_MANY_MODIFICATIONS",
+      "steering_row": "t\u02b0\u02b7 invalid: 2 modifications on one base"
+    },
+    {
+      "name": "standalone-spacing-modifier",
+      "input": "\u02b0",
+      "input_codepoints": ["U+02B0"],
+      "description": "A spacing modifier \u02b0 with no preceding base.",
+      "requirements": ["REQ-IPA-011"],
+      "expected_error": "StandaloneModifier",
+      "expected_error_code": "IPA_STANDALONE_MODIFIER",
+      "steering_row": "\u02b0 invalid standalone modifier"
+    },
+    {
+      "name": "standalone-combining-mark",
+      "input": "\u0303",
+      "input_codepoints": ["U+0303"],
+      "description": "An isolated combining tilde U+0303 with no preceding base.",
+      "requirements": ["REQ-IPA-011"],
+      "expected_error": "StandaloneModifier",
+      "expected_error_code": "IPA_STANDALONE_MODIFIER",
+      "steering_row": "isolated U+0303 invalid standalone combining mark"
+    }
+  ]
+}

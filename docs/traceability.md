@@ -37,6 +37,7 @@
 | REQ-IPA-004/005 (schema shape) | `specs/schema/elang-ipa-repertoire-v1.schema.json` (T0111) | valid JSON; no symbols | Done (shape only) |
 | REQ-IPA-004/005 (encoding) | `specs/schema/json-encoding-policy.md` (T0112) | JCS method documented | Done (artifact) |
 | REQ-ERR-001..003 | `specs/registry/error-codes.{md,json}` (T0119) | valid JSON; categories+codes | Done (artifact) |
+| REQ-BIN-001/003/004/006/007/008/009/010/013/014/015/016 (reference vectors) | `specs/registry/binary-reference-vectors.json`, `fixtures/valid/container/minimal-archive/`, `elang-conformance::binary_vectors` (T0118, OA-11) | `elang-conformance` tests: `committed_fixtures_match_the_builder_byte_for_byte`, `sidecar_digests_are_real`, `footer_embeds_the_real_index_digest`, `framing_relation_holds_for_the_fixture`, `reference_doc_digests_match_the_bytes`, + 2 unit (7 pass) | Done (vectors) — the Phase 3 container reader/writer validates against these in T0320/T0322 |
 | REQ-PKG-005 | `specs/registry/resource-policy-v0.1.0.md`, ADR 0006 (T0121) | OA-15 ratified | Done (artifact) |
 | REQ-UNICODE-001..004 | `elang-unicode` (NFC + General_Category + noncharacter) | `elang-unicode` unit tests + NFC conformance (20,171 rows); `elang-repertoire::unicode` adapter tests | Done — Unicode **18.0.0** from pinned UCD (ADR 0007) |
 | T0116 (Unicode reference data) | pinned UCD 18.0.0 (`specs/sources/ucd-18.0.0/`), generated `gc_tables.rs`/`nfc_tables.rs` | official `NormalizationTest.txt` 18.0.0 passes | Done (OA-13 ratified) |
@@ -63,6 +64,7 @@ version-domain constants above.
 | REQ-CORE-MODEL-006 | `elang-core::bounded` (`ByteBudget`, `BoundedCounter`) | `bounded::tests::*` | Done |
 | REQ-CORE-MODEL-007 | `elang-core::modes` (`Inspected`/`Verified`/`Validated`) | `modes::tests::*` | Done |
 | REQ-CORE-MODEL-008 | workspace lints (`unwrap`/`panic`/`indexing_slicing`/arith) | `cargo clippy -D warnings` clean | Done (enforced) |
+| REQ-CORE-MODEL (threat model, T0213) | `.kiro/specs/elang-v0.1.0/design.md` §4, `SECURITY.md` | threat model documents malicious archives, decompression bombs, path traversal, parser abuse (+ frame abuse, false trust), each mapped to defenses and requirement IDs; consistent across both docs and steering §3.5/§10 | Done (artifact) |
 | REQ-CORE-MODEL-003 | elang-epf / elang-eld validated models | T0205 | Planned (Phases 6/9) |
 | REQ-ERR-001/002 | `elang-core::error` (`Category`, `Error`, `Diagnostic`, `KdlSpan`) | `error::tests::*` | Done |
 | REQ-LIMIT-009 | `elang-core::error::Diagnostics` (cap 100, no masking) | `diagnostics_cap_does_not_mask_failure` | Done |

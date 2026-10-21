@@ -1,0 +1,158 @@
+{
+  "metadata": {
+    "vector_set": "binary-reference-vectors",
+    "vector_set_version": 1,
+    "container_version": "0.1.0",
+    "endianness": "little",
+    "generator": "cargo run -p elang-conformance --bin gen_binary_vectors",
+    "fixture": "fixtures/valid/container/minimal-archive",
+    "steering_reference": "\u00a73 (binary container physical contract)",
+    "requirements": ["REQ-BIN-001", "REQ-BIN-003", "REQ-BIN-004", "REQ-BIN-006", "REQ-BIN-007", "REQ-BIN-008", "REQ-BIN-009", "REQ-BIN-010", "REQ-BIN-013", "REQ-BIN-014", "REQ-BIN-015", "REQ-BIN-016"],
+    "provenance": "Byte-exact, independently reproducible header/index/footer reference vectors. Every offset, size and SHA-256 is computed from the exact little-endian bytes by elang_conformance::binary_vectors; no digest or offset is hand-written. Resource frame bodies are deterministic placeholders (ASCII 'ELANGFRAME:<path>#' padded with '.') standing in for the Phase 4 Zstd frames; the header/index/footer framing is fully normative. No fabricated hashes (steering \u00a70.3; ADR 0003)."
+  },
+  "header": {
+    "length": 32,
+    "fields": [
+      { "offset": 0, "width": 8, "encoding": "raw", "name": "magic", "value_hex": "45 4C 41 4E 47 0D 0A 1A", "note": "ELANG\\r\\n\\x1A" },
+      { "offset": 8, "width": 2, "encoding": "u16le", "name": "major", "value": 0 },
+      { "offset": 10, "width": 2, "encoding": "u16le", "name": "minor", "value": 1 },
+      { "offset": 12, "width": 4, "encoding": "u32le", "name": "flags", "value": 0 },
+      { "offset": 16, "width": 16, "encoding": "raw", "name": "reserved", "value": "all zero" }
+    ],
+    "bytes": [
+      "45", "4C", "41", "4E", "47", "0D", "0A", "1A",
+      "00", "00", "01", "00", "00", "00", "00", "00",
+      "00", "00", "00", "00", "00", "00", "00", "00",
+      "00", "00", "00", "00", "00", "00", "00", "00"
+    ],
+    "sha256": "ee15caa934ffa9220a103c5b83276df6c4e13120d2caa51089febb0c55900bdf"
+  },
+  "index": {
+    "offset": 272,
+    "length": 237,
+    "header": {
+      "length": 16,
+      "fields": [
+        { "offset": 0, "width": 8, "encoding": "raw", "name": "magic", "value_ascii": "ELIDX001" },
+        { "offset": 8, "width": 2, "encoding": "u16le", "name": "index_version", "value": 1 },
+        { "offset": 10, "width": 2, "encoding": "u16le", "name": "entry_format", "value": 1 },
+        { "offset": 12, "width": 4, "encoding": "u32le", "name": "resource_count", "value": 5 }
+      ]
+    },
+    "entry_layout": [
+      { "field": "path_length", "width": 2, "encoding": "u16le" },
+      { "field": "path", "width": "path_length", "encoding": "utf8-nfc" },
+      { "field": "frame_offset", "width": 8, "encoding": "u64le" },
+      { "field": "compressed_size", "width": 8, "encoding": "u64le" },
+      { "field": "uncompressed_size", "width": 8, "encoding": "u64le" },
+      { "field": "compression", "width": 1, "encoding": "u8", "value": 1 }
+    ],
+    "entries": [
+      {
+        "path": "Header/format.version",
+        "path_length": 21,
+        "frame_offset": 32,
+        "compressed_size": 48,
+        "uncompressed_size": 6,
+        "compression": 1
+      },
+      {
+        "path": "Linguistics/phonemes.eld",
+        "path_length": 24,
+        "frame_offset": 80,
+        "compressed_size": 48,
+        "uncompressed_size": 13,
+        "compression": 1
+      },
+      {
+        "path": "META-INF/integrity.kdl",
+        "path_length": 22,
+        "frame_offset": 128,
+        "compressed_size": 48,
+        "uncompressed_size": 14,
+        "compression": 1
+      },
+      {
+        "path": "mimetype",
+        "path_length": 8,
+        "frame_offset": 176,
+        "compressed_size": 48,
+        "uncompressed_size": 21,
+        "compression": 1
+      },
+      {
+        "path": "package.epf",
+        "path_length": 11,
+        "frame_offset": 224,
+        "compressed_size": 48,
+        "uncompressed_size": 12,
+        "compression": 1
+      }
+    ],
+    "bytes": [
+      "45", "4C", "49", "44", "58", "30", "30", "31",
+      "01", "00", "01", "00", "05", "00", "00", "00",
+      "15", "00", "48", "65", "61", "64", "65", "72",
+      "2F", "66", "6F", "72", "6D", "61", "74", "2E",
+      "76", "65", "72", "73", "69", "6F", "6E", "20",
+      "00", "00", "00", "00", "00", "00", "00", "30",
+      "00", "00", "00", "00", "00", "00", "00", "06",
+      "00", "00", "00", "00", "00", "00", "00", "01",
+      "18", "00", "4C", "69", "6E", "67", "75", "69",
+      "73", "74", "69", "63", "73", "2F", "70", "68",
+      "6F", "6E", "65", "6D", "65", "73", "2E", "65",
+      "6C", "64", "50", "00", "00", "00", "00", "00",
+      "00", "00", "30", "00", "00", "00", "00", "00",
+      "00", "00", "0D", "00", "00", "00", "00", "00",
+      "00", "00", "01", "16", "00", "4D", "45", "54",
+      "41", "2D", "49", "4E", "46", "2F", "69", "6E",
+      "74", "65", "67", "72", "69", "74", "79", "2E",
+      "6B", "64", "6C", "80", "00", "00", "00", "00",
+      "00", "00", "00", "30", "00", "00", "00", "00",
+      "00", "00", "00", "0E", "00", "00", "00", "00",
+      "00", "00", "00", "01", "08", "00", "6D", "69",
+      "6D", "65", "74", "79", "70", "65", "B0", "00",
+      "00", "00", "00", "00", "00", "00", "30", "00",
+      "00", "00", "00", "00", "00", "00", "15", "00",
+      "00", "00", "00", "00", "00", "00", "01", "0B",
+      "00", "70", "61", "63", "6B", "61", "67", "65",
+      "2E", "65", "70", "66", "E0", "00", "00", "00",
+      "00", "00", "00", "00", "30", "00", "00", "00",
+      "00", "00", "00", "00", "0C", "00", "00", "00",
+      "00", "00", "00", "00", "01"
+    ],
+    "sha256": "a34879d8e4b45c2a9c9f35be47d9c7111340cbe0c535f7cc79d697c1777efa35"
+  },
+  "footer": {
+    "offset": 509,
+    "length": 64,
+    "fields": [
+      { "offset": 0, "width": 8, "encoding": "raw", "name": "magic", "value_ascii": "ELEND001" },
+      { "offset": 8, "width": 8, "encoding": "u64le", "name": "index_offset", "value": 272 },
+      { "offset": 16, "width": 8, "encoding": "u64le", "name": "index_size", "value": 237 },
+      { "offset": 24, "width": 32, "encoding": "raw", "name": "index_sha256", "value_hex": "a34879d8e4b45c2a9c9f35be47d9c7111340cbe0c535f7cc79d697c1777efa35" },
+      { "offset": 56, "width": 8, "encoding": "raw", "name": "reserved", "value": "all zero" }
+    ],
+    "bytes": [
+      "45", "4C", "45", "4E", "44", "30", "30", "31",
+      "10", "01", "00", "00", "00", "00", "00", "00",
+      "ED", "00", "00", "00", "00", "00", "00", "00",
+      "A3", "48", "79", "D8", "E4", "B4", "5C", "2A",
+      "9C", "9F", "35", "BE", "47", "D9", "C7", "11",
+      "13", "40", "CB", "E0", "C5", "35", "F7", "CC",
+      "79", "D6", "97", "C1", "77", "7E", "FA", "35",
+      "00", "00", "00", "00", "00", "00", "00", "00"
+    ],
+    "sha256": "bd8239c4b00414ce9e55ea8298e8c78ea5aed2c3332c3a48ebdd4dc48428c61c"
+  },
+  "framing_relation": {
+    "rule": "index_offset + index_size == file_size - 64",
+    "index_offset": 272,
+    "index_size": 237,
+    "footer_length": 64,
+    "file_size": 573,
+    "check": "272 + 237 == 573 - 64",
+    "holds": true
+  },
+  "archive_sha256": "4aef5e899ab95179173e26884dc83826b8a2649af8fd88982cda236b76d8b3aa"
+}

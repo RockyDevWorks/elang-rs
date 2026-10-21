@@ -19,7 +19,9 @@ updates:
     open-pull-requests-limit: 10
     # Keep the exact pins in Cargo.toml; allow Dependabot to propose updates to
     # both direct and indirect dependencies so security fixes surface quickly.
-    versioning-strategy: "increase"
+    # For the cargo ecosystem only "auto" and "lockfile-only" are valid; "auto"
+    # bumps the pin and lockfile together (the default) and is what we want.
+    versioning-strategy: "auto"
     labels:
       - "dependencies"
       - "rust"

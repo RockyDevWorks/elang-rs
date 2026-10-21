@@ -16,6 +16,9 @@ implementation is designed to fail closed against:
   rejects overwrite, traversal and symlink escape.
 - **Parser abuse** — nesting-depth, token, string, node, comment and reference
   budgets enforced *during* parsing, before unbounded allocation.
+- **Frame abuse** — exactly one independent standard Zstd frame per resource;
+  dictionary, skippable, concatenated, truncated and trailing-byte frames are
+  rejected.
 
 ### Non-goals / trust boundaries
 
