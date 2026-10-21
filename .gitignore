@@ -23,3 +23,11 @@ clippy_*.log
 /fuzz/target
 /fuzz/corpus
 /fuzz/artifacts
+
+# Kiro spec execution metadata (local session/execution IDs + timestamps, not
+# project content).
+.kiro/specs/**/tasks.meta.json
+
+# Zensical documentation site output (built in CI by docs.yml and published to
+# GitHub Pages; the generated artifact is not committed).
+/site

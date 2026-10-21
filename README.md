@@ -15,6 +15,19 @@ plus a CLI.
 > ELANG Hub, AION, HORIZON or ARKHE. ELANG's first and only linguistic module in
 > this release is **phonemes**.
 
+## Documentation
+
+The public documentation site is built with [Zensical](https://zensical.org) from
+the Markdown sources in [`docs/public/`](docs/public/) and configured by
+[`zensical.toml`](zensical.toml). It is published to GitHub Pages by
+[`.github/workflows/docs.yml`](.github/workflows/docs.yml) on pushes to `main`
+that touch the docs, and is served at
+<https://rockydevworks.github.io/elang-rs/>.
+
+The internal normative material (the steering contract, ADRs, requirements, and
+the open-artifact tracker) lives under [`docs/`](docs/) and `.kiro/` and is the
+source of truth that the public site is derived from.
+
 ## Status
 
 Pre-release, tracking **v0.1.0**. Several normative artifacts (the exact approved

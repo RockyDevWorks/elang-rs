@@ -1,0 +1,98 @@
+# Zensical configuration for the ELANG public documentation site.
+#
+# This drives the static documentation site published to GitHub Pages by
+# .github/workflows/docs.yml. It is independent of the Rust crate's CI
+# (ci.yml) and security workflow (security.yml), which are left untouched.
+#
+# Reference: https://zensical.org/docs/setup/basics/
+
+[project]
+site_name = "ELANG"
+site_description = "ELANG — a portable, deterministic definition and packaging format for constructed languages, with its Rust reference tooling."
+site_author = "ELANG Project"
+# Published via GitHub Pages at <user>.github.io/<repo>/.
+site_url = "https://rockydevworks.github.io/elang-rs/"
+copyright = "Licensed under the Apache License, Version 2.0."
+
+# Markdown sources live in docs/public so the public site is kept separate from
+# the internal normative docs (ADRs, steering, requirements) under docs/.
+docs_dir = "docs/public"
+
+# Output directory consumed by the Pages upload step in docs.yml.
+site_dir = "site"
+
+# Clean, trailing-slash URLs (default). GitHub Pages serves these fine.
+use_directory_urls = true
+
+# Explicit navigation for a deliberate reading order.
+nav = [
+    { "Overview" = "index.md" },
+    { "Getting started" = "getting-started.md" },
+    { "Concepts" = "concepts.md" },
+    { "Format reference" = [
+        "format/container.md",
+        "format/epf.md",
+        "format/eld.md",
+        "format/when.md",
+        "format/unicode-ipa.md",
+        "format/canonical.md",
+        "format/integrity.md",
+        "format/validation.md",
+    ] },
+    { "CLI reference" = "cli.md" },
+    { "Errors & diagnostics" = "errors.md" },
+    { "Security model" = "security.md" },
+    { "Versioning" = "versioning.md" },
+    { "Architecture" = "architecture.md" },
+    { "Specification status" = "spec-status.md" },
+    { "Source (GitHub)" = "https://github.com/RockyDevWorks/elang-rs" },
+]
+
+[project.theme]
+name = "material"
+# A curated set of navigation/content niceties.
+features = [
+    "navigation.instant",
+    "navigation.instant.progress",
+    "navigation.tracking",
+    "navigation.tabs",
+    "navigation.top",
+    "navigation.footer",
+    "toc.follow",
+    "content.code.copy",
+    "content.code.annotate",
+    "search.suggest",
+    "search.highlight",
+]
+
+[project.plugins]
+search = {}
+
+# The declared markdown extensions replace Zensical's defaults, so this is the
+# complete list. It enables admonitions, grid cards (attr_list + md_in_html),
+# collapsible blocks, emoji/icons, syntax highlighting and tabs.
+[project.markdown_extensions]
+abbr = {}
+admonition = {}
+attr_list = {}
+def_list = {}
+footnotes = {}
+md_in_html = {}
+"toc.permalink" = true
+"pymdownx.betterem.smart_enable" = "all"
+"pymdownx.caret" = {}
+"pymdownx.details" = {}
+"pymdownx.emoji.emoji_generator" = "zensical.extensions.emoji.to_svg"
+"pymdownx.emoji.emoji_index" = "zensical.extensions.emoji.twemoji"
+"pymdownx.highlight.anchor_linenums" = true
+"pymdownx.highlight.line_spans" = "__span"
+"pymdownx.highlight.pygments_lang_class" = true
+"pymdownx.inlinehilite" = {}
+"pymdownx.keys" = {}
+"pymdownx.magiclink" = {}
+"pymdownx.mark" = {}
+"pymdownx.smartsymbols" = {}
+"pymdownx.snippets" = {}
+"pymdownx.superfences" = {}
+"pymdownx.tabbed.alternate_style" = true
+"pymdownx.tilde" = {}
