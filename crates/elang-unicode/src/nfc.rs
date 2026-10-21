@@ -134,8 +134,8 @@ fn compose(scalars: &[u32]) -> Vec<u32> {
     }
     let mut out: Vec<u32> = Vec::with_capacity(scalars.len());
     let mut last_starter: Option<usize> = None; // index into `out`
-    // CCC of the last character appended *after* the current starter; 0 means
-    // none yet. Used to detect blocking.
+                                                // CCC of the last character appended *after* the current starter; 0 means
+                                                // none yet. Used to detect blocking.
     let mut prev_ccc: u8 = 0;
 
     for &cp in scalars {
@@ -204,10 +204,7 @@ pub fn nfc(s: &str) -> String {
     // 3. canonical composition
     let composed = compose(&decomposed);
     // 4. back to String (all values are valid scalars by construction)
-    composed
-        .into_iter()
-        .filter_map(char::from_u32)
-        .collect()
+    composed.into_iter().filter_map(char::from_u32).collect()
 }
 
 /// Is `s` already in NFC?

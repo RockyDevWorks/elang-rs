@@ -24,7 +24,11 @@ impl ResourcePath {
     pub fn new(s: impl Into<String>) -> Result<Self, Error> {
         let s = s.into();
         if s.is_empty() {
-            return Err(err(Category::ResourcePath, "PATH_EMPTY_SEGMENT", "empty path"));
+            return Err(err(
+                Category::ResourcePath,
+                "PATH_EMPTY_SEGMENT",
+                "empty path",
+            ));
         }
         if s.len() > MAX_RESOURCE_PATH_BYTES {
             return Err(err(
@@ -34,14 +38,26 @@ impl ResourcePath {
             ));
         }
         if s.starts_with('/') {
-            return Err(err(Category::ResourcePath, "PATH_ABSOLUTE", "absolute path"));
+            return Err(err(
+                Category::ResourcePath,
+                "PATH_ABSOLUTE",
+                "absolute path",
+            ));
         }
         // Drive-letter / Windows absolute (e.g. "C:...") is also absolute.
         if looks_drive_absolute(&s) {
-            return Err(err(Category::ResourcePath, "PATH_ABSOLUTE", "drive-absolute path"));
+            return Err(err(
+                Category::ResourcePath,
+                "PATH_ABSOLUTE",
+                "drive-absolute path",
+            ));
         }
         if s.contains('\\') {
-            return Err(err(Category::ResourcePath, "PATH_BACKSLASH", "backslash in path"));
+            return Err(err(
+                Category::ResourcePath,
+                "PATH_BACKSLASH",
+                "backslash in path",
+            ));
         }
         if s.contains('\0') {
             return Err(err(Category::ResourcePath, "PATH_NUL", "NUL in path"));
@@ -206,35 +222,86 @@ mod tests {
 
     #[test]
     fn resource_path_rejects_bad_forms() {
-        assert_eq!(ResourcePath::new("/abs").unwrap_err().code(), "PATH_ABSOLUTE");
-        assert_eq!(ResourcePath::new("C:/x").unwrap_err().code(), "PATH_ABSOLUTE");
-        assert_eq!(ResourcePath::new("a\\b").unwrap_err().code(), "PATH_BACKSLASH");
-        assert_eq!(ResourcePath::new("a/../b").unwrap_err().code(), "PATH_EMPTY_SEGMENT");
-        assert_eq!(ResourcePath::new("a//b").unwrap_err().code(), "PATH_EMPTY_SEGMENT");
-        assert_eq!(ResourcePath::new("a/./b").unwrap_err().code(), "PATH_EMPTY_SEGMENT");
-        assert_eq!(ResourcePath::new("").unwrap_err().code(), "PATH_EMPTY_SEGMENT");
+        assert_eq!(
+            ResourcePath::new("/abs").unwrap_err().code(),
+            "PATH_ABSOLUTE"
+        );
+        assert_eq!(
+            ResourcePath::new("C:/x").unwrap_err().code(),
+            "PATH_ABSOLUTE"
+        );
+        assert_eq!(
+            ResourcePath::new("a\\b").unwrap_err().code(),
+            "PATH_BACKSLASH"
+        );
+        assert_eq!(
+            ResourcePath::new("a/../b").unwrap_err().code(),
+            "PATH_EMPTY_SEGMENT"
+        );
+        assert_eq!(
+            ResourcePath::new("a//b").unwrap_err().code(),
+            "PATH_EMPTY_SEGMENT"
+        );
+        assert_eq!(
+            ResourcePath::new("a/./b").unwrap_err().code(),
+            "PATH_EMPTY_SEGMENT"
+        );
+        assert_eq!(
+            ResourcePath::new("").unwrap_err().code(),
+            "PATH_EMPTY_SEGMENT"
+        );
         assert_eq!(ResourcePath::new("a\0b").unwrap_err().code(), "PATH_NUL");
-        assert_eq!(ResourcePath::new("x".repeat(1025)).unwrap_err().code(), "PATH_TOO_LONG");
+        assert_eq!(
+            ResourcePath::new("x".repeat(1025)).unwrap_err().code(),
+            "PATH_TOO_LONG"
+        );
     }
 
     #[test]
     fn group_name_rules() {
         assert!(GroupName::new_custom("diphthongs").is_ok());
         assert!(GroupName::new_custom("click-consonants").is_ok());
-        assert_eq!(GroupName::new_custom("consonants").unwrap_err().code(), "ELD_GROUP_DUPLICATE");
-        assert_eq!(GroupName::new_custom("Vowels2").unwrap_err().code(), "ELD_GROUP_INVALID");
-        assert_eq!(GroupName::new_custom("-x").unwrap_err().code(), "ELD_GROUP_INVALID");
-        assert_eq!(GroupName::new_custom("x-").unwrap_err().code(), "ELD_GROUP_INVALID");
-        assert_eq!(GroupName::new_custom("a--b").unwrap_err().code(), "ELD_GROUP_INVALID");
-        assert_eq!(GroupName::new_custom("a".repeat(33)).unwrap_err().code(), "ELD_GROUP_INVALID");
+        assert_eq!(
+            GroupName::new_custom("consonants").unwrap_err().code(),
+            "ELD_GROUP_DUPLICATE"
+        );
+        assert_eq!(
+            GroupName::new_custom("Vowels2").unwrap_err().code(),
+            "ELD_GROUP_INVALID"
+        );
+        assert_eq!(
+            GroupName::new_custom("-x").unwrap_err().code(),
+            "ELD_GROUP_INVALID"
+        );
+        assert_eq!(
+            GroupName::new_custom("x-").unwrap_err().code(),
+            "ELD_GROUP_INVALID"
+        );
+        assert_eq!(
+            GroupName::new_custom("a--b").unwrap_err().code(),
+            "ELD_GROUP_INVALID"
+        );
+        assert_eq!(
+            GroupName::new_custom("a".repeat(33)).unwrap_err().code(),
+            "ELD_GROUP_INVALID"
+        );
     }
 
     #[test]
     fn romanization_rules_and_fold() {
         assert!(Romanization::new("th").is_ok());
         assert_eq!(Romanization::new("TH").unwrap().fold_key(), "th");
-        assert_eq!(Romanization::new("").unwrap_err().code(), "ROMAN_BAD_FORMAT");
-        assert_eq!(Romanization::new("toolongvalue").unwrap_err().code(), "ROMAN_BAD_FORMAT");
-        assert_eq!(Romanization::new("a1").unwrap_err().code(), "ROMAN_BAD_FORMAT");
+        assert_eq!(
+            Romanization::new("").unwrap_err().code(),
+            "ROMAN_BAD_FORMAT"
+        );
+        assert_eq!(
+            Romanization::new("toolongvalue").unwrap_err().code(),
+            "ROMAN_BAD_FORMAT"
+        );
+        assert_eq!(
+            Romanization::new("a1").unwrap_err().code(),
+            "ROMAN_BAD_FORMAT"
+        );
     }
 }

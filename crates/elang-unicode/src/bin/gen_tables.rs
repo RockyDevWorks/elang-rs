@@ -88,7 +88,10 @@ fn gen_gc() -> usize {
         out,
         "/// Inclusive code-point ranges with a forbidden General_Category."
     );
-    let _ = writeln!(out, "pub static FORBIDDEN_CATEGORY_RANGES: &[(u32, u32)] = &[");
+    let _ = writeln!(
+        out,
+        "pub static FORBIDDEN_CATEGORY_RANGES: &[(u32, u32)] = &["
+    );
     for (s, e) in &merged {
         let _ = writeln!(out, "    (0x{s:04X}, 0x{e:04X}),");
     }
@@ -180,7 +183,9 @@ fn gen_nfc() -> (usize, usize, usize) {
     let ccc_of = |cp: u32| chars.get(&cp).map_or(0u8, |c| c.ccc);
     let mut comp_pairs: Vec<((u32, u32), u32)> = Vec::new();
     for (&cp, c) in &chars {
-        let Some(seq) = c.decomp.as_ref() else { continue };
+        let Some(seq) = c.decomp.as_ref() else {
+            continue;
+        };
         if seq.len() != 2 {
             continue; // singletons and longer canonical decomps don't compose
         }
@@ -203,7 +208,10 @@ fn gen_nfc() -> (usize, usize, usize) {
          // decompositions, and canonical composition pairs (UAX#15).\n\n",
     );
     // CCC
-    let _ = writeln!(out, "/// (code point, Canonical_Combining_Class) for ccc != 0, sorted.");
+    let _ = writeln!(
+        out,
+        "/// (code point, Canonical_Combining_Class) for ccc != 0, sorted."
+    );
     let _ = writeln!(out, "pub static CCC: &[(u32, u8)] = &[");
     for (cp, ccc) in &ccc_entries {
         let _ = writeln!(out, "    (0x{cp:04X}, {ccc}),");

@@ -7,7 +7,7 @@
 //! decisions now come from `elang-unicode`. There is no ICU4X dependency and
 //! no host-OS Unicode behavior.
 
-pub use elang_unicode::{PINNED_UNICODE_VERSION, is_noncharacter};
+pub use elang_unicode::{is_noncharacter, PINNED_UNICODE_VERSION};
 
 /// The Unicode version the bundled General_Category + NFC data provides.
 pub const DATA_UNICODE_VERSION: &str = elang_unicode::DATA_UNICODE_VERSION;

@@ -64,6 +64,31 @@ pub enum IpaError {
     Unicode(crate::unicode::UnicodeViolation),
 }
 
+impl IpaError {
+    /// The stable error code from the registry (`specs/registry/error-codes.md`)
+    /// for this failure. Unicode violations delegate to their own code.
+    #[must_use]
+    pub fn code(&self) -> &'static str {
+        match self {
+            // `Empty` is a schema-level emptiness; the closest stable code is
+            // the standalone-modifier/zero-content family. It is reported as
+            // `IPA_NOT_IN_REPERTOIRE` here only if it ever surfaced from a
+            // non-empty parse; a truly empty identifier is rejected before the
+            // ELD schema would ever accept it. Kept explicit for completeness.
+            IpaError::Empty => "IPA_EMPTY",
+            IpaError::TooManyScalars(_) => "IPA_TOO_MANY_SCALARS",
+            IpaError::TooManyUnits(_) => "IPA_TOO_MANY_UNITS",
+            IpaError::BaseNotApproved(_) | IpaError::ModifierNotApproved(_) => {
+                "IPA_NOT_IN_REPERTOIRE"
+            }
+            IpaError::StandaloneModifier(_) => "IPA_STANDALONE_MODIFIER",
+            IpaError::TooManyModifications => "IPA_TOO_MANY_MODIFICATIONS",
+            IpaError::TieBarInvalid => "IPA_TIE_BAR_INVALID",
+            IpaError::Unicode(v) => v.code(),
+        }
+    }
+}
+
 /// One logical base unit after parsing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Unit {
@@ -116,7 +141,9 @@ impl Classifier {
     fn from_repertoire(rep: &Repertoire) -> Self {
         // All approved entries here are single-scalar.
         let collect = |v: &[crate::repertoire::Symbol]| -> BTreeSet<char> {
-            v.iter().filter_map(|s| s.codepoints.first().copied()).collect()
+            v.iter()
+                .filter_map(|s| s.codepoints.first().copied())
+                .collect()
         };
         Self {
             bases: collect(&rep.base_symbols),

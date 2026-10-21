@@ -50,7 +50,8 @@ fn parse_component(s: &str) -> Result<u64, Error> {
     if s.len() > 1 && s.starts_with('0') {
         return Err(bad("leading zero in version component"));
     }
-    s.parse::<u64>().map_err(|_| bad("version component out of range"))
+    s.parse::<u64>()
+        .map_err(|_| bad("version component out of range"))
 }
 
 fn bad(msg: &'static str) -> Error {
@@ -82,8 +83,22 @@ mod tests {
 
     #[test]
     fn parses_valid_versions() {
-        assert_eq!(SemVer::parse("1.0.0").unwrap(), SemVer { major: 1, minor: 0, patch: 0 });
-        assert_eq!(SemVer::parse("0.1.0").unwrap(), SemVer { major: 0, minor: 1, patch: 0 });
+        assert_eq!(
+            SemVer::parse("1.0.0").unwrap(),
+            SemVer {
+                major: 1,
+                minor: 0,
+                patch: 0
+            }
+        );
+        assert_eq!(
+            SemVer::parse("0.1.0").unwrap(),
+            SemVer {
+                major: 0,
+                minor: 1,
+                patch: 0
+            }
+        );
         assert_eq!(SemVer::parse("12.34.56").unwrap().minor, 34);
     }
 
