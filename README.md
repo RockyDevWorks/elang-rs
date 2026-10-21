@@ -1,5 +1,9 @@
 # ELANG
 
+[![CI](https://github.com/RockyDevWorks/elang-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/RockyDevWorks/elang-rs/actions/workflows/ci.yml)
+[![Security](https://github.com/RockyDevWorks/elang-rs/actions/workflows/security.yml/badge.svg)](https://github.com/RockyDevWorks/elang-rs/actions/workflows/security.yml)
+[![codecov](https://codecov.io/gh/RockyDevWorks/elang-rs/branch/main/graph/badge.svg)](https://codecov.io/gh/RockyDevWorks/elang-rs)
+
 ELANG is a portable, deterministic definition and packaging format for
 constructed languages, together with its Rust reference tooling. This repository
 is the reference implementation: the `.elang` binary container, the KDL 2.0

@@ -41,8 +41,8 @@ fn nfc_conformance_unicode_18_0_0() {
         .join("..")
         .join("..")
         .join("specs/sources/ucd-18.0.0/NormalizationTest.txt");
-    let text = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    let text =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
 
     // Confirm we are testing the 18.0.0 file (fail closed on version drift).
     assert!(

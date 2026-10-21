@@ -24,7 +24,9 @@ fn official_base_symbols() -> Vec<&'static str> {
 
     // --- Pulmonic consonants ---
     // Plosive
-    v.extend(["p", "b", "t", "d", "ʈ", "ɖ", "c", "ɟ", "k", "ɡ", "q", "ɢ", "ʔ"]);
+    v.extend([
+        "p", "b", "t", "d", "ʈ", "ɖ", "c", "ɟ", "k", "ɡ", "q", "ɢ", "ʔ",
+    ]);
     // Nasal
     v.extend(["m", "ɱ", "n", "ɳ", "ɲ", "ŋ", "ɴ"]);
     // Trill
@@ -33,8 +35,8 @@ fn official_base_symbols() -> Vec<&'static str> {
     v.extend(["ⱱ", "ɾ", "ɽ"]);
     // Fricative
     v.extend([
-        "ɸ", "β", "f", "v", "θ", "ð", "s", "z", "ʃ", "ʒ", "ʂ", "ʐ", "ç", "ʝ", "x", "ɣ", "χ",
-        "ʁ", "ħ", "ʕ", "h", "ɦ",
+        "ɸ", "β", "f", "v", "θ", "ð", "s", "z", "ʃ", "ʒ", "ʂ", "ʐ", "ç", "ʝ", "x", "ɣ", "χ", "ʁ",
+        "ħ", "ʕ", "h", "ɦ",
     ]);
     // Lateral fricative
     v.extend(["ɬ", "ɮ"]);

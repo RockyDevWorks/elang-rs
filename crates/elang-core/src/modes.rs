@@ -66,7 +66,9 @@ impl Inspected {
     /// never from untrusted input.
     #[must_use]
     pub fn new() -> Self {
-        Self { reached: Stage::FrameInspect }
+        Self {
+            reached: Stage::FrameInspect,
+        }
     }
 
     /// The highest stage reached (always [`Stage::FrameInspect`]).
@@ -86,7 +88,9 @@ impl Verified {
     /// Construct from the reader after completing stages 1–11.
     #[must_use]
     pub fn new() -> Self {
-        Self { reached: Stage::ResourceIntegrity }
+        Self {
+            reached: Stage::ResourceIntegrity,
+        }
     }
 
     /// The highest stage reached (always [`Stage::ResourceIntegrity`]).
@@ -106,7 +110,9 @@ impl Validated {
     /// Construct from the reader after completing all 12 stages.
     #[must_use]
     pub fn new() -> Self {
-        Self { reached: Stage::EldSemantics }
+        Self {
+            reached: Stage::EldSemantics,
+        }
     }
 
     /// The highest stage reached (always [`Stage::EldSemantics`]).

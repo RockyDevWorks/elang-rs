@@ -213,15 +213,33 @@ fn combining_diacritics() -> Vec<Entry> {
         e("\u{033A}", "COMBINING INVERTED BRIDGE BELOW (apical)"),
         e("\u{033B}", "COMBINING SQUARE BELOW (laminal)"),
         e("\u{0303}", "COMBINING TILDE (nasalized)"),
-        e("\u{031A}", "COMBINING LEFT ANGLE ABOVE (no audible release)"),
-        e("\u{0334}", "COMBINING TILDE OVERLAY (velarized or pharyngealized)"),
+        e(
+            "\u{031A}",
+            "COMBINING LEFT ANGLE ABOVE (no audible release)",
+        ),
+        e(
+            "\u{0334}",
+            "COMBINING TILDE OVERLAY (velarized or pharyngealized)",
+        ),
         e("\u{031D}", "COMBINING UP TACK BELOW (raised)"),
         e("\u{031E}", "COMBINING DOWN TACK BELOW (lowered)"),
-        e("\u{0318}", "COMBINING LEFT TACK BELOW (advanced tongue root)"),
-        e("\u{0319}", "COMBINING RIGHT TACK BELOW (retracted tongue root)"),
-        e("\u{032B}", "COMBINING INVERTED DOUBLE ARCH BELOW (labialized, w-variant below)"),
+        e(
+            "\u{0318}",
+            "COMBINING LEFT TACK BELOW (advanced tongue root)",
+        ),
+        e(
+            "\u{0319}",
+            "COMBINING RIGHT TACK BELOW (retracted tongue root)",
+        ),
+        e(
+            "\u{032B}",
+            "COMBINING INVERTED DOUBLE ARCH BELOW (labialized, w-variant below)",
+        ),
         e("\u{0346}", "COMBINING BRIDGE ABOVE (dental/raised variant)"),
-        e("\u{0348}", "COMBINING DOUBLE VERTICAL LINE BELOW (strong articulation)"),
+        e(
+            "\u{0348}",
+            "COMBINING DOUBLE VERTICAL LINE BELOW (strong articulation)",
+        ),
     ]
 }
 
@@ -235,7 +253,10 @@ fn spacing_modifiers() -> Vec<Entry> {
         e("ʷ", "MODIFIER LETTER SMALL W (labialized)"),
         e("ʲ", "MODIFIER LETTER SMALL Y (palatalized)"),
         e("ˠ", "MODIFIER LETTER SMALL GAMMA (velarized)"),
-        e("ˤ", "MODIFIER LETTER SMALL REVERSED GLOTTAL STOP (pharyngealized)"),
+        e(
+            "ˤ",
+            "MODIFIER LETTER SMALL REVERSED GLOTTAL STOP (pharyngealized)",
+        ),
         e("ⁿ", "SUPERSCRIPT LATIN SMALL LETTER N (nasal release)"),
         e("ˡ", "MODIFIER LETTER SMALL L (lateral release)"),
         e("ʼ", "MODIFIER LETTER APOSTROPHE (ejective)"),

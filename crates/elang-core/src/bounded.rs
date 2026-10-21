@@ -27,7 +27,10 @@ impl ByteBudget {
     /// Account for `n` more bytes. Fails (without updating the total) if this
     /// would overflow or exceed the cap.
     pub fn consume(&mut self, n: u64) -> Result<(), Error> {
-        let next = self.used.checked_add(n).ok_or_else(|| budget_err("byte budget overflow"))?;
+        let next = self
+            .used
+            .checked_add(n)
+            .ok_or_else(|| budget_err("byte budget overflow"))?;
         if next > self.cap {
             return Err(budget_err("byte budget exceeded"));
         }

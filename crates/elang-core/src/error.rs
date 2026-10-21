@@ -256,7 +256,11 @@ mod tests {
             .with_stage(5)
             .with_resource("a/b.eld")
             .with_offset(42)
-            .with_span(KdlSpan { line: 2, column: 3, length: 4 });
+            .with_span(KdlSpan {
+                line: 2,
+                column: 3,
+                length: 4,
+            });
         assert_eq!(d.stage, Some(5));
         assert_eq!(d.resource_path.as_deref(), Some("a/b.eld"));
         assert_eq!(d.byte_offset, Some(42));
@@ -267,11 +271,18 @@ mod tests {
     fn diagnostics_cap_does_not_mask_failure() {
         let mut diags = Diagnostics::new();
         for i in 0..(MAX_RETAINED_DIAGNOSTICS + 50) {
-            diags.push(Diagnostic::new("LIMIT_NODES_RESOURCE", Category::Limit, format!("d{i}")));
+            diags.push(Diagnostic::new(
+                "LIMIT_NODES_RESOURCE",
+                Category::Limit,
+                format!("d{i}"),
+            ));
         }
         assert_eq!(diags.retained().len(), MAX_RETAINED_DIAGNOSTICS);
         assert_eq!(diags.total(), MAX_RETAINED_DIAGNOSTICS + 50);
         assert!(diags.truncated());
-        assert!(diags.has_any(), "truncation must never hide that failures exist");
+        assert!(
+            diags.has_any(),
+            "truncation must never hide that failures exist"
+        );
     }
 }
