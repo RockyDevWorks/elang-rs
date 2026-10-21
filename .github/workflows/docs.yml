@@ -1,0 +1,70 @@
+# Build and deploy the Zensical documentation site to GitHub Pages.
+#
+# Dedicated to documentation only — the Rust crate's CI lives in ci.yml and
+# security.yml and is intentionally left untouched.
+#
+# Based on the official Zensical publishing guide:
+# https://zensical.org/docs/publish-your-site/
+# Adapted to run `zensical build --strict` so broken internal links or other
+# strict-mode problems fail the build.
+name: Documentation
+
+on:
+  push:
+    branches:
+      - main
+    # Only rebuild when documentation inputs change.
+    paths:
+      - "docs/public/**"
+      - "zensical.toml"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+# Least-privilege by default; the deploy job requests what Pages needs.
+permissions:
+  contents: read
+
+# Allow one concurrent deployment; let an in-progress run finish.
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build site (strict)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install Zensical
+        run: pip install zensical
+
+      - name: Build with strict mode
+        run: zensical build --strict --clean
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # Matches `site_dir` in zensical.toml.
+          path: site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

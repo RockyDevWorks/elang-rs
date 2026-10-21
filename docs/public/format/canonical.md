@@ -1,0 +1,90 @@
+# Canonical serialization
+
+ELANG defines a **byte-deterministic** serialization so that two semantically
+equal documents always produce identical bytes. This makes packages reproducible
+and content-addressable. The ELD canonical rules below are locked; the EPF and
+integrity-manifest canonical profiles have their own ratified serializers.
+
+## Ordering
+
+Input declaration order is unrestricted — the canonical writer imposes a fixed
+order:
+
+- **Groups:** `consonants`, then `vowels`, then custom groups sorted ASCII
+  bytewise.
+- **Roots** within a group: sorted by NFC IPA identifier, UTF-8 bytewise.
+- **Allophones** within a root: sorted by NFC IPA identifier, UTF-8 bytewise.
+- **Root child order:** `roman`, then `when` (if any), then allophones.
+- **Allophone child order:** explicit `roman` (if any), then `when` (if any).
+
+A fieldless allophone is emitted as a **bare leaf** with no braces; an allophone
+with fields gets a nonempty block.
+
+## Conditions
+
+Inside `when`, `group`, and `or`, direct child expressions are sorted recursively
+by the **Canonical Condition Sorting Key v1** (below). The writer preserves tree
+structure and duplicate predicates — there is no boolean simplification, no
+flattening, and references are not rewritten away from their owning roots.
+
+## Formatting
+
+- **4 ASCII spaces** per nesting level; no tabs.
+- One declaration per line; **zero blank lines**.
+- **LF** line endings only, with **exactly one** final LF.
+- All comments are omitted from canonical output (source may use comments and any
+  KDL 2.0 whitespace).
+- Strings are always standard double-quoted, escaping embedded `"` and `\`.
+  Permitted Unicode is preserved directly as UTF-8, and authored ASCII
+  romanization case is preserved.
+
+Because the characters rejected by the Unicode rules (controls, `Cf`, `Co`,
+`Cn`/noncharacters) can never appear in a valid value, no canonical control-escape
+form is needed. Validated NFC strings are preserved exactly — never silently
+re-normalized.
+
+## Canonical Condition Sorting Key v1
+
+Each condition node is reduced to a binary key, and keys are compared as unsigned
+lexicographic byte strings.
+
+Node ranks (`u8`):
+
+| Node | Rank |
+|------|-----:|
+| `word-position` | 0 |
+| `syllable-position` | 1 |
+| `previous-phoneme` | 2 |
+| `next-phoneme` | 3 |
+| `group` | 4 |
+| `or` | 5 |
+
+Key formats:
+
+```text
+atomic_key    = rank:u8
+             || value_utf8_length:u16BE
+             || exact_validated_value_utf8
+
+composite_key = rank:u8
+             || child_count:u16BE
+             || repeated( sorted_child_key_length:u32BE || sorted_child_key )
+```
+
+Children are sorted recursively **before** their parent's key is built. The key
+discipline applies to the children of `when` (AND), `group` (AND), and `or` (two
+operands). There is no reordering across semantically different parent levels and
+no alias rewriting. `when` itself has no key rank because it is a root expression
+container.
+
+## Idempotence
+
+Canonicalization is **idempotent**:
+
+```text
+canon(canon(x)) == canon(x)
+```
+
+Equivalent inputs (for example, the same inventory with groups declared in a
+different order) produce identical canonical bytes, while genuinely different
+condition trees stay different.
