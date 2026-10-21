@@ -1,8 +1,22 @@
+
+<div align="center">
+
 # ELANG
 
-[![CI](https://github.com/RockyDevWorks/elang-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/RockyDevWorks/elang-rs/actions/workflows/ci.yml)
-[![Security](https://github.com/RockyDevWorks/elang-rs/actions/workflows/security.yml/badge.svg)](https://github.com/RockyDevWorks/elang-rs/actions/workflows/security.yml)
-[![codecov](https://codecov.io/gh/RockyDevWorks/elang-rs/branch/main/graph/badge.svg)](https://codecov.io/gh/RockyDevWorks/elang-rs)
+**Electronic Language — An open, standardized digital format for defining, preserving, and exchanging human and constructed languages.**
+
+<br>
+
+[![CI](https://img.shields.io/github/actions/workflow/status/RockyDevWorks/elang-rs/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/RockyDevWorks/elang-rs/actions/workflows/ci.yml)
+[![Security](https://img.shields.io/github/actions/workflow/status/RockyDevWorks/elang-rs/security.yml?branch=main&label=Security&style=flat-square)](https://github.com/RockyDevWorks/elang-rs/actions/workflows/security.yml)
+[![Coverage](https://img.shields.io/codecov/c/github/RockyDevWorks/elang-rs/main?label=Coverage&style=flat-square)](https://codecov.io/gh/RockyDevWorks/elang-rs)
+[![License](https://img.shields.io/github/license/RockyDevWorks/elang-rs?style=flat-square)](https://github.com/RockyDevWorks/elang-rs/blob/main/LICENSE)
+[![Rust](https://img.shields.io/badge/Rust-2024_Edition-orange?logo=rust&style=flat-square)](https://www.rust-lang.org/)
+[![MSRV](https://img.shields.io/badge/MSRV-TBD-lightgrey?style=flat-square)](https://github.com/RockyDevWorks/elang-rs)
+[![Clippy](https://img.shields.io/badge/Clippy-Enabled-blue?style=flat-square)](https://github.com/RockyDevWorks/elang-rs/actions/workflows/ci.yml)
+
+</div>
+
 
 ELANG is a portable, deterministic definition and packaging format for
 constructed languages, together with its Rust reference tooling. This repository
