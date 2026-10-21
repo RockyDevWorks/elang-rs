@@ -10,9 +10,9 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/RockyDevWorks/elang-rs/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/RockyDevWorks/elang-rs/actions/workflows/ci.yml)
 [![Security](https://img.shields.io/github/actions/workflow/status/RockyDevWorks/elang-rs/security.yml?branch=main&label=Security&style=flat-square)](https://github.com/RockyDevWorks/elang-rs/actions/workflows/security.yml)
 [![Coverage](https://img.shields.io/codecov/c/github/RockyDevWorks/elang-rs/main?label=Coverage&style=flat-square)](https://codecov.io/gh/RockyDevWorks/elang-rs)
-[![License](https://img.shields.io/github/license/RockyDevWorks/elang-rs?style=flat-square)](https://github.com/RockyDevWorks/elang-rs/blob/main/LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square)](https://github.com/RockyDevWorks/elang-rs/blob/main/LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-2024_Edition-orange?logo=rust&style=flat-square)](https://www.rust-lang.org/)
-[![MSRV](https://img.shields.io/badge/MSRV-TBD-lightgrey?style=flat-square)](https://github.com/RockyDevWorks/elang-rs)
+[![MSRV](https://img.shields.io/badge/MSRV-1.90.0-blue?logo=rust&style=flat-square)](https://www.rust-lang.org/)
 [![Clippy](https://img.shields.io/badge/Clippy-Enabled-blue?style=flat-square)](https://github.com/RockyDevWorks/elang-rs/actions/workflows/ci.yml)
 
 </div>
