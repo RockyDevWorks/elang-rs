@@ -14,7 +14,7 @@ use crate::bounded::{BoundedCounter, ByteBudget};
 use crate::checked::checked_range;
 use crate::error::{Category, Error};
 use crate::ids::ResourcePath;
-use crate::limits::{MAX_COMPRESSED_ARCHIVE_BYTES, MAX_RESOURCES};
+use crate::limits::{MAX_GENERIC_RESOURCE_BYTES, MAX_RESOURCES, MAX_UNCOMPRESSED_AGGREGATE_BYTES};
 
 /// Byte length of a SHA-256 digest, as a compile-time constant array length.
 pub const SHA256_LEN: usize = 32;
@@ -68,10 +68,10 @@ impl ResourceEntry {
                 "resource byte range exceeds the archive",
             ));
         }
-        if uncompressed_size > MAX_COMPRESSED_ARCHIVE_BYTES {
+        if uncompressed_size > MAX_GENERIC_RESOURCE_BYTES {
             return Err(err(
                 "INDEX_SIZE_OVER_CEILING",
-                "uncompressed resource size exceeds the archive ceiling",
+                "uncompressed resource size exceeds the per-resource ceiling",
             ));
         }
         Ok(Self {
@@ -174,7 +174,7 @@ impl ResourceIndex {
                     "aggregate uncompressed size overflows",
                 )
             })?;
-            if total > crate::limits::MAX_UNCOMPRESSED_AGGREGATE_BYTES {
+            if total > MAX_UNCOMPRESSED_AGGREGATE_BYTES {
                 return Err(err(
                     "LIMIT_UNCOMPRESSED_AGGREGATE",
                     "aggregate uncompressed size exceeds the archive ceiling",
@@ -223,7 +223,7 @@ fn err(code: &'static str, msg: &'static str) -> Error {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -276,16 +276,32 @@ mod tests {
     }
 
     #[test]
-    fn rejects_uncompressed_over_ceiling() {
+    fn rejects_uncompressed_over_per_resource_ceiling() {
+        // The per-resource ceiling is the generic-resource limit (1 GiB), not
+        // the archive-wide compressed ceiling (6 GiB). A 2 GiB resource is
+        // under the archive ceiling but over the per-resource one, so it must
+        // be rejected here.
+        let over = MAX_GENERIC_RESOURCE_BYTES + 1;
+        assert!(
+            over < MAX_UNCOMPRESSED_AGGREGATE_BYTES,
+            "this value is over the per-resource ceiling but under the aggregate one, \
+             which is the whole point of the test"
+        );
+        let e = ResourceEntry::new(path("big.eld"), 0, 10, over, digest(), 1000);
+        assert_eq!(e.unwrap_err().code(), "INDEX_SIZE_OVER_CEILING");
+    }
+
+    #[test]
+    fn accepts_uncompressed_at_per_resource_ceiling() {
         let e = ResourceEntry::new(
-            path("big.eld"),
+            path("max.eld"),
             0,
             10,
-            crate::limits::MAX_COMPRESSED_ARCHIVE_BYTES + 1,
+            MAX_GENERIC_RESOURCE_BYTES,
             digest(),
             1000,
         );
-        assert_eq!(e.unwrap_err().code(), "INDEX_SIZE_OVER_CEILING");
+        assert!(e.is_ok(), "the ceiling itself must be accepted");
     }
 
     #[test]
@@ -301,14 +317,41 @@ mod tests {
 
     #[test]
     fn index_rejects_aggregate_over_ceiling() {
-        // Two resources just over half the aggregate ceiling each.
-        let half = crate::limits::MAX_UNCOMPRESSED_AGGREGATE_BYTES / 2 + 1;
-        let entries: Vec<ResourceEntry> = ["a.eld", "b.eld"]
-            .iter()
-            .map(|p| ResourceEntry::new(path(p), 0, 10, half, digest(), u64::MAX).unwrap())
+        // Each entry sits exactly at the per-resource ceiling (so the
+        // per-resource check passes) and the index holds one more of them than
+        // the aggregate ceiling allows. This is the only way to reach the
+        // aggregate check — a single oversized entry is caught earlier.
+        let per = MAX_GENERIC_RESOURCE_BYTES;
+        let needed = (MAX_UNCOMPRESSED_AGGREGATE_BYTES / per) + 1;
+        let entries: Vec<ResourceEntry> = (0..needed)
+            .map(|i| {
+                ResourceEntry::new(path(&format!("r{i}.eld")), 0, 10, per, digest(), u64::MAX)
+                    .expect("each entry sits at the per-resource ceiling, so it passes")
+            })
             .collect();
         let idx = ResourceIndex::new(entries);
         assert_eq!(idx.unwrap_err().code(), "LIMIT_UNCOMPRESSED_AGGREGATE");
+    }
+
+    #[test]
+    fn index_accepts_exactly_at_aggregate_ceiling() {
+        let per = MAX_GENERIC_RESOURCE_BYTES;
+        let needed = MAX_UNCOMPRESSED_AGGREGATE_BYTES / per;
+        let entries: Vec<ResourceEntry> = (0..needed)
+            .map(|i| {
+                ResourceEntry::new(path(&format!("r{i}.eld")), 0, 10, per, digest(), u64::MAX)
+                    .unwrap()
+            })
+            .collect();
+        let idx = ResourceIndex::new(entries);
+        assert!(
+            idx.is_ok(),
+            "a total exactly at the aggregate ceiling must be accepted"
+        );
+        assert_eq!(
+            idx.unwrap().total_uncompressed(),
+            MAX_UNCOMPRESSED_AGGREGATE_BYTES
+        );
     }
 
     #[test]

@@ -54,6 +54,35 @@ impl Stage {
     pub const VERIFY_CEILING: Stage = Stage::ResourceIntegrity;
     /// The stage `validate` completes.
     pub const VALIDATE_CEILING: Stage = Stage::EldSemantics;
+
+    /// The stage that immediately follows this one, or `None` at the end of
+    /// the ladder.
+    ///
+    /// Used by [`StageTracker::advance`] to require consecutive progression.
+    #[must_use]
+    pub fn successor(self) -> Option<Stage> {
+        let next = (self as u8).checked_add(1)?;
+        // Guard against a `successor` that would run past the final stage even
+        // if the discriminant arithmetic allowed it.
+        if next > Stage::VALIDATE_CEILING as u8 {
+            return None;
+        }
+        match next {
+            1 => Some(Stage::Preflight),
+            2 => Some(Stage::Header),
+            3 => Some(Stage::Footer),
+            4 => Some(Stage::IndexHash),
+            5 => Some(Stage::Index),
+            6 => Some(Stage::FrameLayout),
+            7 => Some(Stage::FrameInspect),
+            8 => Some(Stage::Bootstrap),
+            9 => Some(Stage::IntegrityStructure),
+            10 => Some(Stage::Epf),
+            11 => Some(Stage::ResourceIntegrity),
+            12 => Some(Stage::EldSemantics),
+            _ => None,
+        }
+    }
 }
 
 /// Result of `inspect`: stages 1–7 completed. This explicitly does **not**
@@ -103,7 +132,7 @@ impl Verified {
     #[must_use]
     pub fn as_inspected(&self) -> Inspected {
         Inspected {
-            reached: self.reached,
+            reached: Stage::INSPECT_CEILING,
         }
     }
 }
@@ -119,7 +148,7 @@ impl Validated {
     #[must_use]
     pub fn as_verified(&self) -> Verified {
         Verified {
-            reached: self.reached,
+            reached: Stage::VERIFY_CEILING,
         }
     }
 
@@ -127,7 +156,7 @@ impl Validated {
     #[must_use]
     pub fn as_inspected(&self) -> Inspected {
         Inspected {
-            reached: self.reached,
+            reached: Stage::INSPECT_CEILING,
         }
     }
 }
@@ -141,55 +170,73 @@ impl Validated {
 /// reached the corresponding ceiling, which is what makes them unforgeable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StageTracker {
-    reached: Stage,
+    reached: Option<Stage>,
 }
 
 impl StageTracker {
     /// A tracker that has completed nothing yet.
     ///
-    /// The starting point is "no stage complete", modelled as a tracker sitting
-    /// just below [`Stage::Preflight`]. Because [`Stage`] starts at 1, the first
-    /// `advance` must be [`Stage::Preflight`] or later from a fresh tracker; use
-    /// [`Self::at`] to seed a tracker at a known stage when resuming.
+    /// No stage is complete, so the first `advance` must be
+    /// [`Stage::Preflight`]. A resumed reader inside this crate can seed a
+    /// tracker at a known stage; external callers must replay `advance` from
+    /// the start.
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            reached: Stage::Preflight,
-        }
+        Self { reached: None }
     }
 
     /// Seed a tracker as if `stage` has just completed.
     ///
-    /// Intended for a reader resuming mid-pipeline; using it to skip stages
-    /// defeats the ladder, so the reader is the only intended caller.
+    /// Intended for a reader resuming mid-pipeline. This is `pub(crate)` rather
+    /// than `pub` precisely because it can bypass the ladder: a public
+    /// `at` would let any downstream crate mint a `Validated` without reading a
+    /// byte. A resumed reader inside this crate is trusted; an external caller
+    /// must replay `advance` from the start.
+    #[allow(
+        dead_code,
+        reason = "tests seed the tracker; production readers use advance"
+    )]
     #[must_use]
-    pub fn at(stage: Stage) -> Self {
-        Self { reached: stage }
+    pub(crate) fn at(stage: Stage) -> Self {
+        Self {
+            reached: Some(stage),
+        }
     }
 
     /// Record that `stage` completed.
     ///
-    /// Returns the previous high-water mark. Refuses to move backwards or
-    /// repeat, so the sequence of accepted calls must be strictly increasing.
+    /// Accepts **only the immediate successor** of the current stage, so the
+    /// accepted sequence from a fresh tracker is exactly
+    /// `Preflight, Header, Footer, …, EldSemantics`. Skipping a stage or
+    /// repeating one returns `None` and leaves the tracker untouched. Because
+    /// every stage must be visited in order, reaching
+    /// [`Stage::EldSemantics`] necessarily means all twelve ran.
+    ///
+    /// Returns the previously completed stage, or `None` if nothing had
+    /// completed yet (in which case the transition is refused).
     pub fn advance(&mut self, stage: Stage) -> Option<Stage> {
-        if stage <= self.reached {
+        let expected = match self.reached {
+            None => Stage::Preflight,
+            Some(current) => current.successor()?,
+        };
+        if stage != expected {
             return None;
         }
-        let previous = self.reached;
-        self.reached = stage;
-        Some(previous)
+        let previous = self.reached.replace(stage);
+        // `previous` is None only on the first stage, which has no predecessor.
+        previous
     }
 
-    /// The highest stage completed so far.
+    /// The highest stage completed so far, or `None` if nothing has.
     #[must_use]
-    pub fn reached(&self) -> Stage {
+    pub fn reached(&self) -> Option<Stage> {
         self.reached
     }
 
     /// Whether the tracker has reached `stage` or beyond.
     #[must_use]
     pub fn has_reached(&self, stage: Stage) -> bool {
-        self.reached >= stage
+        self.reached.is_some_and(|r| r >= stage)
     }
 
     /// The `inspect` result, or `None` if stages 1–7 are not complete.
@@ -197,7 +244,7 @@ impl StageTracker {
     pub fn inspected(&self) -> Option<Inspected> {
         self.has_reached(Stage::INSPECT_CEILING)
             .then_some(Inspected {
-                reached: self.reached,
+                reached: Stage::INSPECT_CEILING,
             })
     }
 
@@ -205,7 +252,7 @@ impl StageTracker {
     #[must_use]
     pub fn verified(&self) -> Option<Verified> {
         self.has_reached(Stage::VERIFY_CEILING).then_some(Verified {
-            reached: self.reached,
+            reached: Stage::VERIFY_CEILING,
         })
     }
 
@@ -214,7 +261,7 @@ impl StageTracker {
     pub fn validated(&self) -> Option<Validated> {
         self.has_reached(Stage::VALIDATE_CEILING)
             .then_some(Validated {
-                reached: self.reached,
+                reached: Stage::VALIDATE_CEILING,
             })
     }
 }
@@ -256,62 +303,163 @@ mod tests {
     }
 
     #[test]
-    fn results_appear_only_at_their_ceiling() {
+    fn fresh_tracker_is_empty() {
+        let t = StageTracker::new();
+        assert_eq!(t.reached(), None);
+        assert!(!t.has_reached(Stage::Preflight));
+        assert!(t.inspected().is_none());
+        assert!(t.verified().is_none());
+        assert!(t.validated().is_none());
+    }
+
+    #[test]
+    fn advance_accepts_only_the_immediate_successor() {
         let mut t = StageTracker::new();
-        t.advance(Stage::Bootstrap);
-        assert!(
-            t.inspected().is_some(),
-            "stage 8 clears the inspect ceiling"
-        );
-        assert!(
-            t.verified().is_none(),
-            "stage 8 is below the verify ceiling"
-        );
-        assert!(t.validated().is_none());
+        // Skipping ahead from a fresh tracker is refused.
+        assert_eq!(t.advance(Stage::EldSemantics), None, "fresh: skip refused");
+        assert_eq!(t.advance(Stage::Header), None, "fresh: skip refused");
+        assert_eq!(t.reached(), None, "refusal leaves state untouched");
 
-        // Stage 10 (Epf) is still below the verify ceiling of 11.
-        t.advance(Stage::Epf);
-        assert!(
-            t.verified().is_none(),
-            "stage 10 is below the verify ceiling"
+        // The first valid advance is Preflight. There is no predecessor.
+        assert_eq!(t.advance(Stage::Preflight), None);
+        assert_eq!(t.reached(), Some(Stage::Preflight));
+
+        // From Preflight the only valid next is Header.
+        assert_eq!(t.advance(Stage::Header), Some(Stage::Preflight));
+        // Skipping ahead from Header to IndexHash is refused — Footer is next.
+        assert_eq!(
+            t.advance(Stage::IndexHash),
+            None,
+            "jumping past Footer is refused"
         );
-        assert!(t.validated().is_none());
-
-        // Stage 11 (ResourceIntegrity) clears verify but not validate.
-        t.advance(Stage::ResourceIntegrity);
-        assert!(t.verified().is_some(), "stage 11 clears the verify ceiling");
-        assert!(t.validated().is_none());
-
-        // Stage 12 (EldSemantics) clears validate.
-        t.advance(Stage::EldSemantics);
-        assert!(t.validated().is_some());
+        assert_eq!(t.advance(Stage::Footer), Some(Stage::Header));
     }
 
     #[test]
     fn advance_refuses_backwards_and_repeats() {
         let mut t = StageTracker::at(Stage::Epf);
+        // The only successor of Epf is ResourceIntegrity; anything else is
+        // rejected — including earlier stages and Epf itself.
         assert_eq!(t.advance(Stage::Index), None, "backwards refused");
         assert_eq!(t.advance(Stage::Epf), None, "repeat refused");
-        assert_eq!(t.reached(), Stage::Epf, "refusal leaves state untouched");
+        assert_eq!(
+            t.reached(),
+            Some(Stage::Epf),
+            "refusal leaves state untouched"
+        );
         assert_eq!(t.advance(Stage::ResourceIntegrity), Some(Stage::Epf));
-        assert_eq!(t.reached(), Stage::ResourceIntegrity);
+        assert_eq!(t.reached(), Some(Stage::ResourceIntegrity));
     }
 
     #[test]
-    fn validated_narrows_down_the_ladder() {
+    fn advance_past_the_top_is_refused() {
+        let mut t = StageTracker::at(Stage::EldSemantics);
+        assert_eq!(
+            t.advance(Stage::EldSemantics),
+            None,
+            "no successor at the top"
+        );
+    }
+
+    #[test]
+    fn results_appear_only_at_their_ceiling() {
+        // Seed just below the inspect ceiling by the trusted in-crate `at`.
+        let mut t = StageTracker::at(Stage::FrameInspect);
+        assert!(
+            t.inspected().is_some(),
+            "stage 7 clears the inspect ceiling"
+        );
+        assert!(t.verified().is_none(), "below the verify ceiling");
+        assert!(t.validated().is_none());
+
+        // Walk one stage at a time up to the verify ceiling.
+        for stage in [
+            Stage::Bootstrap,
+            Stage::IntegrityStructure,
+            Stage::Epf,
+            Stage::ResourceIntegrity,
+        ] {
+            assert!(
+                t.advance(stage).is_some(),
+                "consecutive advance to {stage:?} should succeed"
+            );
+        }
+        assert!(t.verified().is_some(), "stage 11 clears the verify ceiling");
+        assert!(t.validated().is_none());
+
+        assert!(
+            t.advance(Stage::EldSemantics).is_some(),
+            "consecutive advance to validate"
+        );
+        assert!(t.validated().is_some());
+    }
+
+    #[test]
+    fn fresh_tracker_cannot_yield_a_validated_even_by_skipping() {
+        // The whole point of the strict-successor design: nothing ran, so a
+        // Validated is unobtainable no matter what the caller tries.
+        let mut t = StageTracker::new();
+        assert_eq!(
+            t.advance(Stage::EldSemantics),
+            None,
+            "fresh tracker cannot skip ahead"
+        );
+        assert!(t.validated().is_none());
+        assert!(t.verified().is_none());
+        assert!(t.inspected().is_none());
+    }
+
+    #[test]
+    fn stage_successor_covers_the_ladder() {
+        let chain = [
+            Stage::Preflight,
+            Stage::Header,
+            Stage::Footer,
+            Stage::IndexHash,
+            Stage::Index,
+            Stage::FrameLayout,
+            Stage::FrameInspect,
+            Stage::Bootstrap,
+            Stage::IntegrityStructure,
+            Stage::Epf,
+            Stage::ResourceIntegrity,
+            Stage::EldSemantics,
+        ];
+        for window in chain.windows(2) {
+            let (Some(first), Some(second)) = (window.first(), window.get(1)) else {
+                unreachable!("windows(2) always yields exactly two elements");
+            };
+            assert_eq!(first.successor(), Some(*second));
+        }
+        assert_eq!(Stage::EldSemantics.successor(), None);
+    }
+
+    #[test]
+    fn validated_clamps_reached_to_ceiling() {
         let t = StageTracker::at(Stage::EldSemantics);
         let v = t.validated().unwrap();
-        assert_eq!(v.reached(), Stage::EldSemantics);
-        assert_eq!(v.as_verified().reached(), Stage::EldSemantics);
-        assert_eq!(v.as_inspected().reached(), Stage::EldSemantics);
+        assert_eq!(v.reached(), Stage::VALIDATE_CEILING);
+        assert_eq!(v.as_verified().reached(), Stage::VERIFY_CEILING);
+        assert_eq!(v.as_inspected().reached(), Stage::INSPECT_CEILING);
     }
 
     #[test]
-    fn verified_narrows_to_inspected() {
+    fn verified_clamps_reached_to_ceiling() {
         let t = StageTracker::at(Stage::ResourceIntegrity);
         let v = t.verified().unwrap();
-        assert_eq!(v.as_inspected().reached(), Stage::ResourceIntegrity);
+        assert_eq!(v.reached(), Stage::VERIFY_CEILING);
+        assert_eq!(v.as_inspected().reached(), Stage::INSPECT_CEILING);
         assert!(t.validated().is_none());
+    }
+
+    #[test]
+    fn at_seed_path_still_yields_the_full_results() {
+        // `at` is the trusted resume path. Seeded at the top, the tracker must
+        // still expose every result the strict-successor path would.
+        let t = StageTracker::at(Stage::EldSemantics);
+        assert!(t.inspected().is_some());
+        assert!(t.verified().is_some());
+        assert!(t.validated().is_some());
     }
 
     #[test]
@@ -319,8 +467,8 @@ mod tests {
         let a = StageTracker::new();
         let b = StageTracker::default();
         assert_eq!(a, b);
-        let mut c = a;
-        c.advance(Stage::Header);
+        let mut c = a; // Copy: mutating `c` must not affect `a`.
+        let _ = c.advance(Stage::Preflight);
         assert_eq!(a, StageTracker::new(), "Copy leaves the original alone");
     }
 }

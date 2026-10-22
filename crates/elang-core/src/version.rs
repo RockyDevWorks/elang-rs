@@ -60,15 +60,23 @@ pub trait Version: Copy + Eq + Ord + core::fmt::Display {
 }
 
 macro_rules! version_newtype {
-    ($(#[$attr:meta])* $name:ident) => {
+    ($(#[$attr:meta])* $name:ident, $code:literal, $category:expr) => {
         $(#[$attr])*
         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub struct $name(SemVer);
 
         impl $name {
             /// Parse the version string for this domain.
+            ///
+            /// Delegates the grammar to [`SemVer::parse`] (strict
+            /// `MAJOR.MINOR.PATCH`, no leading zeros) but re-labels any
+            /// rejection with this domain's own stable code and category, so a
+            /// caller can tell a bad container version from a bad EPF version
+            /// without inspecting the message.
             pub fn parse(s: &str) -> Result<Self, Error> {
-                Ok(Self(SemVer::parse(s)?))
+                SemVer::parse(s).map(Self).map_err(|e| {
+                    Error::new($code, $category, e.diagnostic.message)
+                })
             }
 
             /// Construct from a `SemVer` (caller must already have validated).
@@ -98,22 +106,30 @@ macro_rules! version_newtype {
 
 version_newtype!(
     /// Binary container (`file.elang`) format version.
-    ContainerVersion
+    ContainerVersion,
+    "CONTAINER_BAD_VERSION",
+    Category::Container
 );
 
 version_newtype!(
     /// EPF (`package.epf`) schema version.
-    EpfVersion
+    EpfVersion,
+    "EPF_BAD_VERSION",
+    Category::EpfSchema
 );
 
 version_newtype!(
     /// ELD phoneme-inventory schema version.
-    EldVersion
+    EldVersion,
+    "ELD_BAD_VERSION",
+    Category::EldSchema
 );
 
 version_newtype!(
     /// Language-definition version declared inside a package.
-    LanguageVersion
+    LanguageVersion,
+    "LANG_BAD_VERSION",
+    Category::EpfSchema
 );
 
 /// Canonical compression profile identifier.
@@ -319,6 +335,32 @@ mod tests {
         assert!(EpfVersion::parse("01.0.0").is_err());
         assert!(EldVersion::parse("v1.0.0").is_err());
         assert!(LanguageVersion::parse("").is_err());
+    }
+
+    #[test]
+    fn parse_errors_carry_the_domain_code_and_category() {
+        // Each domain must report its own stable code/category, not
+        // SemVer's generic EPF-flavoured one.
+        let c = ContainerVersion::parse("1.0").unwrap_err();
+        assert_eq!(c.code(), "CONTAINER_BAD_VERSION");
+        assert_eq!(c.category(), Category::Container);
+
+        let e = EpfVersion::parse("1.0").unwrap_err();
+        assert_eq!(e.code(), "EPF_BAD_VERSION");
+        assert_eq!(e.category(), Category::EpfSchema);
+
+        let l = EldVersion::parse("1.0").unwrap_err();
+        assert_eq!(l.code(), "ELD_BAD_VERSION");
+        assert_eq!(l.category(), Category::EldSchema);
+
+        let g = LanguageVersion::parse("1.0").unwrap_err();
+        assert_eq!(g.code(), "LANG_BAD_VERSION");
+
+        // The underlying reason survives the re-labelling.
+        assert!(ContainerVersion::parse("1.0")
+            .unwrap_err()
+            .to_string()
+            .contains("MAJOR"));
     }
 
     #[test]
