@@ -51,9 +51,11 @@
 ## Phases 2+ — Phase 2 Done; later phases Planned / Blocked
 
 The following requirement groups are tracked to their tasks and move to
-**Scaffolded**/**Done** as each phase lands. Phase 2 (core types, limits,
-diagnostics, safety) is fully implemented; Phase 1 remains partial pending the
-Phase 11 canonical ELD golden vectors (ADR 0003 freeze gate).
+**Scaffolded**/**Done** as each phase lands. The Phase 2 *foundations* (core
+types, limits, diagnostics, safety) are implemented except T0205, the validated
+EPF/ELD AST models, which are deferred to Phases 6/9 where the schemas are
+parsed — see the row marked `Planned (Phases 6/9)` below. Phase 1 remains
+partial pending the Phase 11 canonical ELD golden vectors (ADR 0003 freeze gate).
 
 | Requirement group | Owner crate | Tasks | Status |
 |---|---|---|---|
