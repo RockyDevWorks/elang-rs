@@ -24,7 +24,6 @@
 | REQ-GOV-FIXTURE-001 | `fixtures/README.md`, `fixtures/expected-result.schema.json` | files present | Done |
 | REQ-GOV-RELEASE-001 | `CHANGELOG.md`, `docs/release-strategy.md` | files present | Done |
 | REQ-GOV-OPENART-001 | `docs/open-artifacts.md`, ADR 0003 | files present | Done |
-| REQ-CORE-VERSION-001 | `elang-core::version` (`ContainerVersion`, `EpfVersion`, `EldVersion`, `LanguageVersion`, `CanonicalProfile`, `Version` trait); `version_domains` constants | `version::tests::domain_types_are_independent`, `domain_constants_match_locked_values`, `canonical_profile_*`, `version_trait_round_trip` | Done — version domains are now distinct types, not interchangeable strings |
 
 ## Phase 1 (normative artifacts) — partial
 
