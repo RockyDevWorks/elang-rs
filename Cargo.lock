@@ -84,6 +84,8 @@ name = "elang-container"
 version = "0.1.0"
 dependencies = [
  "elang-core",
+ "elang-unicode",
+ "sha2",
 ]
 
 [[package]]
