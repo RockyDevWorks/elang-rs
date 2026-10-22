@@ -79,7 +79,7 @@
 - [x] **T0212** Design APIs that distinguish `inspect`, `verify` and `validate` results. _(`elang-core::modes::{StageTracker, Inspected, Verified, Validated, Stage}`. **Results are unforgeable, by construction:**
     - result fields are private; there is no public constructor and no `Default`
     - `StageTracker::new()` starts with no stage completed (modelled as `Option<Stage>::None`), so `advance(Preflight)` is the only valid first transition
-    - `advance` accepts only the **immediate successor** of the current stage — `Stage::successor()` is an exhaustive ladder from `Preflight` to `EldSemantics`, and skipping any stage returns `None` and leaves the tracker untouched. Reaching `EldSemantics` therefore proves every earlier stage ran
+    - `advance` accepts only the **immediate successor** of the current stage — `Stage::successor()` is an exhaustive ladder from `Preflight` to `EldSemantics`, and skipping any stage returns `None` and leaves the tracker untouched. Reaching `EldSemantics` therefore proves every earlier stage was *reported* in order — the tracker enforces protocol discipline, not that the validation work itself ran (that is the driving reader's responsibility)
     - `StageTracker::at` is `pub(crate)` (not `pub`) — external callers cannot bypass the ladder to mint a `Validated` without replaying `advance` from the start
     - `inspected()`/`verified()`/`validated()` return `Option` and yield nothing until the corresponding ceiling is reached
     - the `reached` field on each result type is clamped to its ceiling, so `Inspected::reached()` is always `FrameInspect`, `Verified::reached()` is always `ResourceIntegrity`, and `Validated::reached()` is always `EldSemantics` — narrowing conversions are lossless in meaning

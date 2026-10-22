@@ -165,9 +165,12 @@ impl Validated {
 /// stages.
 ///
 /// `advance` is the only way to move forward and it refuses to skip stages or
-/// move backwards, so reaching [`Stage::EldSemantics`] necessarily means every
-/// earlier stage ran. The mode results are handed out only once the tracker has
-/// reached the corresponding ceiling, which is what makes them unforgeable.
+/// move backwards, so reaching [`Stage::EldSemantics`] proves every earlier
+/// stage was *reported* in order. It does not prove the validation work itself
+/// ran — that is the reader's responsibility. The tracker is a protocol-
+/// discipline tool: it makes it impossible to mint a result out of order or
+/// with gaps, not impossible to lie about the stages. A result handed out at a
+/// ceiling is therefore a claim the driving reader made honestly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StageTracker {
     reached: Option<Stage>,
@@ -210,7 +213,8 @@ impl StageTracker {
     /// `Preflight, Header, Footer, …, EldSemantics`. Skipping a stage or
     /// repeating one returns `None` and leaves the tracker untouched. Because
     /// every stage must be visited in order, reaching
-    /// [`Stage::EldSemantics`] necessarily means all twelve ran.
+    /// [`Stage::EldSemantics`] proves every earlier stage was reported in
+    /// order — not that it actually ran (see [`StageTracker`]).
     ///
     /// Returns the previously completed stage, or `None` when this is the
     /// first accepted transition or when the transition is refused. Use
