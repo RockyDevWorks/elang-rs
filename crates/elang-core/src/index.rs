@@ -161,7 +161,7 @@ impl ResourceIndex {
     /// uncompressed total above [`MAX_UNCOMPRESSED_AGGREGATE_BYTES`].
     pub fn new(entries: Vec<ResourceEntry>) -> Result<Self, Error> {
         if entries.len() > MAX_RESOURCES as usize {
-            return Err(err(
+            return Err(limit_err(
                 "LIMIT_RESOURCES_ARCHIVE",
                 "index declares more resources than the archive ceiling",
             ));
@@ -169,13 +169,13 @@ impl ResourceIndex {
         let mut total: u64 = 0;
         for e in &entries {
             total = total.checked_add(e.uncompressed_size()).ok_or_else(|| {
-                err(
+                limit_err(
                     "LIMIT_UNCOMPRESSED_AGGREGATE",
                     "aggregate uncompressed size overflows",
                 )
             })?;
             if total > MAX_UNCOMPRESSED_AGGREGATE_BYTES {
-                return Err(err(
+                return Err(limit_err(
                     "LIMIT_UNCOMPRESSED_AGGREGATE",
                     "aggregate uncompressed size exceeds the archive ceiling",
                 ));
@@ -218,8 +218,18 @@ impl ResourceIndex {
     }
 }
 
+/// Build an `INDEX`-category error.
+///
+/// Index-structure failures (bad range, size over the per-resource ceiling)
+/// are index errors. Budget ceilings use [`limit_err`] instead, because the
+/// registry assigns every `LIMIT_`-prefixed code the `LIMIT` category.
 fn err(code: &'static str, msg: &'static str) -> Error {
     Error::new(code, Category::Index, msg)
+}
+
+/// Build a `LIMIT`-category error.
+fn limit_err(code: &'static str, msg: &'static str) -> Error {
+    Error::new(code, Category::Limit, msg)
 }
 
 #[cfg(test)]
@@ -312,7 +322,9 @@ mod tests {
             })
             .collect();
         let idx = ResourceIndex::new(entries);
-        assert_eq!(idx.unwrap_err().code(), "LIMIT_RESOURCES_ARCHIVE");
+        let e = idx.unwrap_err();
+        assert_eq!(e.code(), "LIMIT_RESOURCES_ARCHIVE");
+        assert_eq!(e.category(), Category::Limit);
     }
 
     #[test]
@@ -330,7 +342,9 @@ mod tests {
             })
             .collect();
         let idx = ResourceIndex::new(entries);
-        assert_eq!(idx.unwrap_err().code(), "LIMIT_UNCOMPRESSED_AGGREGATE");
+        let e = idx.unwrap_err();
+        assert_eq!(e.code(), "LIMIT_UNCOMPRESSED_AGGREGATE");
+        assert_eq!(e.category(), Category::Limit);
     }
 
     #[test]
