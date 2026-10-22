@@ -90,16 +90,15 @@ fn workspace_root() -> PathBuf {
 
 fn read_registry_json() -> Value {
     let path = workspace_root().join("specs/registry/error-codes.json");
-    let raw = fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+    let raw =
+        fs::read_to_string(&path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
     serde_json::from_str(&raw)
         .unwrap_or_else(|e| panic!("{} is not valid JSON: {e}", path.display()))
 }
 
 fn read_registry_md() -> String {
     let path = workspace_root().join("specs/registry/error-codes.md");
-    fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()))
+    fs::read_to_string(&path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()))
 }
 
 fn registry_codes(json: &Value) -> BTreeMap<String, String> {
@@ -459,9 +458,7 @@ fn helper_hardcoded_categories_match_the_registry() {
     let registered = registry_codes(&json);
 
     // (helper_name, expected_registry_category)
-    let helper_categories = [
-        ("limit_err", "LIMIT"),
-    ];
+    let helper_categories = [("limit_err", "LIMIT")];
 
     let mut wrong: BTreeSet<String> = BTreeSet::new();
 
@@ -472,7 +469,9 @@ fn helper_hardcoded_categories_match_the_registry() {
             for (helper, expected) in &helper_categories {
                 let mut i = 0;
                 let chars: Vec<char> = logical.chars().collect();
-                while let Some(pos) = find_subseq(&chars[i..], &helper.chars().collect::<Vec<char>>()) {
+                while let Some(pos) =
+                    find_subseq(&chars[i..], &helper.chars().collect::<Vec<char>>())
+                {
                     let abs = i + pos + helper.len();
                     // Walk forward through `(`, whitespace, and string-literal
                     // bodies to land on the first real `"CODE"` arg.
