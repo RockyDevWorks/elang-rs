@@ -47,6 +47,7 @@
 
 use elang_core::{Category, Error, Result};
 use elang_unicode;
+use sha2::Digest;
 
 /// 8-byte index magic: `ELIDX001` (steering §3.2).
 pub const INDEX_MAGIC: [u8; 8] = *b"ELIDX001";
@@ -214,6 +215,95 @@ impl Index {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
+    }
+
+    /// Serialize the index back to canonical bytes (T0319).
+    ///
+    /// The encoding is fully deterministic: header then entries in stored
+    /// order, every integer little-endian, no padding, no length prefix beyond
+    /// what the format fixes. `Index::decode(&idx.encode()?) == idx` holds for
+    /// any index this crate produced, which is the round-trip property T0320
+    /// asserts against the golden `index.bin`.
+    ///
+    /// # Errors
+    ///
+    /// `INDEX_SIZE_OVER_CEILING` if the total serialization would exceed
+    /// `MAX_INDEX_SIZE` (32 MiB), or `INDEX_COUNT_OUT_OF_RANGE` if an entry
+    /// path exceeds the u16 length field.
+    pub fn encode(&self) -> Result<Vec<u8>> {
+        // Compute the exact total up front so the ceiling check happens before
+        // any allocation grows.
+        let mut total = INDEX_HEADER_LEN;
+        for entry in &self.entries {
+            // Validate the u16 field width now so the ceiling check below runs
+            // on a total that is actually representable.
+            u16::try_from(entry.path.as_str().len()).map_err(|_| {
+                index_err(
+                    "INDEX_COUNT_OUT_OF_RANGE",
+                    "resource path does not fit the u16 length field",
+                )
+            })?;
+            total = total
+                .saturating_add(ENTRY_FIXED_LEN)
+                .saturating_add(entry.path.as_str().len());
+        }
+        if u64::try_from(total).map_or(true, |t| t > crate::footer::MAX_INDEX_SIZE) {
+            return Err(index_err(
+                "INDEX_SIZE_OVER_CEILING",
+                "serialized index exceeds the 32 MiB index ceiling",
+            ));
+        }
+
+        let mut out = Vec::with_capacity(total);
+        out.extend_from_slice(&INDEX_MAGIC);
+        out.extend_from_slice(&INDEX_VERSION.to_le_bytes());
+        out.extend_from_slice(&ENTRY_FORMAT.to_le_bytes());
+        out.extend_from_slice(
+            &u32::try_from(self.entries.len())
+                .map_err(|_| {
+                    index_err(
+                        "INDEX_COUNT_OUT_OF_RANGE",
+                        "resource count does not fit the u32 count field",
+                    )
+                })?
+                .to_le_bytes(),
+        );
+
+        for entry in &self.entries {
+            let path = entry.path.as_str().as_bytes();
+            let path_len = u16::try_from(path.len()).map_err(|_| {
+                index_err(
+                    "INDEX_COUNT_OUT_OF_RANGE",
+                    "resource path does not fit the u16 length field",
+                )
+            })?;
+            out.extend_from_slice(&path_len.to_le_bytes());
+            out.extend_from_slice(path);
+            out.extend_from_slice(&entry.frame_offset.to_le_bytes());
+            out.extend_from_slice(&entry.compressed_size.to_le_bytes());
+            out.extend_from_slice(&entry.uncompressed_size.to_le_bytes());
+            out.push(entry.compression);
+        }
+
+        debug_assert_eq!(out.len(), total);
+        Ok(out)
+    }
+
+    /// Compute the SHA-256 that a footer for this index must carry (T0319).
+    ///
+    /// Returns `(bytes, digest)`: the canonical serialization and its hash. The
+    /// writer stores the digest; the reader recomputes it over the exact bytes
+    /// it read and compares (T0308). Both sides go through `encode`, so a
+    /// hash mismatch can only mean the bytes on disk differ from the index the
+    /// writer had — not an encoding drift.
+    ///
+    /// # Errors
+    ///
+    /// Whatever [`Index::encode`] returns.
+    pub fn encode_and_hash(&self) -> Result<(Vec<u8>, [u8; 32])> {
+        let bytes = self.encode()?;
+        let digest: [u8; 32] = sha2::Sha256::digest(&bytes).into();
+        Ok((bytes, digest))
     }
 }
 
@@ -657,5 +747,124 @@ mod tests {
         b.extend_from_slice(&compressed.to_le_bytes());
         b.extend_from_slice(&uncompressed.to_le_bytes());
         b.push(compression);
+    }
+
+    // ---- T0319/T0320: deterministic serializer ----
+
+    #[test]
+    fn encodes_back_to_the_golden_index_byte_for_byte() {
+        // The reference index was itself produced by this format; re-encoding a
+        // decoded copy must reproduce it exactly. This is the determinism
+        // guarantee writers depend on: two writers with the same logical index
+        // emit the same bytes and therefore the same footer hash.
+        let golden = reference_index();
+        let idx = Index::decode(&golden).unwrap();
+        let encoded = idx.encode().unwrap();
+        assert_eq!(encoded, golden);
+        assert_eq!(encoded.len(), 237);
+    }
+
+    #[test]
+    fn encoding_is_idempotent() {
+        let golden = reference_index();
+        let once = Index::decode(&golden).unwrap().encode().unwrap();
+        let twice = Index::decode(&once).unwrap().encode().unwrap();
+        assert_eq!(once, twice);
+    }
+
+    #[test]
+    fn decode_of_encode_round_trips_the_parsed_index() {
+        let idx = Index::decode(&reference_index()).unwrap();
+        let bytes = idx.encode().unwrap();
+        let again = Index::decode(&bytes).unwrap();
+        assert_eq!(idx, again);
+        assert_eq!(again.len(), 5);
+        assert_eq!(again.entries()[0].path().as_str(), "Header/format.version");
+        assert_eq!(again.entries()[4].path().as_str(), "package.epf");
+    }
+
+    #[test]
+    fn the_computed_hash_matches_the_golden_footer_digest() {
+        // The footer in the fixture stores SHA-256 over the exact index bytes.
+        // Computing it through encode() proves the serializer and the fixture
+        // agree, not merely that two self-consistent implementations do.
+        let idx = Index::decode(&reference_index()).unwrap();
+        let (bytes, digest) = idx.encode_and_hash().unwrap();
+        let expected: [u8; 32] = Sha256::digest(&bytes).into();
+        assert_eq!(digest, expected);
+        // And the footer built from this digest must verify against the bytes.
+        let footer = crate::Footer::new(272, 237, digest).unwrap();
+        footer.verify_index_hash(&bytes).unwrap();
+    }
+
+    #[test]
+    fn encodes_an_empty_index_as_just_its_header() {
+        let empty = Index::decode(&{
+            let mut b = Vec::new();
+            b.extend_from_slice(&INDEX_MAGIC);
+            b.extend_from_slice(&INDEX_VERSION.to_le_bytes());
+            b.extend_from_slice(&ENTRY_FORMAT.to_le_bytes());
+            b.extend_from_slice(&0u32.to_le_bytes());
+            b
+        })
+        .unwrap();
+        let bytes = empty.encode().unwrap();
+        assert_eq!(bytes.len(), INDEX_HEADER_LEN);
+        assert!(Index::decode(&bytes).unwrap().is_empty());
+    }
+
+    #[test]
+    fn every_integer_is_serialized_little_endian() {
+        // Explicitly assert the byte order at each field position so a future
+        // refactor to a native-endian write cannot pass on a little-endian CI
+        // machine (T0322: architecture independence is a spec requirement).
+        let idx = Index::decode(&reference_index()).unwrap();
+        let bytes = idx.encode().unwrap();
+        assert_eq!(&bytes[0..8], &INDEX_MAGIC);
+        // index_version = 1 -> [1, 0]
+        assert_eq!(&bytes[8..10], &[0x01, 0x00]);
+        // entry_format = 1 -> [1, 0]
+        assert_eq!(&bytes[10..12], &[0x01, 0x00]);
+        // resource_count = 5 -> [5, 0, 0, 0]
+        assert_eq!(&bytes[12..16], &[0x05, 0x00, 0x00, 0x00]);
+
+        // Every field of the first entry, position by position. Asserting the
+        // count in particular matters: a serializer that wrote a wrong count
+        // would still round-trip through decode only if decode ignored it too,
+        // and both being wrong is exactly the drift golden bytes catch.
+        let first_path = b"Header/format.version";
+        assert_eq!(&bytes[16..18], &[0x15, 0x00]); // path_length 21
+        assert_eq!(&bytes[18..18 + first_path.len()], first_path);
+        let e = 18 + first_path.len();
+        assert_eq!(&bytes[e..e + 8], &[0x20, 0, 0, 0, 0, 0, 0, 0]); // offset 32
+        assert_eq!(&bytes[e + 8..e + 16], &[0x30, 0, 0, 0, 0, 0, 0, 0]); // compressed 48
+        assert_eq!(&bytes[e + 16..e + 24], &[0x06, 0, 0, 0, 0, 0, 0, 0]); // uncompressed 6
+        assert_eq!(bytes[e + 24], COMPRESSION_ZSTD); // compression 1
+    }
+
+    #[test]
+    fn encoding_is_stable_regardless_of_the_u32_count_encoding_path() {
+        // resource_count is u32; a count above 255 must serialize with the same
+        // rule as a small one. Build a 300-entry index and check the header.
+        let mut b = Vec::new();
+        b.extend_from_slice(&INDEX_MAGIC);
+        b.extend_from_slice(&INDEX_VERSION.to_le_bytes());
+        b.extend_from_slice(&ENTRY_FORMAT.to_le_bytes());
+        b.extend_from_slice(&300u32.to_le_bytes());
+        for i in 0..300u32 {
+            let path = format!("r{i:06}");
+            let len = u16::try_from(path.len()).unwrap();
+            b.extend_from_slice(&len.to_le_bytes());
+            b.extend_from_slice(path.as_bytes());
+            b.extend_from_slice(&(u64::from(i) * 10).to_le_bytes());
+            b.extend_from_slice(&5u64.to_le_bytes());
+            b.extend_from_slice(&5u64.to_le_bytes());
+            b.push(COMPRESSION_ZSTD);
+        }
+        let idx = Index::decode(&b).unwrap();
+        assert_eq!(idx.len(), 300);
+        let re = idx.encode().unwrap();
+        assert_eq!(&re[12..16], &300u32.to_le_bytes());
+        assert_eq!(re, b);
     }
 }
