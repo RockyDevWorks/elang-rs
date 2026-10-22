@@ -6,9 +6,10 @@
 //! offsets are consistent, its sizes fit the archive ceilings, and its path is
 //! a legal [`ResourcePath`].
 //!
-//! This module owns the *entry* only. Parsing the serialized index, checking
-//! path ordering and de-duplication, and comparing against the footer hash
-//! belong to the container layer (Phase 3), which drives these constructors.
+//! This module validates entries and enforces unique, bytewise-sorted paths
+//! and index ceilings. Parsing the serialized index and comparing against the
+//! footer hash belong to the container layer (Phase 3), which drives these
+//! constructors.
 
 use crate::bounded::{BoundedCounter, ByteBudget};
 use crate::checked::checked_range;
@@ -145,9 +146,9 @@ impl ResourceEntry {
 /// The full archive index: validated entries plus the aggregate size they
 /// imply.
 ///
-/// Construction enforces the resource-count ceiling and reserves the aggregate
-/// uncompressed budget, so an index that exists is an index that fits inside
-/// the steering ceilings (steering §3.5).
+/// Construction enforces unique paths in ascending raw UTF-8 byte order
+/// (steering §3.2), the resource-count ceiling, and the aggregate uncompressed
+/// budget (steering §3.5).
 #[derive(Debug, Clone)]
 pub struct ResourceIndex {
     entries: Vec<ResourceEntry>,
@@ -157,8 +158,9 @@ pub struct ResourceIndex {
 impl ResourceIndex {
     /// Build an index from validated entries.
     ///
-    /// Rejects more than [`MAX_RESOURCES`] entries and any aggregate
-    /// uncompressed total above [`MAX_UNCOMPRESSED_AGGREGATE_BYTES`].
+    /// Rejects duplicate paths or paths not in ascending raw UTF-8 byte order,
+    /// more than [`MAX_RESOURCES`] entries, and any aggregate uncompressed total
+    /// above [`MAX_UNCOMPRESSED_AGGREGATE_BYTES`]. Empty indexes are valid.
     pub fn new(entries: Vec<ResourceEntry>) -> Result<Self, Error> {
         if entries.len() > MAX_RESOURCES as usize {
             return Err(limit_err(
@@ -167,7 +169,21 @@ impl ResourceIndex {
             ));
         }
         let mut total: u64 = 0;
+        let mut previous_path: Option<&[u8]> = None;
         for e in &entries {
+            let path = e.path().as_bytes();
+            if let Some(previous_path) = previous_path {
+                if previous_path == path {
+                    return Err(err("INDEX_DUPLICATE_PATH", "duplicate resource path"));
+                }
+                if previous_path > path {
+                    return Err(err(
+                        "INDEX_PATH_NOT_SORTED",
+                        "resource paths are not in ascending UTF-8 byte order",
+                    ));
+                }
+            }
+            previous_path = Some(path);
             total = total.checked_add(e.uncompressed_size()).ok_or_else(|| {
                 limit_err(
                     "LIMIT_UNCOMPRESSED_AGGREGATE",
@@ -245,13 +261,13 @@ mod tests {
         [7u8; 32]
     }
 
-    fn entry(offset: u64, csize: u64, usize_: u64) -> ResourceEntry {
-        ResourceEntry::new(path("a.eld"), offset, csize, usize_, digest(), 1000).unwrap()
+    fn entry(name: &str, offset: u64, csize: u64, usize_: u64) -> ResourceEntry {
+        ResourceEntry::new(path(name), offset, csize, usize_, digest(), 1000).unwrap()
     }
 
     #[test]
     fn accepts_in_bounds_entry() {
-        let e = entry(10, 100, 500);
+        let e = entry("a.eld", 10, 100, 500);
         assert_eq!(e.offset(), 10);
         assert_eq!(e.compressed_size(), 100);
         assert_eq!(e.uncompressed_size(), 500);
@@ -370,19 +386,63 @@ mod tests {
 
     #[test]
     fn index_accepts_within_limits_and_lookups() {
-        let idx = ResourceIndex::new(vec![entry(0, 10, 100), entry(10, 10, 200)]).unwrap();
+        let idx = ResourceIndex::new(vec![
+            entry("a.eld", 0, 10, 100),
+            entry("b.eld", 10, 10, 200),
+        ])
+        .unwrap();
         assert_eq!(idx.len(), 2);
         assert!(!idx.is_empty());
         assert_eq!(idx.total_uncompressed(), 300);
         assert_eq!(idx.get(&path("a.eld")).unwrap().offset(), 0);
+        assert_eq!(idx.get(&path("b.eld")).unwrap().offset(), 10);
         assert!(idx.get(&path("missing.eld")).is_none());
+    }
+
+    #[test]
+    fn index_accepts_empty() {
+        let idx = ResourceIndex::new(vec![]).unwrap();
+        assert!(idx.is_empty());
+        assert_eq!(idx.len(), 0);
+        assert_eq!(idx.total_uncompressed(), 0);
+        assert!(idx.get(&path("missing.eld")).is_none());
+    }
+
+    #[test]
+    fn index_rejects_duplicate_paths() {
+        let e = ResourceIndex::new(vec![
+            entry("a.eld", 0, 10, 100),
+            entry("a.eld", 10, 10, 200),
+        ])
+        .unwrap_err();
+        assert_eq!(e.code(), "INDEX_DUPLICATE_PATH");
+        assert_eq!(e.category(), Category::Index);
+    }
+
+    #[test]
+    fn index_rejects_unsorted_paths() {
+        for names in [["b.eld", "a.eld"], ["a.eld", "A.eld"], ["é.eld", "z.eld"]] {
+            let entries = names.into_iter().map(|s| entry(s, 0, 0, 0)).collect();
+            let e = ResourceIndex::new(entries).unwrap_err();
+            assert_eq!(e.code(), "INDEX_PATH_NOT_SORTED");
+            assert_eq!(e.category(), Category::Index);
+        }
+    }
+
+    #[test]
+    fn index_accepts_raw_utf8_byte_order() {
+        let names = ["A.eld", "a", "a.eld", "z.eld", "é.eld"];
+        let entries = names.into_iter().map(|s| entry(s, 0, 0, 0)).collect();
+        let idx = ResourceIndex::new(entries).unwrap();
+        let actual: Vec<_> = idx.entries().iter().map(|e| e.path().as_str()).collect();
+        assert_eq!(actual, names);
     }
 
     #[test]
     fn index_accepts_exactly_at_resource_ceiling() {
         let entries: Vec<ResourceEntry> = (0..MAX_RESOURCES)
             .map(|i| {
-                ResourceEntry::new(path(&format!("r{i}.eld")), 0, 0, 0, digest(), 1000).unwrap()
+                ResourceEntry::new(path(&format!("r{i:05}.eld")), 0, 0, 0, digest(), 1000).unwrap()
             })
             .collect();
         let idx = ResourceIndex::new(entries);
@@ -393,7 +453,7 @@ mod tests {
     #[test]
     fn reserve_debits_aggregate_and_primes_counter() {
         let mut agg = ByteBudget::new(1000);
-        let mut counter = entry(0, 10, 400).reserve(&mut agg).unwrap();
+        let mut counter = entry("a.eld", 0, 10, 400).reserve(&mut agg).unwrap();
         assert_eq!(agg.used(), 400);
         // The counter is capped at the declared size: overproduction fails.
         assert!(counter.record(400).is_ok());
@@ -404,7 +464,7 @@ mod tests {
     fn reserve_rejects_bomb_before_allocating() {
         let mut agg = ByteBudget::new(100);
         // Declares 400 bytes against a 100-byte aggregate budget.
-        let r = entry(0, 10, 400).reserve(&mut agg);
+        let r = entry("a.eld", 0, 10, 400).reserve(&mut agg);
         assert!(r.is_err());
         assert_eq!(agg.used(), 0, "a rejected reserve must not debit");
     }
