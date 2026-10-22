@@ -52,6 +52,8 @@ primary stage(s) at which it can fire.
 | `FOOTER_OFFSET_INCONSISTENT` | 3 | `index_offset + index_size ≠ file_size − 64`. |
 | `FORMAT_VERSION_INVALID` | 8 | `Header/format.version` not UTF-8 `0.1.0`. |
 | `MIMETYPE_INVALID` | 8 | `mimetype` ≠ exact `application/vnd.elang`. |
+| `CONTAINER_BAD_VERSION` | 8 | Container version is not a strict `MAJOR.MINOR.PATCH` string. |
+| `CANONICAL_PROFILE_UNKNOWN` | — | Canonical compression profile is not the locked `elang-canonical-zstd-v1` identifier. |
 
 ### INDEX (stages 4–6)
 
@@ -62,6 +64,10 @@ primary stage(s) at which it can fire.
 | `INDEX_BAD_VERSION` | 5 | index version≠1 or entry format≠1. |
 | `INDEX_COUNT_OUT_OF_RANGE` | 5 | resource count 0 or >25,000. |
 | `INDEX_SIZE_OUT_OF_RANGE` | 5 | index size outside 16..=33,554,432. |
+| `INDEX_SIZE_OVER_CEILING` | 5 | Declared uncompressed resource size exceeds the per-resource ceiling. |
+| `INDEX_RANGE_OUT_OF_BOUNDS` | 5 | Resource offset + compressed size overflows or exceeds the archive length. |
+| `LIMIT_RESOURCES_ARCHIVE` | 5 | Index declares more than 25,000 resources. |
+| `LIMIT_UNCOMPRESSED_AGGREGATE` | 5 | Aggregate declared uncompressed size overflows or exceeds 8 GiB. |
 | `INDEX_ENTRY_MALFORMED` | 5 | Truncated/overlong entry, bad compression code. |
 | `INDEX_PATH_NOT_SORTED` | 5 | Entries not strictly ascending by UTF-8 bytes. |
 | `INDEX_DUPLICATE_PATH` | 5 | Duplicate path. |
@@ -119,6 +125,7 @@ primary stage(s) at which it can fire.
 | `EPF_MISSING_NODE` | 10 | Missing required node. |
 | `EPF_BAD_ARITY` | 10 | Wrong arg/property count or block presence. |
 | `EPF_BAD_VERSION` | 10 | `epf`/`eld` ≠ `0.1.0`, or bad semver. |
+| `LANG_BAD_VERSION` | 10 | Language-definition version is not a strict `MAJOR.MINOR.PATCH` string. |
 | `EPF_BAD_URN` | 10 | Identifier URN malformed. |
 | `EPF_VERSION_MISMATCH` | 10 | `language-version` ≠ URN version suffix. |
 | `EPF_BAD_METADATA_FIELD` | 10 | Field length/content violation. |
@@ -130,6 +137,7 @@ primary stage(s) at which it can fire.
 | Code | Stage | Meaning |
 |---|---|---|
 | `ELD_EMPTY` | 12 | Empty/whitespace/comment-only file. |
+| `ELD_BAD_VERSION` | 12 | ELD schema version is not a strict `MAJOR.MINOR.PATCH` string. |
 | `ELD_TOPLEVEL_INVALID` | 12 | Missing/duplicate/extra top-level node. |
 | `ELD_GROUP_INVALID` | 12 | Missing `consonants`/`vowels`, bad custom name, empty group, >16 groups. |
 | `ELD_GROUP_DUPLICATE` | 12 | Duplicate group name / reserved reuse. |
