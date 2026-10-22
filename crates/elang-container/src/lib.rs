@@ -9,6 +9,8 @@
 //! untrusted: no panics, no out-of-bounds reads, checked offset arithmetic.
 #![allow(clippy::needless_doctest_main)]
 
+pub mod footer;
 pub mod header;
 
+pub use footer::{Footer, FOOTER_LEN, FOOTER_MAGIC, MAX_INDEX_SIZE, MIN_INDEX_SIZE};
 pub use header::{Header, HEADER_LEN, HEADER_MAGIC, SUPPORTED_MAJOR, SUPPORTED_MINOR};
