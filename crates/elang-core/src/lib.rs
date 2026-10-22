@@ -21,6 +21,9 @@ pub mod modes;
 pub mod version;
 
 pub use error::{Category, Diagnostic, Diagnostics, Error, KdlSpan, Result};
+pub use version::{
+    CanonicalProfile, ContainerVersion, EldVersion, EpfVersion, LanguageVersion, SemVer, Version,
+};
 
 /// Version-domain constants locked by the ELANG steering contract (§1).
 ///
