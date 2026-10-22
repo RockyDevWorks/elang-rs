@@ -93,30 +93,30 @@
 
 ## Phase 3 — Binary container header, footer and index
 
-- [ ] **T0301** Implement 32-byte header decoder with magic `ELANG\r\n\x1A`.
-- [ ] **T0302** Enforce major=0, minor=1, flags=0 and all 16 reserved bytes zero.
-- [ ] **T0303** Implement 32-byte header encoder with exact little-endian fields.
-- [ ] **T0304** Implement 64-byte terminal footer decoder (`ELEND001`).
-- [ ] **T0305** Validate footer reserved bytes and checked index bounds.
-- [ ] **T0306** Enforce `index_offset + index_size == file_size - 64`.
-- [ ] **T0307** Enforce index size range 16..33,554,432.
-- [ ] **T0308** Verify footer SHA-256 against exact index bytes.
-- [ ] **T0309** Implement 16-byte index header decoder (`ELIDX001`).
-- [ ] **T0310** Enforce index version=1, entry format=1, count<=25,000.
-- [ ] **T0311** Implement index entry parser: `u16 LE` path length + UTF-8 path + three `u64 LE` + compression `u8`.
-- [ ] **T0312** Enforce compression code exactly 1.
-- [ ] **T0313** Enforce 1024-byte max path, strict UTF-8 and NFC.
-- [ ] **T0314** Reject absolute paths, empty/`.`/`..` segments, NUL and backslashes.
-- [ ] **T0315** Enforce strict ascending bytewise path order and no duplicates.
-- [ ] **T0316** Validate contiguous frames in index order starting at byte 32.
-- [ ] **T0317** Reject frame gaps, overlaps, unindexed bytes and offset/length overflow.
-- [ ] **T0318** Ensure last frame ends exactly at index offset.
-- [ ] **T0319** Implement deterministic index serializer and index hash computation.
-- [ ] **T0320** Implement footer serializer and golden byte comparison.
-- [ ] **T0321** Test truncated headers, footer variants, zero/overflow counts and corrupt index.
-- [ ] **T0322** Test little-endian and byte-offset vectors on multiple architectures.
-- [ ] **T0323** Test empty index/absent required resources rejected at appropriate stage.
-- [ ] **T0324** Expose index-only archive listing without decompressing resources.
+- [x] **T0301** Implement 32-byte header decoder with magic `ELANG\r\n\x1A`. — `Header::decode` ✅
+- [x] **T0302** Enforce major=0, minor=1, flags=0 and all 16 reserved bytes zero. — `Header::decode` order magic→version→flags→reserved ✅
+- [x] **T0303** Implement 32-byte header encoder with exact little-endian fields. — `Header::encode` ✅
+- [x] **T0304** Implement 64-byte terminal footer decoder (`ELEND001`). — `Footer::decode` ✅
+- [x] **T0305** Validate footer reserved bytes and checked index bounds. — `Footer::decode` reserved check + `Footer::new` size range ✅
+- [x] **T0306** Enforce `index_offset + index_size == file_size - 64`. — `Footer::check_framing` (checked_add) ✅
+- [x] **T0307** Enforce index size range 16..33,554,432. — `Footer::new` MIN/MAX_INDEX_SIZE ✅
+- [x] **T0308** Verify footer SHA-256 against exact index bytes. — `Footer::verify_index_hash` ✅
+- [x] **T0309** Implement 16-byte index header decoder (`ELIDX001`). — `Index::decode` ✅
+- [x] **T0310** Enforce index version=1, entry format=1, count<=25,000. — `Index::decode` ✅
+- [x] **T0311** Implement index entry parser: `u16 LE` path length + UTF-8 path + three `u64 LE` + compression `u8`. — `decode_entry` ✅
+- [x] **T0312** Enforce compression code exactly 1. — `decode_entry` compression check ✅
+- [x] **T0313** Enforce 1024-byte max path, strict UTF-8 and NFC. — UTF-8 then NFC via elang-unicode before ResourcePath ✅
+- [x] **T0314** Reject absolute paths, empty/`.`/`..` segments, NUL and backslashes. — delegated to `ResourcePath::new` ✅
+- [x] **T0315** Enforce strict ascending bytewise path order and no duplicates. — delegated to `ResourceIndex::new` ✅
+- [x] **T0316** Validate contiguous frames in index order starting at byte 32. — `validate_layout` first frame at byte 32 ✅
+- [x] **T0317** Reject frame gaps, overlaps, unindexed bytes and offset/length overflow. — `validate_layout` gap/overlap/unindexed/trailing + `FrameSpan::end` overflow ✅
+- [x] **T0318** Ensure last frame ends exactly at index offset. — `validate_layout` cursor == index_offset ✅
+- [x] **T0319** Implement deterministic index serializer and index hash computation. — `Index::encode` + `Index::encode_and_hash` ✅
+- [x] **T0320** Implement footer serializer and golden byte comparison. — `Footer::encode` golden byte comparison ✅
+- [x] **T0321** Test truncated headers, footer variants, zero/overflow counts and corrupt index. — truncated footer, bad magic, zero/oversize index_size, corrupt index hash ✅
+- [x] **T0322** Test little-endian and byte-offset vectors on multiple architectures. — byte-position assertions for every LE field (arch-independent) ✅
+- [x] **T0323** Test empty index/absent required resources rejected at appropriate stage. — empty index round-trip through `ArchiveListing` ✅
+- [x] **T0324** Expose index-only archive listing without decompressing resources. — `ArchiveListing::parse` + `listing()` ✅
 
 **Acceptance:** arbitrary untrusted container bytes cannot cause panic or out-of-bounds reads; binary vectors match exactly.
 
