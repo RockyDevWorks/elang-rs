@@ -24,7 +24,7 @@
 | REQ-GOV-FIXTURE-001 | `fixtures/README.md`, `fixtures/expected-result.schema.json` | files present | Done |
 | REQ-GOV-RELEASE-001 | `CHANGELOG.md`, `docs/release-strategy.md` | files present | Done |
 | REQ-GOV-OPENART-001 | `docs/open-artifacts.md`, ADR 0003 | files present | Done |
-| REQ-CORE-VERSION-001 (partial) | `elang-core::version_domains` | `version_domains_are_locked` test passes | Done |
+| REQ-CORE-VERSION-001 | `elang-core::version` (`ContainerVersion`, `EpfVersion`, `EldVersion`, `LanguageVersion`, `CanonicalProfile`, `Version` trait); `version_domains` constants | `version::tests::domain_types_are_independent`, `domain_constants_match_locked_values`, `canonical_profile_*`, `version_trait_round_trip` | Done — version domains are now distinct types, not interchangeable strings |
 
 ## Phase 1 (normative artifacts) — partial
 
@@ -48,21 +48,23 @@
 > corresponding Rust validator and its tests move it to a crate section as later
 > phases implement and test against these artifacts.
 
-## Phases 2–16 — Planned / Blocked
+## Phases 2+ — Phase 2 Done; later phases Planned / Blocked
 
-The following requirement groups are tracked to their tasks and will move to
-**Scaffolded**/**Done** as each phase lands. None are implemented yet beyond the
-version-domain constants above.
+The following requirement groups are tracked to their tasks and move to
+**Scaffolded**/**Done** as each phase lands. Phase 2 (core types, limits,
+diagnostics, safety) is fully implemented; Phase 1 remains partial pending the
+Phase 11 canonical ELD golden vectors (ADR 0003 freeze gate).
 
 | Requirement group | Owner crate | Tasks | Status |
 |---|---|---|---|
-| REQ-CORE-VERSION-001/002 | `elang-core::version` (`SemVer`, `domains`) | `version::tests::*` (strict parse, no leading zeros) | Done |
+| REQ-CORE-VERSION-001/002 | `elang-core::version` (`SemVer` + per-domain newtypes, `Version` trait, `CanonicalProfile`) | `version::tests::*` (strict parse, no leading zeros, u64 overflow, domain independence, profile exact-match, trait round-trip) | Done |
 | REQ-CORE-VERSION-003/004 | elang-container | T1204, T0301 | Planned (Phase 3) |
-| REQ-CORE-MODEL-001/002 | `elang-core::ids` (`ResourcePath`, `GroupName`, `Romanization`, `IpaIdentifierText`) | `ids::tests::*` | Done |
+| REQ-CORE-MODEL-001 | `elang-core::ids::ResourcePath` (validated path), **`elang-core::index::ResourceEntry` + `ResourceIndex`** (validated index entry + index, with `checked_add` for offset+size, per-resource `MAX_*` ceilings, aggregate `MAX_RESOURCES` / `MAX_UNCOMPRESSED_AGGREGATE_BYTES` enforcement, `reserve()` debits the aggregate before allocating) | `ids::tests::resource_path_*`, `index::tests::*` (12 tests covering in-bounds, overflow, zero-length-at-end, ceiling overruns, exact-ceiling acceptance, no-double-debit on reserve failure) | Done — index entry type was missing pre-session; Phase 3 and 4 can consume a `ResourceIndex` directly |
+| REQ-CORE-MODEL-002 | `elang-core::ids` (`GroupName`, `Romanization`, `IpaIdentifierText`) | `ids::tests::*` | Done |
 | REQ-CORE-MODEL-004 | `elang-core::limits` | `limits::tests::*` | Done |
 | REQ-CORE-MODEL-005 | `elang-core::checked` | `checked::tests::*` (overflow/underflow/OOB) | Done |
 | REQ-CORE-MODEL-006 | `elang-core::bounded` (`ByteBudget`, `BoundedCounter`) | `bounded::tests::*` | Done |
-| REQ-CORE-MODEL-007 | `elang-core::modes` (`Inspected`/`Verified`/`Validated`) | `modes::tests::*` | Done |
+| REQ-CORE-MODEL-007 | `elang-core::modes::{StageTracker, Inspected, Verified, Validated, Stage}` | `modes::tests::fresh_tracker_yields_no_results`, `results_appear_only_at_their_ceiling`, `advance_refuses_backwards_and_repeats`, `validated_narrows_down_the_ladder`, `verified_narrows_to_inspected`, `tracker_is_copy_and_default_equivalent` | Done — **results are unforgeable**: public constructors removed, fields private, no `Default`. `StageTracker::advance` rejects backwards/equal, so reaching `EldSemantics` necessarily means every earlier stage ran. `inspected()`/`verified()`/`validated()` return `Option` and yield nothing until their ceiling is reached. |
 | REQ-CORE-MODEL-008 | workspace lints (`unwrap`/`panic`/`indexing_slicing`/arith) | `cargo clippy -D warnings` clean | Done (enforced) |
 | REQ-CORE-MODEL (threat model, T0213) | `.kiro/specs/elang-v0.1.0/design.md` §4, `SECURITY.md` | threat model documents malicious archives, decompression bombs, path traversal, parser abuse (+ frame abuse, false trust), each mapped to defenses and requirement IDs; consistent across both docs and steering §3.5/§10 | Done (artifact) |
 | REQ-CORE-MODEL-003 | elang-epf / elang-eld validated models | T0205 | Planned (Phases 6/9) |
