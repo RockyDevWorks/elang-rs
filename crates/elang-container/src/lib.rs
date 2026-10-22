@@ -8,3 +8,7 @@
 //! (reader integration and writer). This crate must treat all container bytes as
 //! untrusted: no panics, no out-of-bounds reads, checked offset arithmetic.
 #![allow(clippy::needless_doctest_main)]
+
+pub mod header;
+
+pub use header::{Header, HEADER_LEN, HEADER_MAGIC, SUPPORTED_MAJOR, SUPPORTED_MINOR};
