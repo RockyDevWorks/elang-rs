@@ -24,7 +24,6 @@
 | REQ-GOV-FIXTURE-001 | `fixtures/README.md`, `fixtures/expected-result.schema.json` | files present | Done |
 | REQ-GOV-RELEASE-001 | `CHANGELOG.md`, `docs/release-strategy.md` | files present | Done |
 | REQ-GOV-OPENART-001 | `docs/open-artifacts.md`, ADR 0003 | files present | Done |
-| REQ-CORE-VERSION-001 (partial) | `elang-core::version_domains` | `version_domains_are_locked` test passes | Done |
 
 ## Phase 1 (normative artifacts) — partial
 
@@ -48,21 +47,25 @@
 > corresponding Rust validator and its tests move it to a crate section as later
 > phases implement and test against these artifacts.
 
-## Phases 2–16 — Planned / Blocked
+## Phases 2+ — Phase 2 Done; later phases Planned / Blocked
 
-The following requirement groups are tracked to their tasks and will move to
-**Scaffolded**/**Done** as each phase lands. None are implemented yet beyond the
-version-domain constants above.
+The following requirement groups are tracked to their tasks and move to
+**Scaffolded**/**Done** as each phase lands. The Phase 2 *foundations* (core
+types, limits, diagnostics, safety) are implemented except T0205, the validated
+EPF/ELD AST models, which are deferred to Phases 6/9 where the schemas are
+parsed — see the row marked `Planned (Phases 6/9)` below. Phase 1 remains
+partial pending the Phase 11 canonical ELD golden vectors (ADR 0003 freeze gate).
 
 | Requirement group | Owner crate | Tasks | Status |
 |---|---|---|---|
-| REQ-CORE-VERSION-001/002 | `elang-core::version` (`SemVer`, `domains`) | `version::tests::*` (strict parse, no leading zeros) | Done |
+| REQ-CORE-VERSION-001/002 | `elang-core::version` (`SemVer` + per-domain newtypes, `Version` trait, `CanonicalProfile`) | `version::tests::*` (strict parse, no leading zeros, u64 overflow, domain independence, profile exact-match, trait round-trip) | Done |
 | REQ-CORE-VERSION-003/004 | elang-container | T1204, T0301 | Planned (Phase 3) |
-| REQ-CORE-MODEL-001/002 | `elang-core::ids` (`ResourcePath`, `GroupName`, `Romanization`, `IpaIdentifierText`) | `ids::tests::*` | Done |
+| REQ-CORE-MODEL-001 | `elang-core::ids::ResourcePath` (validated path), **`elang-core::index::ResourceEntry` + `ResourceIndex`** (validated index entry + index, with `checked_add` for offset+size, per-resource `MAX_*` ceilings, aggregate `MAX_RESOURCES` / `MAX_UNCOMPRESSED_AGGREGATE_BYTES` enforcement, unique paths in ascending raw UTF-8 byte order, `reserve()` debits the aggregate before allocating) | `ids::tests::resource_path_*`, `index::tests::*` (in-bounds, overflow, zero-length-at-end, ceiling overruns, exact-ceiling acceptance, empty indexes, duplicate/unsorted path rejection, UTF-8 byte ordering, distinct-path lookup, no-double-debit on reserve failure) | Done — index entry type was missing pre-session; Phase 3 and 4 can consume a `ResourceIndex` directly |
+| REQ-CORE-MODEL-002 | `elang-core::ids` (`GroupName`, `Romanization`, `IpaIdentifierText`) | `ids::tests::*` | Done |
 | REQ-CORE-MODEL-004 | `elang-core::limits` | `limits::tests::*` | Done |
 | REQ-CORE-MODEL-005 | `elang-core::checked` | `checked::tests::*` (overflow/underflow/OOB) | Done |
 | REQ-CORE-MODEL-006 | `elang-core::bounded` (`ByteBudget`, `BoundedCounter`) | `bounded::tests::*` | Done |
-| REQ-CORE-MODEL-007 | `elang-core::modes` (`Inspected`/`Verified`/`Validated`) | `modes::tests::*` | Done |
+| REQ-CORE-MODEL-007 | `elang-core::modes::{StageTracker, Inspected, Verified, Validated, Stage}` | `modes::tests::{fresh_tracker_yields_no_results, results_appear_only_at_their_ceiling, advance_refuses_backwards_and_repeats, tracker_is_copy_and_default_equivalent, fresh_tracker_is_empty, advance_accepts_only_the_immediate_successor, advance_past_the_top_is_refused, fresh_tracker_cannot_yield_a_validated_even_by_skipping, stage_successor_covers_the_ladder, validated_clamps_reached_to_ceiling, verified_clamps_reached_to_ceiling, at_seed_path_still_yields_the_full_results}` | Done — **results are unforgeable, by construction**: result fields are private with no public constructor and no `Default`. `StageTracker::new()` starts with `reached: None`, so `advance(Preflight)` is the only valid first transition. `advance` accepts only the **immediate successor** of the current stage (`Stage::successor()` is the exhaustive ladder); skipping a stage returns `None` and leaves the tracker untouched. Reaching `EldSemantics` therefore proves every earlier stage was *reported* in order — not that the validation work itself ran, which is the reader's responsibility. `StageTracker::at` is `pub(crate)`, not `pub`, so external crates cannot bypass the ladder to mint a `Validated`. The `reached` field on each result type is clamped to its ceiling, so narrowing conversions are lossless in meaning. |
 | REQ-CORE-MODEL-008 | workspace lints (`unwrap`/`panic`/`indexing_slicing`/arith) | `cargo clippy -D warnings` clean | Done (enforced) |
 | REQ-CORE-MODEL (threat model, T0213) | `.kiro/specs/elang-v0.1.0/design.md` §4, `SECURITY.md` | threat model documents malicious archives, decompression bombs, path traversal, parser abuse (+ frame abuse, false trust), each mapped to defenses and requirement IDs; consistent across both docs and steering §3.5/§10 | Done (artifact) |
 | REQ-CORE-MODEL-003 | elang-epf / elang-eld validated models | T0205 | Planned (Phases 6/9) |

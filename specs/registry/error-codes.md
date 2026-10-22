@@ -51,6 +51,7 @@ primary stage(s) at which it can fire.
 | `FOOTER_RESERVED_NONZERO` | 3 | Footer reserved bytes nonzero. |
 | `FOOTER_OFFSET_INCONSISTENT` | 3 | `index_offset + index_size ≠ file_size − 64`. |
 | `FORMAT_VERSION_INVALID` | 8 | `Header/format.version` not UTF-8 `0.1.0`. |
+| `CONTAINER_BAD_VERSION` | 8 | Binary container version string not strict `MAJOR.MINOR.PATCH`. |
 | `MIMETYPE_INVALID` | 8 | `mimetype` ≠ exact `application/vnd.elang`. |
 
 ### INDEX (stages 4–6)
@@ -69,6 +70,8 @@ primary stage(s) at which it can fire.
 | `FRAME_LAYOUT_OVERLAP` | 6 | Overlapping frames. |
 | `FRAME_LAYOUT_UNINDEXED_BYTES` | 6 | Bytes not covered by any frame. |
 | `FRAME_LAYOUT_TRAILING_BYTES` | 6 | Frames do not end exactly at index offset. |
+| `INDEX_RANGE_OUT_OF_BOUNDS` | 5 | `offset + compressed_size` exceeds the archive, or overflows `u64`. |
+| `INDEX_SIZE_OVER_CEILING` | 5 | A resource's `uncompressed_size` exceeds the 1 GiB per-resource ceiling. |
 
 ### RESOURCE_PATH (stage 5)
 
@@ -121,6 +124,7 @@ primary stage(s) at which it can fire.
 | `EPF_BAD_VERSION` | 10 | `epf`/`eld` ≠ `0.1.0`, or bad semver. |
 | `EPF_BAD_URN` | 10 | Identifier URN malformed. |
 | `EPF_VERSION_MISMATCH` | 10 | `language-version` ≠ URN version suffix. |
+| `LANG_BAD_VERSION` | 10 | `language-version` not strict `MAJOR.MINOR.PATCH`. |
 | `EPF_BAD_METADATA_FIELD` | 10 | Field length/content violation. |
 | `EPF_MANIFEST_INVALID` | 10 | Missing/duplicate `phonemes`, `modules` present, bad path. |
 | `EPF_MANIFEST_PATH_NOT_INDEXED` | 10 | `phonemes` path not in index or not `.eld`. |
@@ -130,6 +134,7 @@ primary stage(s) at which it can fire.
 | Code | Stage | Meaning |
 |---|---|---|
 | `ELD_EMPTY` | 12 | Empty/whitespace/comment-only file. |
+| `ELD_BAD_VERSION` | 12 | `eld` schema version not strict `MAJOR.MINOR.PATCH`. |
 | `ELD_TOPLEVEL_INVALID` | 12 | Missing/duplicate/extra top-level node. |
 | `ELD_GROUP_INVALID` | 12 | Missing `consonants`/`vowels`, bad custom name, empty group, >16 groups. |
 | `ELD_GROUP_DUPLICATE` | 12 | Duplicate group name / reserved reuse. |
@@ -195,6 +200,8 @@ primary stage(s) at which it can fire.
 | `LIMIT_COMMENT_BYTES` | Comment byte caps exceeded. |
 | `LIMIT_REFERENCES` | > 10,000,000 semantic references/archive. |
 | `LIMIT_TRAVERSAL_DEPTH` | Semantic traversal depth > 128. |
+| `LIMIT_RESOURCES_ARCHIVE` | > 25,000 resources in one archive. |
+| `LIMIT_UNCOMPRESSED_AGGREGATE` | Aggregate declared uncompressed bytes > 8 GiB. |
 
 ### CANONICAL (writer/roundtrip)
 
@@ -202,6 +209,7 @@ primary stage(s) at which it can fire.
 |---|---|
 | `CANONICAL_NOT_IDEMPOTENT` | `canon(canon(x)) ≠ canon(x)` (internal invariant failure). |
 | `CANONICAL_MISMATCH` | Emitted canonical bytes ≠ expected golden. |
+| `CANONICAL_PROFILE_UNKNOWN` | Canonical-profile identifier is not the locked `elang-canonical-zstd-v1` (or whatever profile the steering committee has ratified). |
 
 ## Stability note
 
