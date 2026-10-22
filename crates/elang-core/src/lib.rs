@@ -15,12 +15,16 @@ pub mod bounded;
 pub mod checked;
 pub mod error;
 pub mod ids;
+pub mod index;
 pub mod limits;
 pub mod model;
 pub mod modes;
 pub mod version;
 
 pub use error::{Category, Diagnostic, Diagnostics, Error, KdlSpan, Result};
+pub use ids::{GroupName, IpaIdentifierText, ResourcePath, Romanization};
+pub use index::{ResourceEntry, ResourceIndex, SHA256_BYTES};
+pub use modes::{Inspected, Stage, StageTracker, Validated, Verified};
 pub use version::{
     CanonicalProfile, ContainerVersion, EldVersion, EpfVersion, LanguageVersion, SemVer, Version,
 };
