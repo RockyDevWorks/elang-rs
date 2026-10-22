@@ -212,11 +212,11 @@ impl StageTracker {
     /// every stage must be visited in order, reaching
     /// [`Stage::EldSemantics`] necessarily means all twelve ran.
     ///
-    /// Returns the previously completed stage for an accepted transition.
-    /// `None` means either the first accepted transition (to [`Stage::Preflight`])
-    /// or a refused transition. Compare [`StageTracker::reached`] before and
-    /// after the call to distinguish these cases: only an accepted transition
-    /// changes the reached stage.
+    /// Returns the previously completed stage, or `None` when this is the
+    /// first accepted transition or when the transition is refused. Use
+    /// [`StageTracker::reached`] to distinguish those cases: after a refused
+    /// transition `reached` is unchanged, while a first accepted transition
+    /// leaves it at `Some(stage)`.
     pub fn advance(&mut self, stage: Stage) -> Option<Stage> {
         let expected = match self.reached {
             None => Stage::Preflight,

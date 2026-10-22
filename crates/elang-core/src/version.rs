@@ -156,7 +156,7 @@ impl CanonicalProfile {
         } else {
             Err(Error::new(
                 "CANONICAL_PROFILE_UNKNOWN",
-                Category::Container,
+                Category::Canonical,
                 "unknown canonical profile",
             ))
         }
@@ -355,6 +355,14 @@ mod tests {
 
         let g = LanguageVersion::parse("1.0").unwrap_err();
         assert_eq!(g.code(), "LANG_BAD_VERSION");
+        assert_eq!(g.category(), Category::EpfSchema);
+
+        // Canonical profile errors belong to the Canonical category (a
+        // canonical-profile mismatch is a writer/roundtrip concern, not a
+        // container-format one).
+        let p = CanonicalProfile::parse("elang-canonical-zstd-v2").unwrap_err();
+        assert_eq!(p.code(), "CANONICAL_PROFILE_UNKNOWN");
+        assert_eq!(p.category(), Category::Canonical);
 
         // The underlying reason survives the re-labelling.
         assert!(ContainerVersion::parse("1.0")
