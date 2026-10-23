@@ -60,13 +60,15 @@ later T0123 step will use to declare the final v0.1.0 freeze.
 3. **JCS writer.** The manifest is emitted as RFC 8785 JSON Canonical
    Scheme: object keys sorted by UTF-16 code unit order, no
    insignificant whitespace, UTF-8, integers without exponent/decimal,
-   control characters escaped as `\uXXXX`, non-BMP characters as
-   surrogate pairs. The writer is implemented in
+   control characters escaped as `\uXXXX`. Only `"`, `\` and control
+   characters below U+0020 are escaped; every other character — including
+   non-BMP scalars — is emitted literally as UTF-8, per RFC 8785 §3.2.2.2.
+   The writer is implemented in
    `elang-conformance::normative_manifest::jcs_canonicalize`.
 
 4. **Pinned checksum.** `PINNED_SPEC_CHECKSUM` holds the SHA-256 of the
    canonical JCS bytes of the committed manifest. The current value
-   (`31074de8…e793a`) covers the ratified corpus **excluding OA-14**:
+   (`f50bf407…5a8fa`) covers the ratified corpus **excluding OA-14**:
    the IPA/Unicode side of the freeze is ready; the canonical ELD side
    is not.
 

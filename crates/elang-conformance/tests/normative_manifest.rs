@@ -73,7 +73,7 @@ fn manifest_excludes_itself() {
 }
 
 #[test]
-fn artifact_paths_are_unique_and_sorted() {
+fn artifact_paths_are_unique_and_nonempty() {
     let mut seen = BTreeSet::new();
     for a in ARTIFACTS {
         assert!(
@@ -106,6 +106,27 @@ fn manifest_declares_the_expected_release_and_schema() {
         artifacts.len(),
         ARTIFACTS.len(),
         "manifest must list every artifact exactly once"
+    );
+}
+
+#[test]
+fn the_jcs_writer_emits_non_bmp_scalars_literally() {
+    // RFC 8785 §3.2.2.2 escapes only `"`, `\` and control characters below
+    // U+0020. A non-BMP scalar is emitted as raw UTF-8; the surrogate-pair
+    // form is JSON-legal but not JCS-canonical. The current corpus is ASCII
+    // only, so this pins the writer rather than the committed digest.
+    let value = serde_json::json!({ "k": "\u{1F600}" });
+    assert_eq!(
+        normative_manifest::jcs_canonicalize(&value),
+        "{\"k\":\"\u{1F600}\"}"
+    );
+    // The two mandatory escapes and control characters are still escaped:
+    // `"` and `\` become `\"` and `\\`, U+000A becomes `\n`, U+0001 becomes
+    // `\u0001`.
+    let value = serde_json::json!({ "k": "a\"b\\c\n\u{1}" });
+    assert_eq!(
+        normative_manifest::jcs_canonicalize(&value),
+        "{\"k\":\"a\\\"b\\\\c\\n\\u0001\"}"
     );
 }
 

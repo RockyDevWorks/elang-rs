@@ -319,8 +319,10 @@ fn utf16_cmp(a: &str, b: &str) -> std::cmp::Ordering {
 
 fn write_jcs_string(s: &str, out: &mut String) {
     out.push('"');
-    // Iterate by Unicode scalar value so we escape control characters and
-    // surrogate halves consistently with RFC 8785.
+    // RFC 8785 §3.2.2.2: only `"`, `\` and control characters below U+0020 are
+    // escaped. Every other character — including non-BMP scalars — is emitted
+    // literally as UTF-8. Surrogate-pair escaping is a JSON-legal encoding
+    // but is NOT JCS-canonical, so it must not be used here.
     for c in s.chars() {
         match c {
             '"' => out.push_str("\\\""),
@@ -331,19 +333,7 @@ fn write_jcs_string(s: &str, out: &mut String) {
             '\u{000D}' => out.push_str("\\r"),
             '\u{0009}' => out.push_str("\\t"),
             c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
-            c => {
-                // Non-BMP characters are emitted by `chars()` as their
-                // original scalar; serde_json/JCS require surrogate-pair
-                // encoding for them in JSON strings.
-                if (c as u32) >= 0x10000 {
-                    let cp = c as u32 - 0x10000;
-                    let hi = 0xD800 + (cp >> 10);
-                    let lo = 0xDC00 + (cp & 0x3FF);
-                    out.push_str(&format!("\\u{:04x}\\u{:04x}", hi, lo));
-                } else {
-                    out.push(c);
-                }
-            }
+            c => out.push(c),
         }
     }
     out.push('"');
@@ -417,10 +407,11 @@ pub fn write_manifest(release_root: &Path) -> Result<(Vec<u8>, String), Manifest
 
 /// Verify the committed manifest against the artifact corpus on disk.
 ///
-/// 1. Reads the committed manifest file.
-/// 2. Parses it and re-canonicalizes to JCS bytes.
-/// 3. Checks the recomputed JCS digest equals `PINNED_SPEC_CHECKSUM`; a
-///    mismatch is a [`ManifestError::DigestMismatch`].
+/// 1. Reads the committed manifest file and hashes its bytes.
+/// 2. Checks that digest equals `PINNED_SPEC_CHECKSUM`; a mismatch is a
+///    [`ManifestError::DigestMismatch`].
+/// 3. Parses the manifest and re-canonicalizes it to JCS bytes, which must
+///    be byte-identical to the committed bytes.
 /// 4. For each artifact entry, re-hashes the file on disk and checks it
 ///    equals the entry's recorded `sha256`.
 pub fn verify(release_root: &Path) -> Result<(), ManifestError> {
