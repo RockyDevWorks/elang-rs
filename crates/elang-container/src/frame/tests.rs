@@ -356,11 +356,9 @@ fn decode_rejects_output_exceeding_a_lowered_declared_size_mid_stream() {
     let before = budget;
     assert!(budget.charged(u64::from(declared)).is_ok()); // declared-size gates pass
     let err = decode(&frame, &mut budget).unwrap_err();
-    assert!(
-        matches!(
-            err.code(),
-            "FRAME_DECOMPRESSED_SIZE_MISMATCH" | "DECOMPRESSION_BUDGET_EXCEEDED"
-        ),
+    assert_eq!(
+        err.code(),
+        "FRAME_DECOMPRESSED_SIZE_MISMATCH",
         "unexpected error: {err:?}"
     );
     assert_eq!(
