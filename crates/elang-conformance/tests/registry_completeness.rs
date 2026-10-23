@@ -64,6 +64,8 @@ const KNOWN_NON_CODES: &[&str] = &[
     "ELEND001",
     "ELIDX001",
     "ELENXXXX",
+    // Deliberately corrupted footer magic used by the layout parse-error test.
+    "NOPENOPE",
     // Emitted by elang-core::model::eld (Phase 9 — registry entries pending).
     "ELD_GROUP_EMPTY",
     "ELD_MISSING_REQUIRED_GROUP",

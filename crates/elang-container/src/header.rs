@@ -222,6 +222,7 @@ fn err(code: &'static str, msg: &'static str) -> Error {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod tests {
     use super::*;
+    use crate::testdata::reference_header;
 
     /// The exact 32 reference header bytes from
     /// `specs/registry/binary-reference-vectors.json` / `header.bin`.
@@ -399,5 +400,30 @@ mod tests {
         assert!(bytes.len() > HEADER_LEN);
         let h = Header::decode(&bytes).unwrap();
         assert_eq!((h.major(), h.minor(), h.flags()), (0, 1, 0));
+    }
+
+    #[test]
+    fn default_header_equals_current() {
+        // `Default::default()` is part of the API surface and must produce
+        // the same header as `Header::current()` so callers that pass through
+        // `..Default::default()` do not see a different binary than callers
+        // that pass through `Header::current()`.
+        let d: Header = Header::default();
+        let c = Header::current();
+        assert_eq!(d.major(), c.major());
+        assert_eq!(d.minor(), c.minor());
+        assert_eq!(d.flags(), c.flags());
+    }
+
+    #[test]
+    fn default_header_encodes_to_the_golden_header_bin() {
+        // Encoding must produce exactly the committed golden header bytes
+        // regardless of whether `Default::default()` or `Header::current()`
+        // produced the value.
+        let h = Header::default();
+        let mut out = vec![0u8; HEADER_LEN];
+        let written = h.encode(&mut out, 0).unwrap();
+        assert_eq!(written, HEADER_LEN);
+        assert_eq!(&out[..], &reference_header()[..]);
     }
 }

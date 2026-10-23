@@ -233,9 +233,14 @@ impl Index {
     ///
     /// # Errors
     ///
-    /// `INDEX_SIZE_OVER_CEILING` if the total serialization would exceed
-    /// `MAX_INDEX_SIZE` (32 MiB), or `INDEX_COUNT_OUT_OF_RANGE` if an entry
-    /// path exceeds the u16 length field.
+    /// `INDEX_COUNT_OUT_OF_RANGE` if an entry path exceeds the u16 length field,
+    /// or `INDEX_SIZE_OVER_CEILING` if the serialization exceeds
+    /// `MAX_INDEX_SIZE` (32 MiB). The latter is a defence-in-depth bound: with
+    /// `MAX_RESOURCES` = 25,000 entries and `MAX_RESOURCE_PATH_BYTES` = 1,024,
+    /// no index this crate can decode could reach 32 MiB (the maximum is
+    /// ~26 MiB), so it is unreachable through the public API today. It is kept
+    /// so that raising either limit later cannot silently produce an oversized
+    /// index.
     pub fn encode(&self) -> Result<Vec<u8>> {
         // Compute the exact total up front so the ceiling check happens before
         // any allocation grows.
@@ -436,6 +441,15 @@ mod tests {
     use elang_core::ResourceIndex;
     use sha2::{Digest, Sha256};
 
+    /// Whether a rejection code belongs to the index or resource-path families.
+    ///
+    /// Extracted so each assertion is a single covered line rather than a
+    /// short-circuited `||` chain whose later arms never execute.
+    fn is_index_or_path_code(code: &str) -> bool {
+        const FAMILIES: [&str; 3] = ["INDEX", "PATH", "ARCHIVE"];
+        FAMILIES.iter().any(|f| code.starts_with(f))
+    }
+
     /// The exact 237-byte reference index from `index.bin`.
     fn reference_index() -> Vec<u8> {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -561,10 +575,8 @@ mod tests {
                     // scanner).
                     let code = e.code();
                     assert!(
-                        code.starts_with("INDEX_")
-                            || code.starts_with("PATH_")
-                            || code.starts_with("ARCHIVE"),
-                        "prefix {len} produced unregistered code {code}",
+                        is_index_or_path_code(code),
+                        "prefix {len} produced unregistered code {code}"
                     );
                 }
             }
@@ -882,5 +894,177 @@ mod tests {
         let re = idx.encode().unwrap();
         assert_eq!(&re[12..16], &300u32.to_le_bytes());
         assert_eq!(re, b);
+    }
+
+    // ---- coverage: encode-side guards and paths not reached by the
+    // reference fixture ----
+
+    #[test]
+    fn encode_and_hash_returns_bytes_matching_encode() {
+        let idx = Index::decode(&reference_index()).unwrap();
+        let (bytes, digest) = idx.encode_and_hash().unwrap();
+        assert_eq!(bytes, idx.encode().unwrap());
+        let expected: [u8; 32] = Sha256::digest(&bytes).into();
+        assert_eq!(digest, expected);
+    }
+
+    #[test]
+    fn decode_rejects_a_resource_count_that_exceeds_the_ceiling() {
+        // count = 25_001 with no entry bytes: the ceiling check must fire
+        // before the entry loop tries to read a missing first entry.
+        let mut b = Vec::new();
+        b.extend_from_slice(&INDEX_MAGIC);
+        b.extend_from_slice(&INDEX_VERSION.to_le_bytes());
+        b.extend_from_slice(&ENTRY_FORMAT.to_le_bytes());
+        b.extend_from_slice(&25_001u32.to_le_bytes());
+        let e = Index::decode(&b).unwrap_err();
+        assert_eq!(e.code(), "INDEX_COUNT_OUT_OF_RANGE");
+    }
+
+    #[test]
+    fn decode_rejects_an_entry_whose_path_length_overruns_the_buffer() {
+        // path_length = 65535 but the buffer ends after the length field.
+        let mut b = Vec::new();
+        b.extend_from_slice(&INDEX_MAGIC);
+        b.extend_from_slice(&INDEX_VERSION.to_le_bytes());
+        b.extend_from_slice(&ENTRY_FORMAT.to_le_bytes());
+        b.extend_from_slice(&1u32.to_le_bytes());
+        b.extend_from_slice(&u16::MAX.to_le_bytes());
+        let e = Index::decode(&b).unwrap_err();
+        assert_eq!(e.code(), "INDEX_ENTRY_MALFORMED");
+    }
+
+    #[test]
+    fn decode_rejects_a_truncated_compression_byte() {
+        // A well-formed path followed by an entry that stops one byte short
+        // of its 25-byte tail: the compression byte read must fail.
+        let mut b = Vec::new();
+        b.extend_from_slice(&INDEX_MAGIC);
+        b.extend_from_slice(&INDEX_VERSION.to_le_bytes());
+        b.extend_from_slice(&ENTRY_FORMAT.to_le_bytes());
+        b.extend_from_slice(&1u32.to_le_bytes());
+        let path = b"a";
+        b.extend_from_slice(
+            &u16::try_from(path.len())
+                .expect("test path fits u16")
+                .to_le_bytes(),
+        );
+        b.extend_from_slice(path);
+        b.extend_from_slice(&32u64.to_le_bytes());
+        b.extend_from_slice(&8u64.to_le_bytes());
+        b.extend_from_slice(&8u64.to_le_bytes());
+        // compression byte intentionally absent.
+        let e = Index::decode(&b).unwrap_err();
+        assert_eq!(e.code(), "INDEX_ENTRY_MALFORMED");
+    }
+
+    #[test]
+    fn a_prefix_of_a_valid_index_is_never_a_valid_index() {
+        // Guards the sweep test's own invariant: no prefix of the golden
+        // index decodes successfully. If this ever fails, the sweep below is
+        // asserting something weaker than it claims.
+        let full = reference_index();
+        for len in 0..full.len() {
+            assert!(
+                Index::decode(&full[..len]).is_err(),
+                "{len}-byte prefix decoded successfully"
+            );
+        }
+    }
+
+    #[test]
+    fn every_truncation_is_rejected_with_an_index_or_path_code() {
+        // Complements the sweep: pins the *category* of rejection so a future
+        // change cannot start returning an unregistered code for a prefix.
+        let full = reference_index();
+        for len in 0..full.len() {
+            let e = Index::decode(&full[..len]).unwrap_err();
+            let code = e.code();
+            assert!(
+                is_index_or_path_code(code),
+                "{len}-byte prefix produced unregistered code {code}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_corrupted_byte_never_yields_an_identical_index() {
+        // The property the single-byte sweep relies on, asserted directly so
+        // the sweep cannot silently degenerate into a no-op.
+        let full = reference_index();
+        let baseline = Index::decode(&full).unwrap();
+        let mut survived = 0usize;
+        for pos in 0..full.len() {
+            let mut m = full.clone();
+            m[pos] ^= 0xFF;
+            if let Ok(v) = Index::decode(&m) {
+                survived += 1;
+                assert_ne!(v, baseline, "byte {pos} produced the same index");
+            }
+        }
+        // Some corruptions legitimately survive (a byte inside a still-valid
+        // path body), but not all 237.
+        assert!(
+            survived < full.len(),
+            "every corruption survived: suspicious"
+        );
+    }
+
+    #[test]
+    fn decode_rejects_an_entry_whose_path_slice_runs_past_the_buffer() {
+        // A well-formed path length that fits u16, but the entry's tail is
+        // present while the path bytes themselves are cut short. This is the
+        // distinct case from the overflow guards above: nothing overflows,
+        // the slice is simply out of range.
+        let mut b = Vec::new();
+        b.extend_from_slice(&INDEX_MAGIC);
+        b.extend_from_slice(&INDEX_VERSION.to_le_bytes());
+        b.extend_from_slice(&ENTRY_FORMAT.to_le_bytes());
+        b.extend_from_slice(&1u32.to_le_bytes());
+        // Claim a 40-byte path, supply 4 bytes, then a full 25-byte tail.
+        b.extend_from_slice(&40u16.to_le_bytes());
+        b.extend_from_slice(b"abcd");
+        b.extend_from_slice(&32u64.to_le_bytes());
+        b.extend_from_slice(&8u64.to_le_bytes());
+        b.extend_from_slice(&8u64.to_le_bytes());
+        b.push(COMPRESSION_ZSTD);
+        let e = Index::decode(&b).unwrap_err();
+        assert_eq!(e.code(), "INDEX_ENTRY_MALFORMED");
+    }
+
+    #[test]
+    fn decode_rejects_an_entry_whose_tail_is_absent_after_a_valid_path() {
+        // Path is fully present and within bounds, but the entry's 25-byte
+        // tail is missing. The tail-bound check must fire before any read
+        // inside the tail can go out of bounds.
+        let mut b = Vec::new();
+        b.extend_from_slice(&INDEX_MAGIC);
+        b.extend_from_slice(&INDEX_VERSION.to_le_bytes());
+        b.extend_from_slice(&ENTRY_FORMAT.to_le_bytes());
+        b.extend_from_slice(&1u32.to_le_bytes());
+        b.extend_from_slice(&4u16.to_le_bytes());
+        b.extend_from_slice(b"abcd");
+        // Only 20 of the 25 tail bytes follow.
+        b.extend_from_slice(&[0u8; 20]);
+        let e = Index::decode(&b).unwrap_err();
+        assert_eq!(e.code(), "INDEX_ENTRY_MALFORMED");
+    }
+
+    #[test]
+    fn into_resource_entry_failure_surfaces_from_the_bulk_conversion() {
+        // `to_resource_index` collects every entry through
+        // `into_resource_entry`, which range-checks against the archive size.
+        // An archive size smaller than the frames must propagate as an error
+        // rather than producing a ResourceIndex.
+        let idx = Index::decode(&reference_index()).unwrap();
+        // The reference frames run to byte 272; claim an archive of 100 bytes.
+        let e = to_resource_index(&idx, 100).unwrap_err();
+        // `ResourceEntry::new` range-checks against the archive size; the
+        // codes it can raise here are index-range or limit-prefixed.
+        assert!(
+            is_index_or_path_code(e.code()) || e.code().starts_with("LIMIT"),
+            "got {}",
+            e.code()
+        );
     }
 }
