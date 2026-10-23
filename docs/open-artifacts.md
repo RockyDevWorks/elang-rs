@@ -1,9 +1,9 @@
 # Open normative artifacts (release blockers)
 
 > Governed by [ADR 0003](decisions/0003-open-normative-artifacts.md) and
-> REQ-GOV-OPENART-001. These artifacts are **not yet ratified**. Code MUST NOT
-> embed guessed inventories, placeholder/fake hashes or inferred grammars as if
-> they were normative (steering §0.3, §12).
+> REQ-GOV-OPENART-001. Artifacts whose row status is still **Open** are **not
+> yet ratified**. Code MUST NOT embed guessed inventories, placeholder/fake
+> hashes or inferred grammars as if they were normative (steering §0.3, §12).
 >
 > Each row should become a `blocker`-labelled issue using the
 > [normative-artifact issue template](../.github/ISSUE_TEMPLATE/normative_artifact.md).
