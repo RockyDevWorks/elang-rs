@@ -131,6 +131,13 @@ primary stage(s) at which it can fire.
 | `EPF_BAD_METADATA_FIELD` | 10 | Field length/content violation. |
 | `EPF_MANIFEST_INVALID` | 10 | Missing/duplicate `phonemes`, `modules` present, bad path. |
 | `EPF_MANIFEST_PATH_NOT_INDEXED` | 10 | `phonemes` path not in index or not `.eld`. |
+| `EPF_IDENTIFIER_EMPTY` | 10 | `metadata.identifier` is empty. |
+| `EPF_IDENTIFIER_TOO_LONG` | 10 | `metadata.identifier` exceeds 512 UTF-8 bytes. |
+| `EPF_IDENTIFIER_BAD_URN` | 10 | `metadata.identifier` URN has wrong scheme or field count. |
+| `EPF_IDENTIFIER_BAD_SLUG` | 10 | `metadata.identifier` slug violates ASCII lowercase / hyphen rules. |
+| `EPF_NAME_EMPTY` | 10 | `metadata.name` is empty. |
+| `EPF_NAME_TOO_LONG` | 10 | `metadata.name` exceeds 256 UTF-8 bytes. |
+| `EPF_DESCRIPTION_TOO_LONG` | 10 | `metadata.description` exceeds 4096 UTF-8 bytes. |
 
 ### ELD_SCHEMA (stage 12)
 
@@ -194,6 +201,7 @@ primary stage(s) at which it can fire.
 |---|---|
 | `LIMIT_NESTING_DEPTH` | KDL nesting > 64. |
 | `LIMIT_TOKEN_BYTES` | Encoded token > 1 MiB. |
+| `LIMIT_EPF_BYTES` | `package.epf` input > 1 MiB uncompressed. |
 | `LIMIT_STRING_BYTES` | Decoded string > 1 MiB (or per-resource/archive cap). |
 | `LIMIT_NAME_BYTES` | Node/property name > 256 bytes. |
 | `LIMIT_ARGS` | > 256 args per node. |

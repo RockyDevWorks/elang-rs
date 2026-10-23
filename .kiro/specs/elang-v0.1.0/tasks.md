@@ -170,24 +170,24 @@
 
 ## Phase 6 — EPF schema and manifest
 
-- [ ] **T0601** Parse exactly five top-level nodes `epf`, `eld`, `language-version`, `metadata`, `manifest`.
-- [ ] **T0602** Reject unknown or duplicate top-level nodes and properties.
-- [ ] **T0603** Enforce exact single string arg/no block for three version nodes.
-- [ ] **T0604** Require EPF/ELD schema values exactly `0.1.0`.
-- [ ] **T0605** Require `metadata` and `manifest` blocks; zero args/properties.
-- [ ] **T0606** Validate required `metadata.identifier` once, <=512 UTF-8 bytes.
-- [ ] **T0607** Parse `urn:elang:language:<namespace>:<language-name>:<version>`.
-- [ ] **T0608** Validate lowercase ASCII slug segments, hyphens, alphanumeric ends.
-- [ ] **T0609** Validate strict version and equality to `language-version`.
-- [ ] **T0610** Validate required nonempty `metadata.name`, <=256 UTF-8 bytes.
-- [ ] **T0611** Validate optional `metadata.description` <=4096 UTF-8 bytes (empty allowed).
-- [ ] **T0612** Reject duplicate metadata fields, unknown fields, extra args, nested blocks.
-- [ ] **T0613** Require exactly one manifest `phonemes` entry with one nonempty `.eld` path.
-- [ ] **T0614** Validate manifest path with canonical resource-path rules and index existence.
-- [ ] **T0615** Reject `modules` and any other unrecognized manifest entry.
-- [ ] **T0616** Canonicalize top-level EPF order as locked.
-- [ ] **T0617** Implement ratified canonical EPF string/whitespace serialization.
-- [ ] **T0618** Add EPF roundtrip, valid/invalid metadata and boundary tests.
+- [x] **T0601** Parse exactly five top-level nodes `epf`, `eld`, `language-version`, `metadata`, `manifest`.
+- [x] **T0602** Reject unknown or duplicate top-level nodes and properties.
+- [x] **T0603** Enforce exact single string arg/no block for three version nodes.
+- [x] **T0604** Require EPF/ELD schema values exactly `0.1.0`.
+- [x] **T0605** Require `metadata` and `manifest` blocks; zero args/properties.
+- [x] **T0606** Validate required `metadata.identifier` once, <=512 UTF-8 bytes.
+- [x] **T0607** Parse `urn:elang:language:<namespace>:<language-name>:<version>`.
+- [x] **T0608** Validate lowercase ASCII slug segments, hyphens, alphanumeric ends.
+- [x] **T0609** Validate strict version and equality to `language-version`.
+- [x] **T0610** Validate required nonempty `metadata.name`, <=256 UTF-8 bytes.
+- [x] **T0611** Validate optional `metadata.description` <=4096 UTF-8 bytes (empty allowed).
+- [x] **T0612** Reject duplicate metadata fields, unknown fields, extra args, nested blocks.
+- [x] **T0613** Require exactly one manifest `phonemes` entry with one nonempty `.eld` path.
+- [x] **T0614** Validate manifest path with canonical resource-path rules and index existence.
+- [x] **T0615** Reject `modules` and any other unrecognized manifest entry.
+- [x] **T0616** Canonicalize top-level EPF order as locked.
+- [x] **T0617** Implement ratified canonical EPF string/whitespace serialization.
+- [x] **T0618** Add EPF roundtrip, valid/invalid metadata and boundary tests.
 
 **Acceptance:** EPF schema exactly matches frozen grammar; unknown declarations never ignored.
 

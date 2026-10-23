@@ -42,7 +42,7 @@ crates and the conformance runner; it holds no validation logic itself.
 | `elang-kdl` | constrained KDL 2.0 parse + canonical emit, parser budgets | core |
 | `elang-container` | header/index/footer, path validation, frame I/O, Zstd reader/encoder, reader state machine, writer | core |
 | `elang-repertoire` | IPA allowlist (`ipa-v1.json`), IPA identifier validation, JCS + SHA-256 verify; Unicode via `elang-unicode` | core, unicode |
-| `elang-epf` | `package.epf` schema | core, kdl |
+| `elang-epf` | `package.epf` schema | core, kdl, unicode |
 | `elang-integrity` | integrity manifest parse + SHA-256 verify | core, kdl |
 | `elang-eld` | phoneme model, IPA parser, `when` AST/evaluator, canonical ELD writer | core, kdl, repertoire |
 | `elang-conformance` | fixture runner, golden comparisons | core, container, epf, eld, integrity, repertoire |

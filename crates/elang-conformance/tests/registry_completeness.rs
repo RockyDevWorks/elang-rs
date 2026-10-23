@@ -53,10 +53,17 @@ const MIN_CODE_LEN: usize = 8;
 ///
 /// * Binary magic bytes — these are container/index format constants, never
 ///   diagnostics.
-/// * Codes emitted by earlier phases (6/9) that predate this check and are
-///   not yet in the registry. They are tracked here so this PR does not have
-///   to widen its scope to register another phase's codes; each must be added
-///   to the registry when its phase is finalised.
+/// * Codes emitted by earlier phases that predate this check and are
+///   not yet in the registry. They are tracked here so a phase that is not
+///   the subject of the current change does not have to widen its scope to
+///   register another phase's codes; each must be added to the registry when
+///   its phase is finalised.
+///
+/// The EPF model codes (`EPF_IDENTIFIER_*`, `EPF_NAME_*`,
+/// `EPF_DESCRIPTION_TOO_LONG`) were removed from this list in Phase 6
+/// (Issue #16): they are now registered under `EPF_SCHEMA` in both registry
+/// formats, and `elang-epf::error::from_core` remaps them onto the coarser
+/// `EPF_BAD_URN` / `EPF_BAD_METADATA_FIELD` codes at the schema boundary.
 const KNOWN_NON_CODES: &[&str] = &[
     // Binary format magic (elang-conformance / elang-container). `ELENXXXX` is
     // a deliberately corrupted footer magic used by the T0321 footer-variant
@@ -72,14 +79,6 @@ const KNOWN_NON_CODES: &[&str] = &[
     "ELD_TOO_MANY_ALLOPHONES",
     "ELD_TOO_MANY_GROUPS",
     "ELD_TOO_MANY_ROOTS",
-    // Emitted by elang-core::model::epf (Phase 7 — registry entries pending).
-    "EPF_DESCRIPTION_TOO_LONG",
-    "EPF_IDENTIFIER_BAD_SLUG",
-    "EPF_IDENTIFIER_BAD_URN",
-    "EPF_IDENTIFIER_EMPTY",
-    "EPF_IDENTIFIER_TOO_LONG",
-    "EPF_NAME_EMPTY",
-    "EPF_NAME_TOO_LONG",
     // Emitted by elang-repertoire::ipa / elang-core::model::when.
     "IPA_EMPTY",
     "WHEN_GROUP_ARITY",

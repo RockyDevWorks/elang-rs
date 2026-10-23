@@ -107,7 +107,7 @@ partial pending the Phase 11 canonical ELD golden vectors (ADR 0003 freeze gate)
 | REQ-FRAME-012 | elang-container (T0420) | 6 GiB ceiling defined by `elang_core::limits::MAX_COMPRESSED_ARCHIVE_BYTES`, not yet enforced; 2 GiB recommended-warning deferred to writer (Phase 12) | Partial (6 GiB enforcement); Partial (2 GiB warning — writer-side) |
 | REQ-READER-001..006 | elang-container | T1201–T1208 | Planned |
 | REQ-PKG-001..005 | elang-container / elang-epf | T1204, T1205, T0411, T0121 | Planned |
-| REQ-EPF-001..014 | elang-epf | T0601–T0618 | Planned |
+| REQ-EPF-001..014 | elang-epf | T0601–T0618 | **Done** (Issue #16, Phase 6). `parse`/`parse_with_budgets` enforce C-01..C-11; `manifest::resolve_phonemes` performs C-12's index cross-check via the `IndexLookup` trait; `canon::to_string`/`to_bytes` implement the ADR 0005 canonical profile byte-for-byte. 58 unit + 16 integration tests cover roundtrip, boundary lengths (256/257 name, 4096/4097 description, 512/513 identifier), canonical golden vectors, and every negative case in the grammar. NFC + forbidden-category enforcement added via `elang-unicode` (grammar §1). EPF model codes registered under `EPF_SCHEMA`; `elang-epf::error::from_core` remaps them onto `EPF_BAD_URN`/`EPF_BAD_METADATA_FIELD` at the schema boundary. |
 | REQ-INTEGRITY-001..008 | elang-integrity | T0701–T0711 | **Blocked** (integrity KDL grammar — ADR 0003) |
 | REQ-UNICODE-001..004 | elang-repertoire | T0801–T0805 | Planned |
 | REQ-IPA-001..014 | elang-repertoire / elang-eld | T0106–T0115, T0806–T0825 | **Blocked** (IPA allowlist + digest — ADR 0003) |
