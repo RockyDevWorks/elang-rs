@@ -214,6 +214,41 @@ primary stage(s) at which it can fire.
 | `CANONICAL_MISMATCH` | Emitted canonical bytes ≠ expected golden. |
 | `CANONICAL_PROFILE_UNKNOWN` | Canonical-profile identifier is not the locked `elang-canonical-zstd-v1` (or whatever profile the steering committee has ratified). |
 
+### KDL PARSER (Phase 5, stage 10)
+
+KDL 2.0 parser diagnostic codes (see ADR 0010, steering §10). The parser
+is hand-rolled and reports every structural or budget violation through
+this stable set so the schema layer can route them through the unified
+error model.
+
+| Code | Category | Meaning |
+|---|---|---|
+| `KDL_INVALID_UTF8` | CONTAINER | Input bytes fail UTF-8 validation before parsing. |
+| `KDL_TOKEN_TOO_LONG` | LIMIT | A single token (identifier, string, number, comment) exceeded `MAX_ENCODED_TOKEN_BYTES` (1 MiB). |
+| `KDL_STRING_TOO_LONG` | LIMIT | Decoded string exceeded `MAX_DECODED_STRING_BYTES` (1 MiB). |
+| `KDL_NAME_TOO_LONG` | LIMIT | Node or property name exceeded `MAX_NAME_BYTES` (256 B). |
+| `KDL_TOO_MANY_ARGS` | LIMIT | Node has more positional arguments than `MAX_ARGS_PER_NODE`. |
+| `KDL_TOO_MANY_PROPS` | LIMIT | Node has more properties than `MAX_PROPS_PER_NODE`. |
+| `KDL_NESTING_TOO_DEEP` | LIMIT | `children` block nesting exceeded `MAX_KDL_NESTING_DEPTH` (64). |
+| `KDL_TOO_MANY_NODES_RESOURCE` | LIMIT | Per-resource node count exceeded `MAX_NODES_PER_RESOURCE`. |
+| `KDL_TOO_MANY_NODES_ARCHIVE` | LIMIT | Archive-wide node count exceeded `MAX_NODES_PER_ARCHIVE` (10 M). |
+| `KDL_COMMENT_TOO_LONG` | LIMIT | A single comment exceeded `MAX_COMMENT_BYTES` (1 MiB). |
+| `KDL_COMMENT_BUDGET_EXCEEDED` | LIMIT | Cumulative comment bytes per resource exceeded `MAX_COMMENT_BYTES_PER_RESOURCE` (16 MiB). |
+| `KDL_STRING_BUDGET_RESOURCE_EXCEEDED` | LIMIT | Cumulative decoded string bytes per resource exceeded `MAX_DECODED_STRING_BYTES_PER_RESOURCE` (256 MiB). |
+| `KDL_STRING_BUDGET_ARCHIVE_EXCEEDED` | LIMIT | Archive-wide decoded string bytes exceeded `MAX_DECODED_STRING_BYTES_PER_ARCHIVE` (1 GiB). |
+| `KDL_UNTERMINATED_STRING` | LIMIT | String literal missing closing `"`. |
+| `KDL_UNTERMINATED_COMMENT` | LIMIT | Block comment missing `*/`. |
+| `KDL_UNTERMINATED_RAW_STRING` | LIMIT | Raw string `r#…#` missing matching closing fence. |
+| `KDL_INVALID_ESCAPE` | LIMIT | Unrecognised escape sequence in a string literal. |
+| `KDL_INVALID_UNICODE_ESCAPE` | LIMIT | Malformed `\u{…}` escape (missing `}`, non-hex digit, surrogate, out-of-range). |
+| `KDL_INVALID_NUMBER` | LIMIT | Numeric literal malformed (no digits after base prefix, missing exponent, etc.). |
+| `KDL_UNEXPECTED_BYTE` | LIMIT | Byte outside the KDL grammar where a token was expected. |
+| `KDL_UNEXPECTED_EOF` | LIMIT | End-of-input reached where a token was expected. |
+| `KDL_INVALID_IDENTIFIER` | LIMIT | Bare identifier contains an invalid character (e.g. reserved punctuation). |
+| `KDL_MISSING_VERSION_PRAGMA` | LIMIT | Reserved for consumers requiring the optional `/kdl-version "2.0"` pragma; parsing accepts its absence and does not emit this code. |
+| `KDL_UNSUPPORTED_VERSION` | LIMIT | `/kdl-version` value is not the pinned `"2.0"`. |
+| `KDL_OTHER` | LIMIT | Catch-all for unmodelled failures. |
+
 ## Stability note
 
 This registry is the single source of truth for codes. Crates MUST NOT invent
