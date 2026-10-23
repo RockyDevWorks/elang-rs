@@ -126,6 +126,39 @@ mod tests {
         );
     }
 
+    /// The blanket `IndexLookup for &T` impl forwards to the inner lookup.
+    /// `Vec<String>` already has an explicit `IndexLookup for [String]` impl,
+    /// and `&[String]` flows through the `&T` blanket via slice coercion.
+    #[test]
+    fn blanket_impl_for_reference_forwards_lookups() {
+        let owned: Vec<String> = vec!["a/b.eld".into()];
+        let slice_ref: &[String] = owned.as_slice();
+        // Coerce `&&[String]` to `&[String]` (or use UFCS) so the call
+        // resolves through the `IndexLookup for [String]` impl.
+        assert!(IndexLookup::contains(slice_ref, "a/b.eld"));
+        assert!(!IndexLookup::contains(slice_ref, "x/y.eld"));
+    }
+
+    /// The blanket `IndexLookup for [T]` impl iterates the slice.
+    #[test]
+    fn blanket_impl_for_slice_iterates_elements() {
+        // Wrap each entry in a tiny newtype that itself implements
+        // `IndexLookup`, then look up against the slice.
+        struct Lookup(&'static str);
+        impl IndexLookup for Lookup {
+            fn contains(&self, path: &str) -> bool {
+                path == self.0
+            }
+        }
+        let array: [Lookup; 2] = [Lookup("a.eld"), Lookup("b.eld")];
+        // Coerce `[Lookup; 2]` to the unsized `[Lookup]` the impl is on.
+        let slice: &[Lookup] = &array;
+        // Use UFCS so `core::slice::<[T]>::contains` is not selected.
+        assert!(IndexLookup::contains(slice, "a.eld"));
+        assert!(IndexLookup::contains(slice, "b.eld"));
+        assert!(!IndexLookup::contains(slice, "c.eld"));
+    }
+
     #[test]
     fn resolves_against_resource_index() {
         let rp = elang_core::ResourcePath::new("Linguistics/phonemes.eld").unwrap();

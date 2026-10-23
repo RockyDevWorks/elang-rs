@@ -31,4 +31,3 @@ clippy_*.log
 # Zensical documentation site output (built in CI by docs.yml and published to
 # GitHub Pages; the generated artifact is not committed).
 /site
-cache/

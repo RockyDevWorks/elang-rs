@@ -29,8 +29,9 @@
 //! the `UNICODE` category so they surface in stage-10 diagnostics alongside
 //! the schema codes.
 
-use elang_core::error::{Category, Error};
+use elang_core::error::{Category, Diagnostic, Error};
 use elang_core::ids::ResourcePath;
+use elang_core::limits::MAX_EPF_BYTES;
 use elang_core::model::epf as model;
 use elang_core::version::SemVer;
 use elang_kdl::ast::{KdlChildren, KdlDocument, KdlNode};
@@ -49,6 +50,11 @@ use crate::manifest::has_eld_extension;
 /// Runs every schema check except C-12's index-existence cross-check; the
 /// caller is responsible for that once both the EPF and the archive index
 /// are in hand.
+///
+/// Input is rejected with `LIMIT_EPF_BYTES` before any KDL allocation if it
+/// exceeds [`MAX_EPF_BYTES`] (1 MiB) — this guard exists so a hostile or
+/// truncated archive cannot drive the lexer into O(n) newline-index
+/// collection on attacker-controlled bytes (CodeRabbit architecture review).
 pub fn parse(input: &[u8]) -> Result<model::EpfPackage, Error> {
     let mut budgets = BudgetTracker::new();
     parse_with_budgets(input, &mut budgets)
@@ -56,12 +62,38 @@ pub fn parse(input: &[u8]) -> Result<model::EpfPackage, Error> {
 
 /// Parse `input` with a caller-supplied [`BudgetTracker`], useful when
 /// multiple resources from the same archive share aggregate budgets.
+///
+/// The 1 MiB input-size ceiling is enforced unconditionally at the
+/// `package.epf` entrypoint — KDL-level token/string budgets are not a
+/// substitute for an explicit byte-input cap.
 pub fn parse_with_budgets(
     input: &[u8],
     budgets: &mut BudgetTracker,
 ) -> Result<model::EpfPackage, Error> {
+    check_input_size(input)?;
     let doc = kdl_parse_with_budgets(input, budgets).map_err(from_kdl)?;
     parse_document(&doc)
+}
+
+/// Reject `input` longer than [`MAX_EPF_BYTES`]. Emitted as a stage-10
+/// `LIMIT_EPF_BYTES` diagnostic so it surfaces in the same channel as every
+/// other Reader-stage error.
+fn check_input_size(input: &[u8]) -> Result<(), Error> {
+    if (input.len() as u64) <= MAX_EPF_BYTES {
+        return Ok(());
+    }
+    Err(Error {
+        diagnostic: Diagnostic::new(
+            "LIMIT_EPF_BYTES",
+            Category::Limit,
+            format!(
+                "package.epf input is {} bytes, exceeds MAX_EPF_BYTES ({})",
+                input.len(),
+                MAX_EPF_BYTES
+            ),
+        )
+        .with_stage(10),
+    })
 }
 
 /// Parse a `package.epf` document that has **already** been tokenised by
@@ -554,7 +586,9 @@ fn unicode_to_error(v: UnicodeViolation) -> Error {
             )
         }
     };
-    Error::new(code, Category::Unicode, message)
+    Error {
+        diagnostic: Diagnostic::new(code, Category::Unicode, message).with_stage(10),
+    }
 }
 
 #[cfg(test)]

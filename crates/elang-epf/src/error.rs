@@ -37,28 +37,19 @@ pub(crate) fn epf_err(code: &'static str, message: impl Into<String>) -> Error {
     epf_err_at(code, message, SourceSpan::INVALID)
 }
 
-/// Build a `LIMIT` diagnostic. Used when an input-level ceiling is breached
-/// before the EPF schema rules can fire.
-#[allow(dead_code, reason = "kept for future input-size guards")]
-pub(crate) fn limit_err(code: &'static str, message: impl Into<String>) -> Error {
-    Error::new(code, Category::Limit, message)
-}
-
 /// Map a KDL `SourceSpan` onto the `KdlSpan` carried by `Diagnostic`.
 ///
-/// The KDL span records 1-based line/column plus byte length, which is what
-/// every other diagnostic in the reference implementation uses. The EPF layer
-/// never receives a span past EOF, so any `Position::INVALID` becomes `None`.
+/// Returns `None` for any invalid span (one whose endpoints carry the
+/// `Position::INVALID` sentinel); the KDL span records 1-based line/column
+/// plus byte length, which is what every other diagnostic in the reference
+/// implementation uses.
 fn span_to_kdl(span: SourceSpan) -> Option<KdlSpan> {
     if span.is_invalid() {
         return None;
     }
-    if span.start.is_invalid() || span.end.is_invalid() {
-        return None;
-    }
     let length = span.len();
-    // `SourceSpan::len` already saturates to `u32::MAX` when the endpoints
-    // are invalid, so the value is always in range.
+    // `SourceSpan::len` already returns 0 when the endpoints are invalid,
+    // so the value is always in range.
     Some(KdlSpan {
         line: span.start.line,
         column: span.start.column,
@@ -107,7 +98,15 @@ pub(crate) fn from_core(err: Error) -> Error {
         (EpfSchema, "EPF_VERSION_MISMATCH") => "EPF_VERSION_MISMATCH",
         _ => return err,
     };
-    Error::new(mapped, Category::EpfSchema, err.diagnostic.message)
+    // Remap in place: keep the underlying `Diagnostic`'s message, span, and
+    // any other source metadata; only the code, category, and stage change.
+    // Every EPF_SCHEMA code in the registry is assigned to stage 10
+    // (Reader), so callers that filter on stage still see the diagnostic.
+    let mut diagnostic = err.diagnostic;
+    diagnostic.code = mapped;
+    diagnostic.category = Category::EpfSchema;
+    diagnostic.stage = Some(10);
+    Error { diagnostic }
 }
 
 #[cfg(test)]

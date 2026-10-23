@@ -201,6 +201,7 @@ primary stage(s) at which it can fire.
 |---|---|
 | `LIMIT_NESTING_DEPTH` | KDL nesting > 64. |
 | `LIMIT_TOKEN_BYTES` | Encoded token > 1 MiB. |
+| `LIMIT_EPF_BYTES` | `package.epf` input > 1 MiB uncompressed. |
 | `LIMIT_STRING_BYTES` | Decoded string > 1 MiB (or per-resource/archive cap). |
 | `LIMIT_NAME_BYTES` | Node/property name > 256 bytes. |
 | `LIMIT_ARGS` | > 256 args per node. |
