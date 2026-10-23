@@ -90,6 +90,9 @@ structural rules.
 !!! info "Repertoire status"
     The IPA inventory has been generated, cross-checked, and pinned (107 base
     symbols, 27 combining diacritics, 9 spacing modifiers in the current data),
-    with the canonical JCS SHA-256 pinned and asserted by test. It is **not yet
-    frozen for release** pending a second human review. See
+    with the canonical JCS SHA-256 pinned and asserted by test. The second
+    human review of the diacritic and spacing-modifier inventories
+    **completed 2026-10-23** (outcome match; `specs/sources/SOURCES.md` §7).
+    OA-1 and OA-4 are **Ratified**. The IPA side of the repertoire is fully
+    ratified; the only outstanding v0.1.0 freeze blocker is now OA-14. See
     [Specification status](../spec-status.md).

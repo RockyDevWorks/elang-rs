@@ -43,13 +43,20 @@ presented as ratified (steering §0.3; [ADR 0003](../docs/decisions/0003-open-no
 
 ## Still blocked before the freeze (T0123)
 
-- **Unicode 18.0.0:** ICU4X currently provides Unicode 17.0 (ADR 0007). The
-  repertoire is validated but not *frozen* until the pin is met.
-- **Second human review** of the combining-diacritic and spacing-modifier
-  inventories against the chart's Diacritics block (T0114).
+- ~~**Unicode 18.0.0:** ICU4X currently provides Unicode 17.0 (ADR 0007). The
+  repertoire is validated but not *frozen* until the pin is met.~~ **Done**
+  (ADR 0007, revised): a first-party `elang-unicode` crate generates GC + NFC
+  tables from the official pinned UCD 18.0.0; NFC passes the official
+  18.0.0 `NormalizationTest.txt`. ICU4X is no longer in the dep graph.
+- ~~**Second human review** of the combining-diacritic and spacing-modifier
+  inventories against the chart's Diacritics block (T0114).~~ **Done**
+  (2026-10-23): the repository owner compared the 27 combining diacritics
+  and 9 spacing modifiers row-by-row against the Diacritics and (non-prosodic)
+  Suprasegmentals blocks of the pinned UNITIPA 2020 chart. Outcome: match.
+  See `specs/sources/SOURCES.md` §7; OA-1/OA-4 Ratified.
 - **Golden byte vectors:** the binary header/index/footer vectors (T0118,
   OA-11) are **done** (see below); the canonical ELD goldens (OA-14) are
-  produced in Phase 11.
+  produced in Phase 11 — this is the **only** remaining release blocker.
 
 ## Binary reference vectors (T0118, OA-11)
 

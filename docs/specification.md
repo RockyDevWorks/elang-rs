@@ -47,8 +47,9 @@ must not be fabricated:
 1. **IPA diacritic/modifier inventories (T0106–T0110)** — the allowlist has
    been generated, cross-checked against an independent chart transcription
    and pinned (`specs/schema/ipa-v1.json`, 107 base / 27 combining / 9
-   spacing, ADR 0008). The remaining gate is a second human review of the
-   diacritic and modifier inventories before formal freeze (T0123).
+   spacing, ADR 0008). The second human review of the diacritic and modifier
+   inventories **completed 2026-10-23** (outcome match, `specs/sources/SOURCES.md`
+   §7); OA-1/OA-4 are Ratified and this gate is closed.
 2. **Canonical ELD golden files + SHA-256 (OA-14)** — produced by the Phase 11
    canonical writer (T1121). The methodology (JCS, deterministic EPF
    ordering) is published; the fixtures themselves depend on the writer

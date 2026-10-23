@@ -49,7 +49,7 @@ These decision-derived artifacts have been produced and reviewed:
   key (E-2), the exact `"`/`\` escaping set (E-3), bare-vs-block allophone
   emission (E-4/E-5) and layout invariants (E-6).
 
-## IPA inventory — generated, verified, pinned (not yet frozen)
+## IPA inventory — generated, verified, ratified, pinned
 
 The IPA inventory has been generated, cross-checked, and pinned:
 
@@ -59,8 +59,11 @@ The IPA inventory has been generated, cross-checked, and pinned:
 - The canonical (RFC 8785 JCS) SHA-256 digest is computed and pinned, and asserted
   by test.
 
-It is **not yet frozen for release**, pending a second human review of the
-diacritic and modifier inventories.
+The **second human review of the diacritic and spacing-modifier inventories
+completed 2026-10-23** (outcome match; see `specs/sources/SOURCES.md` §7).
+OA-1 and OA-4 are **Ratified**. The IPA side of the repertoire is fully
+ratified; the only outstanding v0.1.0 freeze blocker is now OA-14 (Phase 11
+canonical ELD goldens).
 
 ## Still open — must not be fabricated
 
@@ -70,8 +73,8 @@ reviewed rather than guessed:
 - Canonical ELD golden files and their SHA-256 digests (OA-14) — produced by
   the Phase 11 canonical writer (T1121).
 - The frozen, reviewed schema/repertoire versions plus the spec checksum and
-  release tag (OA-17) — depends on OA-14 and the second human review of the
-  IPA diacritic/modifier inventories.
+  release tag (OA-17) — depends on OA-14 only (the IPA second-human-review
+  gate closed 2026-10-23).
 
 !!! danger "No fabricated normative data"
     Until each open item is ratified, no code path embeds a guessed inventory, a

@@ -102,11 +102,30 @@ them as not-in-repertoire.
 
 An executable cross-check (`chart_crosscheck.rs`) transcribes the official chart
 grids independently of the generator and asserts an exact match of the base-
-symbol set. This is a strong automated review of the **base** inventory. The
-combining-diacritic and spacing-modifier inventories are reviewed against the
-chart's Diacritics block; a second human reviewer should still sign off before
-the repertoire is *frozen* for the v0.1.0 release tag (T0123). Until then the
-repertoire is loadable and validated but not declared frozen (ADR 0003, §12).
+symbol set. This is a strong automated review of the **base** inventory.
+
+**Second human review (T0114, T0825) — completed 2026-10-23 by the repository
+owner.** The 27 combining diacritics and 9 spacing modifiers in
+`specs/schema/ipa-v1.json` were compared row-by-row against the
+Diacritics block and the non-prosodic part of the Suprasegmentals block of the
+UNITIPA chart revised to 2020 (`specs/sources/unitipa-ipa-chart-2020.pdf`,
+SHA-256 `882a0e4df2ad8c45c53752ecfecc506647e5e39b47dc83646fca925ce84f5fc9`).
+Outcome: match. The prosodic categories deliberately excluded per §6
+(suprasegmentals, tone letters/diacritics, intonation boundaries) were also
+confirmed absent from the two included lists. With this review, OA-1 and
+OA-4 in `docs/open-artifacts.md` are flipped to Ratified; the remaining
+release blocker on v0.1.0 is OA-14 (canonical ELD goldens — Phase 11,
+T1121) followed by the T0123 freeze/tag (OA-17).
+
+Review method: every row of `specs/schema/ipa-v1.json` was opened next to
+the pinned chart and the comparison was performed row-by-row. Combining
+diacritics were rendered on the `◌` (U+25CC DOTTED CIRCLE) carrier — the
+same way the chart displays them — so the mark shape and position could be
+compared visually. The prosodic categories listed in §6 were independently
+checked against the chart's Suprasegmentals block and confirmed absent
+from the two included inventories. The review is reproducible from the two
+files named above (chart PDF + `ipa-v1.json`), both of which are pinned in
+this repo.
 
 ## 8. Licensing and attribution
 

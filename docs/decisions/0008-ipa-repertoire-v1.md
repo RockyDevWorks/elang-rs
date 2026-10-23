@@ -48,14 +48,23 @@ alphabet shown on the **UNITIPA chart revised to 2020**.
    signs off on the combining-diacritic and spacing-modifier inventories against
    the chart. The base-symbol set is cross-checked automatically against an
    independent transcription of the chart grids (`chart_crosscheck.rs`).
+   **Gate status (2026-10-23):** both conditions are now met — (a) landed via
+   ADR 0007/OA-13, (b) the repository owner completed the row-by-row review
+   (27 diacritics + 9 spacing modifiers, outcome match) against the pinned
+   UNITIPA 2020 chart; see `specs/sources/SOURCES.md` §7. OA-1/OA-4 are
+   Ratified. The repertoire's own gate is therefore **cleared**; the remaining
+   v0.1.0 freeze blocker is OA-14 (canonical ELD goldens, Phase 11).
 
 ## Consequences
 
 - OA-1/OA-4/OA-5 move from "fabrication-forbidden open" to "generated and
-  verified"; the IPA validator ships a real inventory.
+  verified" (now ratified — see the gate status above); the IPA validator ships
+  a real inventory.
 - The "2026" label is documented as an issue tag, resolving the ambiguity.
-- Freezing remains blocked on the Unicode 18.0 pin and a second review, so the
-  anti-fabrication and anti-drift rules still hold through release.
+- The anti-fabrication and anti-drift rules held through the review: every
+  inventory entry and the pinned JCS digest were reproduced from the generator
+  and verified against the pinned chart before ratification. Freezing is now
+  blocked only on OA-14, not on the IPA gate.
 
 ## Alternatives considered
 

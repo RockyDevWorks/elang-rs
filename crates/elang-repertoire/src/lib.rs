@@ -14,9 +14,12 @@
 //! against the official 18.0.0 NormalizationTest.txt — ADR 0007). No ICU4X, no
 //! host-OS Unicode behavior.
 //!
-//! The repertoire is loadable and fully validated; freezing it for the v0.1.0
-//! release tag still awaits a second human review of the diacritic/modifier
-//! inventories (ADR 0003, steering §12; T0123).
+//! The repertoire is loadable, fully validated, and **ratified**: the second
+//! human review of the combining-diacritic and spacing-modifier inventories
+//! against the pinned UNITIPA 2020 chart completed 2026-10-23 (outcome match;
+//! `specs/sources/SOURCES.md` §7; OA-1/OA-4 Ratified per `docs/open-artifacts.md`).
+//! The only remaining v0.1.0 release blocker downstream of this crate is
+//! OA-14 (canonical ELD goldens, Phase 11).
 
 pub mod ipa;
 pub mod repertoire;
