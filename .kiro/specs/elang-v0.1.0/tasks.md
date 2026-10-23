@@ -198,11 +198,11 @@
 - [x] **T0703** Validate manifest entries, SHA-256 encoding and unknown/duplicate fields.
 - [x] **T0704** Require coverage of every indexed resource **except integrity.kdl itself**.
 - [x] **T0705** Reject entries for missing resources and missing hashes for indexed resources.
-- [ ] **T0706** Stream SHA-256 over exact uncompressed resource bytes.
-- [ ] **T0707** Compare digests in constant-time where appropriate and report resource-specific failures.
-- [ ] **T0708** Verify footer index hash separately from resource integrity hashes.
+- [x] **T0706** Stream SHA-256 over exact uncompressed resource bytes. _(Implemented via `Hasher` in `elang-integrity`; container stage 11 drives `update()` per decompressed chunk.)_
+- [x] **T0707** Compare digests in constant-time where appropriate and report resource-specific failures. _(Constant-time `ct_eq_32` XOR-fold over the 32 digest bytes; `verify_one` emits `INTEGRITY_HASH_MISMATCH` at stage 11 with `resource_path` attached.)_
+- [x] **T0708** Verify footer index hash separately from resource integrity hashes. _(Structural: `IntegrityEntry` carries no footer slot; C-05 rejects any `footer_hash` property. See `verify.rs` module docs and `parse_rejects_footer_hash_property_on_resource` conformance test.)_
 - [ ] **T0709** Implement canonical integrity manifest writer from finalized grammar.
-- [ ] **T0710** Test byte mutation, hash mismatch, omitted/duplicate/extra entries and resource swaps.
+- [x] **T0710** Test byte mutation, hash mismatch, omitted/duplicate/extra entries and resource swaps. _(Streaming/mutation/swap/empty-body tests in `tests/integrity_conformance.rs`; coverage + duplicate tests already in `parse.rs`.)_
 - [ ] **T0711** Document that SHA-256 integrity is **not** a publisher signature.
 
 **Acceptance:** verify mode checks every resource against integrity inventory; self-hash cycles excluded by rule.

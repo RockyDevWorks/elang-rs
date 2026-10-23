@@ -1,10 +1,12 @@
 //! # elang-integrity
 //!
-//! `META-INF/integrity.kdl` parsing, structural validation, and (in a later
-//! round) SHA-256 verification over the exact uncompressed bytes of every
-//! indexed resource except the manifest itself.
+//! `META-INF/integrity.kdl` parsing, structural validation, and SHA-256
+//! verification over the exact uncompressed bytes of every indexed resource
+//! except the manifest itself.
 //!
-//! ## Scope of this crate (T0701–T0705, this PR)
+//! ## Scope (Phase 7, Issue #17 — T0701..T0711)
+//!
+//! ### Done in this crate
 //!
 //! - [`parse`] / [`parse_with_budgets`] — parse the manifest under the 16 MiB
 //!   cap (`MAX_INTEGRITY_BYTES`) using KDL 2.0 with parser budgets.
@@ -18,25 +20,28 @@
 //! - [`verify_coverage`] — enforce constraint C-04: every indexed resource
 //!   except `META-INF/integrity.kdl` has exactly one entry, and there are no
 //!   entries for non-indexed paths.
+//! - [`Hasher`] — streaming SHA-256 accumulator fed by the container's
+//!   decompressor (stage 11).
+//! - [`verify_one`] — per-resource constant-time digest comparison; emits
+//!   [`INTEGRITY_HASH_MISMATCH`] at stage 11 with the resource path attached
+//!   on mismatch.
 //!
-//! ## Not yet in this crate (T0706–T0711, follow-up PRs)
+//! ### Deferred to the writer-and-docs PR (T0709, T0711)
 //!
-//! - Streaming SHA-256 over exact uncompressed bytes (T0706, T0707).
-//! - Constant-time digest compare + per-resource failure reporting (T0707).
-//! - Footer index hash separation (T0708).
-//! - Canonical integrity manifest writer (T0709).
-//! - Full conformance corpus (T0710).
-//! - Documentation that SHA-256 is not a publisher signature (T0711,
-//!   REQ-INTEGRITY-008).
+//! - [`canonical_bytes`](crate::write) — T0709 canonical manifest writer
+//!   (lock-step with the grammar's serialization rules, ADR 0004 §"Canonical
+//!   serialization").
+//! - The "SHA-256 is not a publisher signature" doc page — T0711,
+//!   REQ-INTEGRITY-008.
 //!
 //! ## Error model
 //!
-//! Every diagnostic carries a code from `specs/registry/error-codes.{md,json}`
-//! under the `INTEGRITY` category. Stage-9 codes (`INTEGRITY_STRUCTURE_INVALID`,
-//! `INTEGRITY_BAD_ALGORITHM`, `INTEGRITY_BAD_HEX`, `INTEGRITY_MISSING_ENTRY`,
-//! `INTEGRITY_EXTRA_ENTRY`, `INTEGRITY_DUPLICATE_ENTRY`) are emitted here;
-//! `INTEGRITY_HASH_MISMATCH` (stage 11) will be emitted by the verify path in
-//! the follow-up PR. KDL parser errors propagate with their own category.
+//! Every diagnostic carries a code from `specs/registry/error-codes.{md,json}`.
+//! Stage-9 codes (`INTEGRITY_STRUCTURE_INVALID`, `INTEGRITY_BAD_ALGORITHM`,
+//! `INTEGRITY_BAD_HEX`, `INTEGRITY_MISSING_ENTRY`, `INTEGRITY_EXTRA_ENTRY`,
+//! `INTEGRITY_DUPLICATE_ENTRY`) are emitted from [`parse`] /
+//! [`parse_document`]. Stage-11 codes (`INTEGRITY_HASH_MISMATCH`) are emitted
+//! from [`verify_one`]. KDL parser errors propagate with their own category.
 //! NFC / forbidden-category violations on `resource` path args surface with
 //! the `UNICODE` category.
 //!
@@ -50,7 +55,7 @@
 //!
 //! Implemented in Phase 7 (Issue #17). See `specs/grammar/integrity-0.1.0.md`,
 //! `specs/grammar/integrity-0.1.0.abnf` and
-//! [`ADR 0004`](../../../docs/decisions/0004-integrity-manifest-grammar.md)
+//! [ADR 0004](../../../docs/decisions/0004-integrity-manifest-grammar.md)
 //! for the normative artifacts this crate implements.
 
 #![deny(unsafe_code)]
@@ -59,8 +64,12 @@
 pub mod error;
 pub mod manifest;
 pub mod parse;
+pub mod verify;
 
 pub use elang_core::ids::ResourcePath;
 
-pub use crate::manifest::{verify_coverage, Algorithm, IntegrityEntry, IntegrityManifest};
+pub use crate::manifest::{
+    verify_coverage, Algorithm, IntegrityEntry, IntegrityManifest, SHA_256_LITERAL,
+};
 pub use crate::parse::{parse, parse_document, parse_with_budgets};
+pub use crate::verify::{verify_one, Hasher};

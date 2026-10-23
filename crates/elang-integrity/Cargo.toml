@@ -20,3 +20,6 @@ elang-kdl.workspace = true
 # `elang-integrity` is corrected to include `unicode` in this PR (it was an
 # oversight when the crate stub was created).
 elang-unicode.workspace = true
+# Streaming SHA-256 hasher for the verify path (T0706). Version pinned
+# workspace-wide (`sha2 = "=0.11.1"`, T0012).
+sha2.workspace = true

@@ -36,8 +36,9 @@ use crate::error::integrity_err;
 /// `elang_core::index::SHA256_LEN` but kept local so the integrity crate
 /// doesn't depend on the byte-units policy of `SHA256_BYTES` (`u64`) for an
 /// array length. The constant is locked by ADR 0004 ("Only SHA-256 is
-/// defined in v0.1.0").
-const SHA256_LEN: usize = 32;
+/// defined in v0.1.0") and is shared across [`crate::manifest`] and
+/// [`crate::verify`].
+pub(crate) const SHA256_LEN: usize = 32;
 
 /// The KDL argument string for [`Algorithm::Sha256`].
 ///
