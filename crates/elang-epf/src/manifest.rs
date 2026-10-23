@@ -3,7 +3,7 @@
 //! Constraint **C-12** of `specs/grammar/epf-0.1.0.md` splits into two halves:
 //!
 //! * *Syntactic* — the path is a safe package-relative resource path ending in
-//!   `.eld`. That is checked during EPF parse (see [`crate::parse()`]).
+//!   `.eld`. That is checked during EPF parse (see [`mod@crate::parse`]).
 //! * *Semantic* — the path **exists** in the archive index already parsed at
 //!   reader stage 5. That check needs external data, so it lives here and is
 //!   performed by the caller once both the EPF and the index are available.
