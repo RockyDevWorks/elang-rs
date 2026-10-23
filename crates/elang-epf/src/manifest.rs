@@ -127,13 +127,12 @@ mod tests {
     }
 
     /// The blanket `IndexLookup for &T` impl forwards to the inner lookup.
-    /// `Vec<String>` already has an explicit `IndexLookup for [String]` impl,
-    /// and `&[String]` flows through the `&T` blanket via slice coercion.
+    /// `&[String]` forwards to the explicit `IndexLookup for [String]` impl.
     #[test]
     fn blanket_impl_for_reference_forwards_lookups() {
         let owned: Vec<String> = vec!["a/b.eld".into()];
         let slice_ref: &[String] = owned.as_slice();
-        // Select `Self = &[String]` to exercise the reference impl.
+        // Explicitly select the reference impl to exercise its forwarding.
         assert!(<&[String] as IndexLookup>::contains(&slice_ref, "a/b.eld"));
         assert!(!<&[String] as IndexLookup>::contains(&slice_ref, "x/y.eld"));
     }
