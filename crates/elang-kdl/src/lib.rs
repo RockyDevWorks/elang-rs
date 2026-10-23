@@ -8,7 +8,7 @@
 //!
 //! ## Entry points
 //!
-//! - [`parse`] — parse a UTF-8 byte slice as a [`KdlDocument`].
+//! - [`fn@parse`] — parse a UTF-8 byte slice as a [`KdlDocument`].
 //! - [`parse_with_budgets`] — parse with a caller-supplied budget
 //!   tracker (useful for parsing multiple resources sequentially).
 //! - [`canon::emit_value`] — emit a canonical KDL 2.0 double-quoted
@@ -25,7 +25,7 @@
 //! | [`lex`] | Token stream with budget-aware failure |
 //! | [`budget`] | `BudgetTracker` enforcing steering §10 limits |
 //! | [`error`] | `ParseError` + `ErrorCode` (registry-aligned) |
-//! | [`parse`] | Recursive-descent parser building an AST |
+//! | [`mod@parse`] | Recursive-descent parser building an AST |
 //! | [`canon`] | Canonical double-quoted string emitter |
 //!
 //! See ADR 0010 in `docs/decisions/0010-kdl-parser-hand-roll.md` for the

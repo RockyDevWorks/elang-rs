@@ -4,9 +4,8 @@
 //! `specs/registry/error-codes.md`) so that schema layers and the CLI can
 //! match on the code without depending on the human-readable message. Every
 //! error also carries a [`SourceSpan`] pointing at the offending bytes when
-//! one is known; the [`ParseError::Unknown`] sentinel exists for cases where
-//! no span is available (e.g. input validation failures before the parser
-//! runs).
+//! one is known; when no span is available (e.g. input validation failures
+//! before the parser runs) the span is [`SourceSpan::INVALID`].
 
 use crate::span::SourceSpan;
 
