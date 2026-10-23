@@ -21,7 +21,7 @@
 | OA-9 | Machine-checkable ELD v0.1.0 grammar (bare allophones, nonempty blocks) | §6, §12.5 | ELD parser freeze | T0102 | **Ratified** — [`specs/grammar/eld-0.1.0.md`](../specs/grammar/eld-0.1.0.md) + ABNF |
 | OA-10 | Stable machine-readable error-code registry + metadata schema | §11 | error model freeze, diagnostics | T0119 | **Ratified** — [`specs/registry/error-codes.md`](../specs/registry/error-codes.md) + [`.json`](../specs/registry/error-codes.json) |
 | OA-11 | Binary header/index/footer reference vectors and offsets | §3 | container golden fixtures | T0118 | **Ratified** — [`specs/registry/binary-reference-vectors.json`](../specs/registry/binary-reference-vectors.json) + byte-exact fixtures `fixtures/valid/container/minimal-archive/`; all offsets/sizes/digests computed (real index SHA-256 `a34879d8…fa35`) by the `elang-conformance::binary_vectors` builder and asserted by tests. |
-| OA-12 | Tie-bar equivalence and IPA comparison-key test vectors | §7 | IPA uniqueness tests | T0117 | Open |
+| OA-12 | Tie-bar equivalence and IPA comparison-key test vectors | §7 | IPA uniqueness tests | T0117 | **Ratified** — [`specs/registry/ipa-tie-bar-vectors.json`](../specs/registry/ipa-tie-bar-vectors.json) (12 vectors: 6 positive, 2 equivalence, 4 negative, every row of steering §7.1); driver [`elang-repertoire` integration test `tie_bar_vectors.rs`](../crates/elang-repertoire/tests/tie_bar_vectors.rs) (5 passing tests) loads the JSON and asserts the published expectations against the pinned repertoire. |
 | OA-13 | Unicode 18.0 NFC + General Category reference test data | §7 | Unicode validation tests | T0116 | **Ratified** — `elang-unicode` generated from pinned UCD 18.0.0; NFC passes official `NormalizationTest.txt` (20,171 rows); ADR 0007. |
 | OA-14 | Canonical ELD golden files + SHA-256 | §9 | canonical writer conformance | T1121 | Open |
 | OA-15 | Policy for extra indexed resources / manifest coverage in v0.1.0 (no invented modules) | §2 | REQ-PKG-005 | T0121 | **Ratified** — ADR 0006, [`specs/registry/resource-policy-v0.1.0.md`](../specs/registry/resource-policy-v0.1.0.md) |
@@ -35,9 +35,11 @@
   independently reviewed against that source and has test vectors. Decision-only
   artifacts (grammars, canonical profiles, policies) are ratified by an ADR
   and/or a published spec file.
-- **Ratified so far (2026-10-20):** OA-3 (schema shape), OA-6 (integrity grammar,
+- **Ratified so far (2026-10-23):** OA-3 (schema shape), OA-6 (integrity grammar,
   ADR 0004), OA-7 (canonical EPF, ADR 0005), OA-8 (EPF grammar), OA-9 (ELD
-  grammar), OA-10 (error registry), OA-15 (resource policy, ADR 0006).
+  grammar), OA-10 (error registry), OA-11 (binary vectors, byte-exact), OA-12
+  (tie-bar vectors, 12 published cases), OA-13 (Unicode 18.0 data), OA-15
+  (resource policy, ADR 0006), OA-16 (residual ELD canonical edge cases, ADR 0009).
 - **IPA inventory (OA-1/OA-2/OA-4/OA-5) is generated, verified and pinned**
   (ADR 0008): `specs/schema/ipa-v1.json` (107 base / 27 combining / 9 spacing)
   from the UNITIPA 2020 chart, with the real JCS digest pinned and the base set
@@ -55,9 +57,10 @@
   condition sort key (E-2), the exact `"`/`\` escaping set (E-3), bare-vs-block
   allophone emission (E-4/E-5) and layout invariants (E-6); EPF/integrity
   profiles were already locked by ADR 0004/0005.
-- **Still open — blocked on external source data or later phases:** OA-12
-  (tie-bar vectors — partially covered by `ipa.rs` tests), OA-14 (canonical ELD
-  goldens), OA-17 (freeze/tag). These MUST NOT be fabricated.
+- **Still open — blocked on external source data or later phases:** OA-14
+  (canonical ELD goldens — depends on Phase 11 canonical writer, T1121),
+  OA-17 (freeze/tag — depends on OA-14 and on the second human review of
+  OA-1/OA-4 diacritic/modifier inventories). These MUST NOT be fabricated.
 - **OA-13 (Unicode data) is ratified:** `elang-unicode` provides Unicode 18.0.0
   General_Category + NFC from the pinned UCD, and NFC passes the official 18.0.0
   conformance suite (ADR 0007). `unicode_data_matches_pin()` is now `true`.

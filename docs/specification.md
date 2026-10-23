@@ -41,27 +41,50 @@ see [ADR 0003](decisions/0003-open-normative-artifacts.md) and the live tracker
 in [`open-artifacts.md`](open-artifacts.md)). Machine-checkable artifacts land
 under the top-level [`specs/`](../specs/) directory.
 
-Still open — **blocked on external pinned source data**, must not be fabricated:
+Still open — **blocked on external pinned source data or later phases**,
+must not be fabricated:
 
-1. Exact approved IPA allowlist (base symbols, combining diacritics, spacing
-   modifiers) for the pinned 2026 IPA chart, with classification and
-   canonical-decomposition handling.
-2. The canonical (RFC 8785 JCS) SHA-256 digest of the IPA repertoire JSON (the
-   *method* is published in `specs/schema/json-encoding-policy.md`; the digest
-   itself awaits the reviewed inventory).
+1. **IPA diacritic/modifier inventories (T0106–T0110)** — the allowlist has
+   been generated, cross-checked against an independent chart transcription
+   and pinned (`specs/schema/ipa-v1.json`, 107 base / 27 combining / 9
+   spacing, ADR 0008). The remaining gate is a second human review of the
+   diacritic and modifier inventories before formal freeze (T0123).
+2. **Canonical ELD golden files + SHA-256 (OA-14)** — produced by the Phase 11
+   canonical writer (T1121). The methodology (JCS, deterministic EPF
+   ordering) is published; the fixtures themselves depend on the writer
+   landing.
+3. **Formal freeze + spec checksum/release tag (OA-17)** — depends on (1) and
+   (2). Until the freeze lands, no schema or repertoire version is final.
 
 Ratified in Phase 1 (decision-only / contract-derived artifacts):
 
-3. The complete `META-INF/integrity.kdl` grammar and canonical serialization —
+4. The complete `META-INF/integrity.kdl` grammar and canonical serialization —
    ADR 0004, `specs/grammar/integrity-0.1.0.md`.
-4. The canonical EPF serializer profile — ADR 0005,
+5. The canonical EPF serializer profile — ADR 0005,
    `specs/canonical/epf-canonical-serialization.md`.
-5. Machine-checkable ELD/EPF grammars and the repertoire JSON Schema —
+6. Machine-checkable ELD/EPF grammars and the repertoire JSON Schema —
    `specs/grammar/{epf,eld}-0.1.0.md` and
    `specs/schema/elang-ipa-repertoire-v1.schema.json`.
-6. The error-code registry — `specs/registry/error-codes.md`. Reference golden
-   fixtures and reproducibility hashes still depend on the IPA/Unicode data and
-   remain open.
+7. The error-code registry — `specs/registry/error-codes.md` +
+   `error-codes.json`. Reference golden fixtures and reproducibility hashes
+   still depend on the IPA/Unicode data and remain open.
+8. **Binary header/index/footer reference vectors and offsets (T0118, OA-11)**
+   — `specs/registry/binary-reference-vectors.json` +
+   `fixtures/valid/container/minimal-archive/`. All offsets, sizes and
+   SHA-256 digests are computed by the deterministic
+   `elang-conformance::binary_vectors` builder and asserted by tests.
+9. **Tie-bar equivalence and IPA comparison-key test vectors (T0117, OA-12)**
+   — 12 published vectors
+   (`specs/registry/ipa-tie-bar-vectors.json`) across positive,
+   equivalence and negative cases, driven by the `elang-repertoire`
+   integration test `tie_bar_vectors.rs`.
+10. **Residual KDL canonicalization edge cases (T0122, OA-16)** — ADR 0009
+    pins the authored-byte vs comparison-key views for ordering (E-1),
+    the condition sort key (E-2), the exact `"`/`\` escaping set (E-3),
+    bare-vs-block allophone emission (E-4/E-5) and layout invariants (E-6).
+11. **Unicode 18.0.0 data (T0116, OA-13)** — first-party `elang-unicode`
+    generated from the pinned UCD 18.0.0; NFC passes the official
+    `NormalizationTest.txt` (20,171 rows); ADR 0007.
 
 Until each open item is ratified, the corresponding code path must not embed
 guessed inventories or fabricated hashes.

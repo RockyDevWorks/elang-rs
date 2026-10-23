@@ -34,6 +34,20 @@ These decision-derived artifacts have been produced and reviewed:
 - The resource/manifest policy for extra indexed resources (no invented modules).
 - Unicode 18.0.0 data: General_Category + NFC generated from the pinned UCD, with
   NFC passing the official 18.0.0 conformance suite.
+- Binary header/index/footer reference vectors and offsets: the exact §3 layout
+  with header, index and footer field tables and byte-exact fixtures
+  ([`specs/registry/binary-reference-vectors.json`](../../specs/registry/binary-reference-vectors.json),
+  `fixtures/valid/container/minimal-archive/`). All offsets, sizes and SHA-256
+  digests are computed by the deterministic `elang-conformance::binary_vectors`
+  builder and asserted by tests.
+- Tie-bar equivalence and IPA comparison-key test vectors: 12 published vectors
+  ([`specs/registry/ipa-tie-bar-vectors.json`](../../specs/registry/ipa-tie-bar-vectors.json))
+  covering positive, equivalence and negative cases from §7.1, driven by the
+  `elang-repertoire` integration test `tie_bar_vectors.rs`.
+- Residual KDL canonicalization edge cases for ELD: ADR 0009 pins the
+  authored-byte vs comparison-key views for ordering (E-1), the condition sort
+  key (E-2), the exact `"`/`\` escaping set (E-3), bare-vs-block allophone
+  emission (E-4/E-5) and layout invariants (E-6).
 
 ## IPA inventory — generated, verified, pinned (not yet frozen)
 
@@ -53,12 +67,11 @@ diacritic and modifier inventories.
 The following remain open and are release blockers. They must be produced and
 reviewed rather than guessed:
 
-- Binary header/index/footer reference vectors and offsets.
-- Additional tie-bar equivalence and IPA comparison-key test vectors.
-- Canonical ELD golden files and their SHA-256 digests.
-- Residual KDL canonicalization edge cases to be ratified.
+- Canonical ELD golden files and their SHA-256 digests (OA-14) — produced by
+  the Phase 11 canonical writer (T1121).
 - The frozen, reviewed schema/repertoire versions plus the spec checksum and
-  release tag.
+  release tag (OA-17) — depends on OA-14 and the second human review of the
+  IPA diacritic/modifier inventories.
 
 !!! danger "No fabricated normative data"
     Until each open item is ratified, no code path embeds a guessed inventory, a
