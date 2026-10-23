@@ -107,7 +107,10 @@ fn check_input_size(input: &[u8]) -> Result<(), Error> {
 /// fail-closed: any unrecognized construct is rejected.
 pub fn parse_document(doc: &KdlDocument) -> Result<IntegrityManifest, Error> {
     let nodes = doc.nodes();
-    if nodes.len() != 1 {
+    // Exactly one top-level node is required; the slice-destructure pattern
+    // produces a clear error message for both 0 and 2+ node counts and
+    // makes the "exactly one" post-condition visible to the compiler.
+    let [integ] = nodes else {
         return Err(integrity_err(
             "INTEGRITY_STRUCTURE_INVALID",
             format!(
@@ -115,13 +118,7 @@ pub fn parse_document(doc: &KdlDocument) -> Result<IntegrityManifest, Error> {
                 nodes.len()
             ),
         ));
-    }
-    let integ = nodes.first().ok_or_else(|| {
-        integrity_err(
-            "INTEGRITY_STRUCTURE_INVALID",
-            "integrity.kdl has no top-level node",
-        )
-    })?;
+    };
     if integ.name() != "integrity" {
         return Err(integrity_err_at(
             "INTEGRITY_STRUCTURE_INVALID",
@@ -482,27 +479,38 @@ integrity {
 
     #[test]
     fn accepts_input_at_exact_cap() {
-        // Build a syntactically valid manifest padded with a block comment
-        // out to exactly MAX_INTEGRITY_BYTES. The parse may fail with a
-        // non-cap diagnostic on a malformed body, but never with
-        // LIMIT_INTEGRITY_BYTES.
+        // The cap check (`check_input_size`) is `> MAX`, so input at exactly
+        // MAX must pass. Test the helper directly: empty input trivially
+        // passes, and an over-cap input fails.
+        let tiny = b"";
+        check_input_size(tiny).expect("empty input passes the cap check");
+
         #[allow(clippy::cast_possible_truncation)]
-        let target = MAX_INTEGRITY_BYTES as usize;
-        let prefix = b"/* ";
-        let suffix = b" */";
-        let filler_len = target - prefix.len() - suffix.len();
-        let mut input = Vec::with_capacity(target);
-        input.extend_from_slice(prefix);
-        input.resize(filler_len + prefix.len(), b' ');
-        input.extend_from_slice(suffix);
-        assert_eq!(input.len(), target);
-        let result = parse(&input);
-        if let Err(e) = &result {
-            assert_ne!(
-                e.diagnostic.code, "LIMIT_INTEGRITY_BYTES",
-                "input at exactly MAX_INTEGRITY_BYTES must not trip the cap"
-            );
-        }
+        let cap_input = vec![b' '; MAX_INTEGRITY_BYTES as usize];
+        check_input_size(&cap_input).expect("input at exactly MAX must pass the cap check");
+    }
+
+    #[test]
+    fn rejects_one_byte_over_cap() {
+        // Strictly-greater input must trip LIMIT_INTEGRITY_BYTES — the
+        // inverse of `accepts_input_at_exact_cap` and the test that makes
+        // the cap boundary meaningful.
+        #[allow(clippy::cast_possible_truncation)]
+        let target = MAX_INTEGRITY_BYTES as usize + 1;
+        let input = vec![b' '; target];
+        let err = parse(&input).unwrap_err();
+        assert_eq!(err.diagnostic.code, "LIMIT_INTEGRITY_BYTES");
+        assert_eq!(err.diagnostic.category, Category::Limit);
+    }
+
+    #[test]
+    fn rejects_invalid_kdl_with_syntax_error() {
+        // Garbage that cannot parse as KDL must surface as a stage-9 error
+        // routed through `error::from_kdl`. We don't pin a specific KDL
+        // error code (the parser is a black box); we just verify the
+        // stage is set and the diagnostic carries a category.
+        let err = parse(b"this is not { valid KDL").unwrap_err();
+        assert_eq!(err.diagnostic.stage, Some(9));
     }
 
     #[test]
@@ -545,6 +553,15 @@ integrity {
         let doc = kdl_parse("integrity {}");
         let err = parse_document(&doc).unwrap_err();
         assert_eq!(err.diagnostic.code, "INTEGRITY_STRUCTURE_INVALID");
+    }
+
+    #[test]
+    fn c01_rejects_empty_document() {
+        // Zero top-level nodes is a structural violation.
+        let doc = kdl_parse("");
+        let err = parse_document(&doc).unwrap_err();
+        assert_eq!(err.diagnostic.code, "INTEGRITY_STRUCTURE_INVALID");
+        assert!(err.diagnostic.message.contains("got 0"));
     }
 
     #[test]
@@ -670,6 +687,105 @@ integrity {
         let doc = kdl_parse("integrity {\n    algorithm \"sha-256\"\n    resource \"a\"\n}\n");
         let err = parse_document(&doc).unwrap_err();
         assert_eq!(err.diagnostic.code, "INTEGRITY_STRUCTURE_INVALID");
+    }
+
+    #[test]
+    fn c02_rejects_algorithm_two_args() {
+        // Algorithm node with two args (only one allowed).
+        let doc = kdl_parse(&format!(
+            "integrity {{\n    algorithm \"sha-256\" \"extra\"\n    resource \"a\" sha256=\"{ZERO}\"\n}}\n"
+        ));
+        let err = parse_document(&doc).unwrap_err();
+        assert_eq!(err.diagnostic.code, "INTEGRITY_STRUCTURE_INVALID");
+        assert!(err.diagnostic.message.contains("exactly one arg"));
+    }
+
+    #[test]
+    fn c02_rejects_algorithm_non_string_arg() {
+        // Algorithm arg must be a string literal, not a number.
+        let doc = kdl_parse(&format!(
+            "integrity {{\n    algorithm 1\n    resource \"a\" sha256=\"{ZERO}\"\n}}\n"
+        ));
+        let err = parse_document(&doc).unwrap_err();
+        assert_eq!(err.diagnostic.code, "INTEGRITY_BAD_ALGORITHM");
+        assert!(err.diagnostic.message.contains("string literal"));
+    }
+
+    #[test]
+    fn c03_rejects_resource_non_string_path_arg() {
+        // Resource path arg must be a string literal, not a number.
+        let doc = kdl_parse(&format!(
+            "integrity {{\n    algorithm \"sha-256\"\n    resource 1 sha256=\"{ZERO}\"\n}}\n"
+        ));
+        let err = parse_document(&doc).unwrap_err();
+        assert_eq!(err.diagnostic.code, "INTEGRITY_STRUCTURE_INVALID");
+        assert!(err.diagnostic.message.contains("string literal"));
+    }
+
+    #[test]
+    fn c03_rejects_duplicate_sha256_property() {
+        // Same property name appearing twice on a resource is a structural error.
+        let doc = kdl_parse(&format!(
+            "integrity {{\n    algorithm \"sha-256\"\n    resource \"a\" sha256=\"{ZERO}\" sha256=\"{ZERO}\"\n}}\n"
+        ));
+        let err = parse_document(&doc).unwrap_err();
+        assert_eq!(err.diagnostic.code, "INTEGRITY_STRUCTURE_INVALID");
+        assert!(err.diagnostic.message.contains("duplicate"));
+    }
+
+    #[test]
+    fn c03_rejects_sha256_non_string() {
+        // sha256 property must be a string literal, not an integer.
+        let doc =
+            kdl_parse("integrity {\n    algorithm \"sha-256\"\n    resource \"a\" sha256=1\n}\n");
+        let err = parse_document(&doc).unwrap_err();
+        assert_eq!(err.diagnostic.code, "INTEGRITY_STRUCTURE_INVALID");
+        assert!(err.diagnostic.message.contains("sha256"));
+    }
+
+    #[test]
+    fn c03_rejects_path_with_forbidden_category() {
+        // BEL (U+0007) is in the `Cc` (Control) General_Category; the
+        // unicode layer must reject it before ResourcePath construction.
+        let doc = kdl_parse(&format!(
+            "integrity {{\n    algorithm \"sha-256\"\n    resource \"a\u{0007}b\" sha256=\"{ZERO}\"\n}}\n"
+        ));
+        let err = parse_document(&doc).unwrap_err();
+        assert_eq!(err.diagnostic.code, "UNICODE_FORBIDDEN_CATEGORY");
+        assert!(err.diagnostic.message.contains("U+0007"));
+    }
+
+    #[test]
+    fn c03_rejects_path_with_noncharacter() {
+        // U+FFFE is a Unicode noncharacter (Plane 0 last-but-one).
+        let doc = kdl_parse(&format!(
+            "integrity {{\n    algorithm \"sha-256\"\n    resource \"a\u{FFFE}b\" sha256=\"{ZERO}\"\n}}\n"
+        ));
+        let err = parse_document(&doc).unwrap_err();
+        assert_eq!(err.diagnostic.code, "UNICODE_NONCHARACTER");
+        assert!(err.diagnostic.message.contains("U+FFFE"));
+    }
+
+    #[test]
+    fn span_of_returns_value_span() {
+        // Direct exercise of the private `span_of` helper: a KDL value's
+        // span is whatever the parser recorded, not invalid.
+        let doc = kdl_parse("integrity {\n    algorithm \"sha-256\"\n}\n");
+        let integ = doc.nodes().first().expect("test: doc has integrity node");
+        let children = integ.children().expect("integrity block");
+        let algorithm = children.first().expect("test: integrity has children");
+        let first = algorithm.args().next().expect("algorithm arg");
+        let span = span_of(first);
+        assert!(!span.is_invalid());
+    }
+
+    #[test]
+    fn span_to_kdl_returns_none_for_invalid_span() {
+        // Direct exercise of the private `span_to_kdl` helper:
+        // an invalid `SourceSpan` (no source location) maps to `None`,
+        // so the diagnostic is built without a span.
+        let invalid = elang_kdl::span::SourceSpan::INVALID;
+        assert_eq!(span_to_kdl(invalid), None);
     }
 
     #[test]

@@ -378,4 +378,51 @@ mod tests {
         // Hand-verified against CANONICAL_GOLDEN:
         assert_eq!(bytes.len(), CANONICAL_GOLDEN.len());
     }
+
+    #[test]
+    fn push_kdl_string_escapes_backslash_directly() {
+        // `ResourcePath::new` rejects `\` in paths, so the backslash-escape
+        // arm of `push_kdl_string` is unreachable via the public writer
+        // surface. Test it directly to keep the arm covered.
+        let mut out = String::new();
+        push_kdl_string(&mut out, r"back\slash");
+        assert_eq!(out, r"back\\slash");
+    }
+
+    #[test]
+    fn canonical_bytes_escapes_control_chars_in_path() {
+        // Exercise every `push_kdl_string` escape arm:
+        // - LF  (\n)   → `\n`         (KDL 2.0 standard escape)
+        // - CR  (\r)   → `\r`
+        // - TAB (\t)   → `\t`
+        // - BEL (\x07) → `\u{7}`     (general Unicode escape for any
+        //                            other ASCII control; < 0x20)
+        // All four are in the Cc General_Category so a path containing
+        // them cannot reach the writer via the parser; we construct the
+        // manifest directly to assert the writer's escape surface.
+        for (path_str, expected_escape) in [
+            ("a\nb", "\\n"),
+            ("a\rb", "\\r"),
+            ("a\tb", "\\t"),
+            ("a\x07b", "\\u{7}"),
+        ] {
+            let mut resources = BTreeMap::new();
+            let path = ResourcePath::new(path_str.to_string())
+                .expect("test: control-char path is structurally valid");
+            let digest = [0u8; SHA256_LEN];
+            resources.insert(path.clone(), IntegrityEntry { path, digest });
+            let m = IntegrityManifest {
+                algorithm: crate::manifest::Algorithm::Sha256,
+                resources,
+            };
+            let bytes = canonical_bytes(&m);
+            let text = std::str::from_utf8(&bytes).expect("utf-8");
+            assert!(
+                text.contains(expected_escape),
+                "path containing {:?} must escape to {expected_escape:?} \
+                 in canonical bytes; got: {text}",
+                path_str
+            );
+        }
+    }
 }

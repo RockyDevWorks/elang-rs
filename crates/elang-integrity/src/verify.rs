@@ -340,4 +340,24 @@ mod tests {
         assert_eq!(hex, SHA256_ABC_HEX);
         assert_eq!(hex.len(), 64);
     }
+
+    #[test]
+    fn hasher_default_matches_new() {
+        // `Default::default()` and `Hasher::new()` must build the same state.
+        let from_default = Hasher::default();
+        let from_new = Hasher::new();
+        assert_eq!(from_default.finalize_hex(), from_new.finalize_hex());
+    }
+
+    #[test]
+    fn hasher_debug_does_not_leak_state() {
+        // The Debug impl uses `finish_non_exhaustive` — it must produce
+        // a struct name (so logs are readable) but no internal fields.
+        let h = Hasher::new();
+        let dbg = format!("{:?}", h);
+        assert!(dbg.contains("Hasher"));
+        // No hex bytes, no internal state — that would defeat the
+        // non-exhaustive contract.
+        assert!(dbg.len() < 32, "Debug output too long: {dbg}");
+    }
 }

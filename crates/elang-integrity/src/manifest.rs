@@ -377,6 +377,21 @@ mod tests {
         verify_coverage(&m, &idx, &self_path).expect("coverage must pass");
     }
 
+    #[test]
+    fn coverage_skips_self_when_listed_as_indexed_resource() {
+        // Defensive: if the container's index ever lists the manifest's
+        // own path as a regular resource (a layering bug), the loop's
+        // `continue` must skip it instead of failing with MISSING_ENTRY.
+        // The self-exclusion check above is the real guard; this just
+        // documents that the loop tolerates a self-in-indexed input.
+        let m = manifest(&["a.eld"]);
+        let mut idx = BTreeSet::new();
+        idx.insert(p("a.eld"));
+        idx.insert(p("META-INF/integrity.kdl"));
+        let self_path = p("META-INF/integrity.kdl");
+        verify_coverage(&m, &idx, &self_path).expect("self-in-index must not fail");
+    }
+
     // Used in the `coverage_*` tests for `Category` equality.
     use elang_core::error::Category;
 }
