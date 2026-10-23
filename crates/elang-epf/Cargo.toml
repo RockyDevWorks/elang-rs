@@ -14,3 +14,7 @@ workspace = true
 [dependencies]
 elang-core.workspace = true
 elang-kdl.workspace = true
+# NFC + General_Category + noncharacter validation for EPF string values
+# (grammar epf-0.1.0.md §1: "enforced NFC for all string values"; ADR 0005
+# rule 6 requires values "free of controls/Cf/Co/Cn").
+elang-unicode.workspace = true
