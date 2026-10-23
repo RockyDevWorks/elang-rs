@@ -139,10 +139,10 @@
 - [x] **T0415** Set canonical `nbWorkers=0`, `checksumFlag=1`, `contentSizeFlag=1`. → `frame::encode` sets `CompressionLevel`, `NbWorkers(0)`, `ChecksumFlag(true)`, `ContentSizeFlag(true)`
 - [x] **T0416** Set canonical `dictIDFlag=0`, `windowLog=27`, long-distance matching off, no dictionary. → `frame::encode` sets `DictIdFlag(false)`, `WindowLog(27)`, `EnableLongDistanceMatching(false)`
 - [x] **T0417** Use one `ZSTD_compress2()` call over complete resource input for canonical frames. → single `CCtx::compress2` over the complete input (see `frame::encode`)
-- [x] **T0418** Freeze remaining canonical libzstd defaults and verify them against pinned library. → covered transitively by T0419 determinism test; pinned libzstd asserted by `pinned_zstd_constant_is_157` + `linked_libzstd_is_157`
+- [x] **T0418** Freeze remaining canonical libzstd defaults and verify them against pinned library. → fixed golden bytes asserted by `frame::tests::canonical_matches_pinned_golden_bytes`; pinned libzstd asserted by `pinned_zstd_constant_is_157` + `linked_libzstd_is_157`
 - [x] **T0419** Compare canonical frames byte-for-byte across repeated runs. → `frame::tests::canonical_is_byte_identical_across_repeated_runs` + `canonical_uses_a_fresh_context_per_call`
-- [x] **T0420** Test compressed archive 6 GiB limit and recommended 2 GiB warning behavior. → 6 GiB archive ceiling enforced by `index::ResourceIndex` (`LIMIT_RESOURCES_ARCHIVE`); 2 GiB recommended warning deferred to writer (Phase 12)
-- [x] **T0421** Add malicious frame and decompression-bomb regression tests. → `frame::tests::decode_rejects_a_corrupted_body` + `decode_rejects_a_corrupted_checksum` + the 14 mutation-verified guards in `frame::inspect` / `frame::decode`
+- [ ] **T0420** Test compressed archive 6 GiB limit and recommended 2 GiB warning behavior. → 6 GiB ceiling defined by `elang_core::limits::MAX_COMPRESSED_ARCHIVE_BYTES`, enforcement pending; 2 GiB recommended warning deferred to writer (Phase 12)
+- [x] **T0421** Add malicious frame and decompression-bomb regression tests. → `frame::tests::decode_rejects_a_corrupted_body` + `decode_rejects_a_corrupted_checksum` + `decode_rejects_output_exceeding_a_lowered_declared_size_mid_stream` (lowered content size, unchanged body, declared-size budget gates pass) + the 14 mutation-verified guards in `frame::inspect` / `frame::decode`
 - [x] **T0422** Benchmark frame inspection, streaming decode and canonical encode. → benchmarks deferred (no `criterion` dependency in workspace); covered by determinism + round-trip tests for now
 
 **Acceptance:** reader enforces one-frame contract and resource budgets; canonical output byte-identical for golden inputs.

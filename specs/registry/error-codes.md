@@ -89,7 +89,7 @@ primary stage(s) at which it can fire.
 
 | Code | Stage | Meaning |
 |---|---|---|
-| `FRAME_BAD_MAGIC` | 7 | Frame magic, descriptor sanity, or windowLog range is invalid. |
+| `FRAME_BAD_MAGIC` | 7 | Fewer than four bytes, incorrect frame magic, or an Unused/Reserved descriptor bit is set. |
 | `FRAME_MISSING_CONTENT_SIZE` | 7 | Frame content size not present. |
 | `FRAME_MISSING_CHECKSUM` | 7 | Frame checksum not present. |
 | `FRAME_WINDOW_TOO_LARGE` | 7 | Window > 128 MiB. |

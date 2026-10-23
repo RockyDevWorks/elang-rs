@@ -232,18 +232,13 @@ pub fn inspect(bytes: &[u8]) -> Result<FrameHeader> {
 
     // Window_Descriptor is present only when Single_Segment_flag is clear.
     let mut window_size = 0u64;
+    let mut window_log = 0u32;
     if !single_segment {
         let w = *bytes.get(at).ok_or_else(|| {
             frame_err("FRAME_TRUNCATED", "frame ends before the window descriptor")
         })?;
         at = at.saturating_add(1);
-        let window_log = 10u32.saturating_add(u32::from(w >> 3));
-        if !(10..=31).contains(&window_log) {
-            return Err(frame_err(
-                "FRAME_WINDOW_TOO_LARGE",
-                format!("frame window log {window_log} is outside the legal range 10..=31"),
-            ));
-        }
+        window_log = 10u32.saturating_add(u32::from(w >> 3));
         let mantissa = u64::from(w & 0x07);
         let base = 1u64.checked_shl(window_log).unwrap_or(u64::MAX);
         window_size =
@@ -275,6 +270,14 @@ pub fn inspect(bytes: &[u8]) -> Result<FrameHeader> {
             ));
         }
         at = at.saturating_add(dict_len);
+    }
+
+    // Dictionary dependency takes precedence over every window error.
+    if !single_segment && !(10..=31).contains(&window_log) {
+        return Err(frame_err(
+            "FRAME_WINDOW_TOO_LARGE",
+            format!("frame window log {window_log} is outside the legal range 10..=31"),
+        ));
     }
 
     // Frame_Content_Size.
@@ -465,9 +468,10 @@ const DECODE_SCRATCH: usize = 128 * 1024;
 ///
 /// # Errors
 ///
-/// Every [`inspect`] error, plus `LIMIT_RESOURCES_ARCHIVE` when the resource
+/// Every [`inspect`] error, plus `DECOMPRESSION_BUDGET_EXCEEDED` when the resource
 /// or the running total exceeds its ceiling, `FRAME_DECOMPRESS_FAILED` when
-/// libzstd rejects the body, and `FRAME_DECOMPRESSED_SIZE_MISMATCH` when a
+/// libzstd rejects the body, `FRAME_CHECKSUM_MISMATCH` when its checksum fails,
+/// and `FRAME_DECOMPRESSED_SIZE_MISMATCH` when a
 /// frame contradicts its own declared size.
 pub fn decode(bytes: &[u8], budget: &mut DecodeBudget) -> Result<Vec<u8>> {
     let header = inspect(bytes)?;
@@ -484,10 +488,19 @@ pub fn decode(bytes: &[u8], budget: &mut DecodeBudget) -> Result<Vec<u8>> {
         let produced = {
             let mut dst = OutBuffer::around(&mut scratch[..]);
             let hint = dctx.decompress_stream(&mut dst, &mut input).map_err(|e| {
-                frame_err(
-                    "FRAME_DECOMPRESS_FAILED",
-                    format!("libzstd rejected the frame body: {e}"),
-                )
+                // SAFETY: ZSTD_getErrorCode only classifies an integer result;
+                // it takes no pointers and has no memory or lifetime requirements.
+                #[allow(
+                    unsafe_code,
+                    reason = "zstd-safe 8.2.0 has no safe error-code accessor"
+                )]
+                let code = match unsafe { zstd_sys::ZSTD_getErrorCode(e) } {
+                    zstd_sys::ZSTD_ErrorCode::ZSTD_error_checksum_wrong => {
+                        "FRAME_CHECKSUM_MISMATCH"
+                    }
+                    _ => "FRAME_DECOMPRESS_FAILED",
+                };
+                frame_err(code, format!("libzstd rejected the frame body: {e}"))
             })?;
             let pos = dst.pos();
             (hint, pos)

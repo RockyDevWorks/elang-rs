@@ -99,6 +99,7 @@ dependencies = [
  "elang-unicode",
  "sha2",
  "zstd-safe",
+ "zstd-sys",
 ]
 
 [[package]]

@@ -104,7 +104,7 @@ fn inspect_rejects_a_frame_with_no_content_size_flag() {
     let mut bytes = Vec::new();
     bytes.extend_from_slice(&[0x28, 0xB5, 0x2F, 0xFD]); // magic
     bytes.push(0x00); // descriptor: FCS=0, single=0, no dict, no checksum
-    bytes.push(0xAF); // window desc -> windowLog=10+(0xAF>>3)=0x15=21 (valid)
+    bytes.push(0xAF); // windowLog = 10 + (0xAF >> 3) = 31; size gate rejects first
     bytes.extend_from_slice(&[0u8; 4]); // body placeholder
     let err = inspect(&bytes).unwrap_err();
     assert_eq!(err.code(), "FRAME_MISSING_CONTENT_SIZE");
@@ -118,6 +118,29 @@ fn inspect_rejects_a_frame_with_no_checksum_flag() {
     frame[4] &= !0b0000_0100; // clear Content_Checksum_flag
     let err = inspect(&frame).unwrap_err();
     assert_eq!(err.code(), "FRAME_MISSING_CHECKSUM");
+}
+
+#[test]
+fn inspect_rejects_a_frame_with_a_dictionary_dependency() {
+    let mut frame = valid_canonical(b"hello");
+    assert_eq!(frame[4] & 0x23, 0x20); // single segment, no dictionary ID
+    frame[4] |= 0x01; // one-byte Dictionary_ID before Frame_Content_Size
+    frame.insert(5, 1);
+    let err = inspect(&frame).unwrap_err();
+    assert_eq!(err.code(), "FRAME_DICTIONARY_DEPENDENCY");
+}
+
+#[test]
+fn inspect_checks_dictionary_dependency_before_an_out_of_range_window() {
+    let mut frame = valid_canonical(b"hello");
+    frame[4] = 0x45; // two-byte FCS, non-single segment, checksum, one-byte dict ID
+    frame.splice(5..6, [0xB0, 1, 0, 0]); // windowLog = 32, dictID = 1, FCS = 256
+    let err = inspect(&frame).unwrap_err();
+    assert_eq!(err.code(), "FRAME_DICTIONARY_DEPENDENCY");
+
+    frame[6] = 0; // remove the dictionary dependency to reach the window check
+    let err = inspect(&frame).unwrap_err();
+    assert_eq!(err.code(), "FRAME_WINDOW_TOO_LARGE");
 }
 
 #[test]
@@ -158,8 +181,8 @@ fn inspect_rejects_trailing_bytes_without_a_frame_magic() {
 #[test]
 fn inspect_rejects_an_oversized_window() {
     // Hand-craft a frame whose window descriptor yields >128 MiB:
-    // windowLog=27 (descriptor bits 5..7), mantissa=7 (low bits). The base is
-    // exactly 128 MiB; the add is (128 MiB / 8) * 7 = 112 MiB; total 240 MiB.
+    // windowLog=28 (descriptor bits 3..7), mantissa=7 (low bits). The base is
+    // 256 MiB; adding (256 MiB / 8) * 7 = 224 MiB gives 480 MiB.
     //
     // The descriptor must put us past the FCS-presence gate first:
     // fcs_flag = 1 (2-byte FCS), single_segment = 0 (window present), checksum
@@ -167,11 +190,30 @@ fn inspect_rejects_an_oversized_window() {
     let mut bytes = Vec::new();
     bytes.extend_from_slice(&[0x28, 0xB5, 0x2F, 0xFD]); // magic
     bytes.push(0x44); // descriptor: fcs=1, single=0, checksum=1, dict=0
-    bytes.push(0x97); // window descriptor: log=27, mantissa=7 -> 240 MiB
+    bytes.push(0x97); // window descriptor: log=28, mantissa=7 -> 480 MiB
     bytes.extend_from_slice(&0u16.to_le_bytes()); // FCS = 0 (FCS, +256 if relevant)
     bytes.extend_from_slice(&[0u8; 8]); // body placeholder
     let err = inspect(&bytes).unwrap_err();
     assert_eq!(err.code(), "FRAME_WINDOW_TOO_LARGE");
+}
+
+#[test]
+fn inspect_checks_the_exact_window_ceiling_including_mantissa() {
+    // Keep a complete valid body, FCS and checksum so no other gate masks
+    // the window check. A 256-byte input has a two-byte content-size field.
+    let original = valid_canonical(&[0u8; 256]);
+    assert_eq!(original[4], 0x64); // single segment, two-byte FCS, checksum
+    for (descriptor, window_size) in [(0x88, MAX_WINDOW_BYTES), (0x89, 144 << 20)] {
+        let mut frame = original.clone();
+        frame[4] &= !0x20; // clear Single_Segment_flag
+        frame.insert(5, descriptor); // windowLog = 27, mantissa = 0 or 1
+        if window_size == MAX_WINDOW_BYTES {
+            assert_eq!(inspect(&frame).unwrap().window_size, window_size);
+        } else {
+            let err = inspect(&frame).unwrap_err();
+            assert_eq!(err.code(), "FRAME_WINDOW_TOO_LARGE");
+        }
+    }
 }
 
 #[test]
@@ -274,13 +316,56 @@ fn decode_rejects_a_corrupted_checksum() {
     frame[last] ^= 0xFF;
     let mut budget = DecodeBudget::generic();
     let err = decode(&frame, &mut budget).unwrap_err();
+    assert_eq!(err.code(), "FRAME_CHECKSUM_MISMATCH");
+}
+
+#[test]
+fn decode_rejects_output_exceeding_a_lowered_declared_size_mid_stream() {
+    // T0421: a small window lets libzstd recycle its streaming buffer rather
+    // than size it to the declaration. Multiple blocks then reach our output
+    // counter before libzstd's final size/checksum check. Leave the body intact.
+    let input = vec![0xAB; 3 * DECODE_SCRATCH];
+    let mut cctx = CCtx::create();
+    for param in [
+        CParameter::WindowLog(10),
+        CParameter::ContentSizeFlag(true),
+        CParameter::ChecksumFlag(true),
+    ] {
+        cctx.set_parameter(param).unwrap();
+    }
+    let mut frame = vec![0u8; zstd_safe::compress_bound(input.len())];
+    let written = cctx.compress2(&mut frame[..], &input[..]).unwrap();
+    frame.truncate(written);
+    assert_eq!(decode(&frame, &mut DecodeBudget::generic()).unwrap(), input);
+    let header = inspect(&frame).unwrap();
+    assert_eq!(header.window_size, 1024);
+    assert_eq!(header.content_size, input.len() as u64);
+    assert_eq!(frame[4] >> 6, 2); // four-byte Frame_Content_Size
+
+    // Keep the declaration above one scratch buffer to avoid libzstd's
+    // one-shot fast path, and above its internal window/buffer size.
+    let declared = u32::try_from(DECODE_SCRATCH + 1).unwrap();
+    frame[header.header_size - 4..header.header_size].copy_from_slice(&declared.to_le_bytes());
+    assert_eq!(inspect(&frame).unwrap().content_size, u64::from(declared));
+
+    let mut budget = DecodeBudget {
+        max_resource_bytes: u64::from(declared),
+        max_aggregate_bytes: 1024 * 1024,
+        aggregate_used: 17,
+    };
+    let before = budget;
+    assert!(budget.charged(u64::from(declared)).is_ok()); // declared-size gates pass
+    let err = decode(&frame, &mut budget).unwrap_err();
     assert!(
         matches!(
             err.code(),
-            "FRAME_CHECKSUM_MISMATCH" | "FRAME_DECOMPRESS_FAILED"
+            "FRAME_DECOMPRESSED_SIZE_MISMATCH" | "DECOMPRESSION_BUDGET_EXCEEDED"
         ),
-        "expected checksum mismatch, got {}",
-        err.code()
+        "unexpected error: {err:?}"
+    );
+    assert_eq!(
+        budget, before,
+        "failed decode must not charge the aggregate"
     );
 }
 
@@ -305,6 +390,46 @@ fn encode_then_inspect_round_trips_each_profile() {
         let mut budget = DecodeBudget::generic();
         let out = decode(&frame, &mut budget).unwrap();
         assert_eq!(out, input, "{profile:?}");
+    }
+}
+
+#[test]
+fn canonical_matches_pinned_golden_bytes() {
+    // T0418 / REQ-FRAME-010/011. Captured with libzstd 1.5.7 and the locked
+    // canonical parameters. Empty, literal and match-compressed blocks freeze
+    // the output independently of repeated-run determinism.
+    let repeated = b"the quick brown fox jumps over the lazy dog, again and again\n".repeat(128);
+    let cases: &[(&[u8], &[u8])] = &[
+        (
+            b"",
+            &[
+                0x28, 0xb5, 0x2f, 0xfd, 0x24, 0x00, 0x01, 0x00, 0x00, 0x99, 0xe9, 0xd8, 0x51,
+            ],
+        ),
+        (
+            b"deterministic-by-construction canonical payload",
+            &[
+                0x28, 0xb5, 0x2f, 0xfd, 0x24, 0x2f, 0x79, 0x01, 0x00, 0x64, 0x65, 0x74, 0x65, 0x72,
+                0x6d, 0x69, 0x6e, 0x69, 0x73, 0x74, 0x69, 0x63, 0x2d, 0x62, 0x79, 0x2d, 0x63, 0x6f,
+                0x6e, 0x73, 0x74, 0x72, 0x75, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x20, 0x63, 0x61, 0x6e,
+                0x6f, 0x6e, 0x69, 0x63, 0x61, 0x6c, 0x20, 0x70, 0x61, 0x79, 0x6c, 0x6f, 0x61, 0x64,
+                0xc8, 0x39, 0x40, 0x3b,
+            ],
+        ),
+        (
+            &repeated,
+            &[
+                0x28, 0xb5, 0x2f, 0xfd, 0x64, 0x80, 0x1d, 0x1d, 0x02, 0x00, 0x74, 0x03, 0x74, 0x68,
+                0x65, 0x20, 0x71, 0x75, 0x69, 0x63, 0x6b, 0x20, 0x62, 0x72, 0x6f, 0x77, 0x6e, 0x20,
+                0x66, 0x6f, 0x78, 0x20, 0x6a, 0x75, 0x6d, 0x70, 0x73, 0x20, 0x6f, 0x76, 0x65, 0x72,
+                0x20, 0x74, 0x68, 0x65, 0x20, 0x6c, 0x61, 0x7a, 0x79, 0x20, 0x64, 0x6f, 0x67, 0x2c,
+                0x20, 0x61, 0x67, 0x61, 0x69, 0x6e, 0x20, 0x61, 0x6e, 0x64, 0x0a, 0x02, 0x00, 0x40,
+                0x0e, 0x84, 0x2e, 0xac, 0x58, 0x81, 0x02, 0x13, 0xcc, 0x63, 0x2c,
+            ],
+        ),
+    ];
+    for (input, golden) in cases {
+        assert_eq!(encode(input, Profile::Canonical).unwrap(), *golden);
     }
 }
 
