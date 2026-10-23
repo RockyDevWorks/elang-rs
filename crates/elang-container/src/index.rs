@@ -35,8 +35,9 @@
 //! here — `ResourcePath::new` documents that it assumes the input is already
 //! NFC-checked, so this module owns that step rather than assuming it.
 //!
-//! Ordering and uniqueness (T0315) are enforced by `elang_core::ResourceIndex`,
-//! which this module drives — the same split the core types were designed for.
+//! Ordering, uniqueness and size ceilings are enforced by
+//! `elang_core::ResourceIndex` and by `ArchiveListing::parse` for listings that
+//! do not have integrity-manifest digests yet.
 //!
 //! All parsing is bounds-checked and total: a truncated, over-long, or
 //! adversarial index yields a registered error code, never a panic or an
@@ -141,7 +142,7 @@ impl IndexEntry {
 /// Construction guarantees the 16-byte header is well-formed and every entry
 /// parsed within bounds with a legal compression code and a validated path.
 /// Aggregate invariants (sorted order, uniqueness, count, size ceilings) are
-/// enforced when building a `ResourceIndex` from the entries.
+/// enforced when building a `ResourceIndex` or parsing an `ArchiveListing`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Index {
     entries: Vec<IndexEntry>,
@@ -157,7 +158,7 @@ impl Index {
     /// - `INDEX_BAD_VERSION` — `index_version` or `entry_format` != 1.
     /// - `INDEX_COUNT_OUT_OF_RANGE` — `resource_count` > 25,000.
     /// - `INDEX_ENTRY_MALFORMED` — an entry is truncated, overruns the buffer,
-    ///   or has an illegal compression code.
+    ///   has an illegal compression code, or bytes remain after the entries.
     /// - path errors (`PATH_NOT_UTF8`, `PATH_NOT_NFC`, `PATH_ABSOLUTE`, …) —
     ///   from `ResourcePath`, after NFC validation.
     pub fn decode(bytes: &[u8]) -> Result<Self> {
@@ -194,6 +195,11 @@ impl Index {
             let (entry, next) = decode_entry(bytes, cursor)?;
             entries.push(entry);
             cursor = next;
+        }
+        if cursor != bytes.len() {
+            return Err(malformed(
+                "index has trailing bytes after the declared entries",
+            ));
         }
 
         Ok(Self { entries })
@@ -523,6 +529,16 @@ mod tests {
         let truncated = &full[..full.len() - 10];
         let e = Index::decode(truncated).unwrap_err();
         assert_eq!(e.code(), "INDEX_ENTRY_MALFORMED");
+    }
+
+    #[test]
+    fn rejects_trailing_bytes_after_the_last_entry() {
+        let mut bytes = reference_index();
+        bytes.push(0);
+        assert_eq!(
+            Index::decode(&bytes).unwrap_err().code(),
+            "INDEX_ENTRY_MALFORMED"
+        );
     }
 
     #[test]

@@ -12,6 +12,7 @@
 //! `[32, index_offset)` must belong to exactly one frame. This module proves
 //! that relation without decompressing anything.
 
+use elang_core::limits::{MAX_GENERIC_RESOURCE_BYTES, MAX_UNCOMPRESSED_AGGREGATE_BYTES};
 use elang_core::{Category, Error, Result};
 
 use crate::footer::Footer;
@@ -241,16 +242,19 @@ pub struct ArchiveListing {
 }
 
 impl ArchiveListing {
-    /// Parse an archive for listing, validating framing and layout but never
-    /// decompressing a frame.
+    /// Parse an archive for listing, validating framing, index invariants and
+    /// layout without decompressing a frame.
     ///
     /// Runs, in order: header decode, footer decode, the
     /// `index_offset + index_size + 64 == len` framing check (T0306), the index
-    /// SHA-256 check (T0308), index parse, then frame layout (T0316-T0318).
+    /// SHA-256 check (T0308), index parse, bytewise path ordering/uniqueness and
+    /// declared size ceilings, then frame layout (T0316-T0318).
     ///
     /// # Errors
     ///
     /// Any of the header/footer/index/layout errors documented on those types.
+    /// Index invariants return `INDEX_DUPLICATE_PATH`, `INDEX_PATH_NOT_SORTED`,
+    /// `INDEX_SIZE_OVER_CEILING`, or `LIMIT_UNCOMPRESSED_AGGREGATE`.
     pub fn parse(archive: &[u8]) -> Result<Self> {
         let header = Header::decode(archive)?;
 
@@ -300,8 +304,44 @@ impl ArchiveListing {
         footer.verify_index_hash(index_bytes)?;
         let index = Index::decode(index_bytes)?;
 
-        // `Index::decode` already rejects a region shorter than
-        // `INDEX_HEADER_LEN`, so no separate size check is needed here.
+        // Enforce the ResourceIndex invariants directly: index-only inspection
+        // has no integrity-manifest digests to build ResourceEntry values with.
+        let mut previous_path: Option<&[u8]> = None;
+        let mut total_uncompressed = 0u64;
+        for entry in index.entries() {
+            let path = entry.path().as_bytes();
+            if let Some(previous) = previous_path {
+                if previous == path {
+                    return Err(layout_err(
+                        "INDEX_DUPLICATE_PATH",
+                        "duplicate resource path",
+                    ));
+                }
+                if previous > path {
+                    return Err(layout_err(
+                        "INDEX_PATH_NOT_SORTED",
+                        "resource paths are not in ascending UTF-8 byte order",
+                    ));
+                }
+            }
+            previous_path = Some(path);
+            if entry.uncompressed_size() > MAX_GENERIC_RESOURCE_BYTES {
+                return Err(layout_err(
+                    "INDEX_SIZE_OVER_CEILING",
+                    "uncompressed resource size exceeds the per-resource ceiling",
+                ));
+            }
+            total_uncompressed = total_uncompressed
+                .checked_add(entry.uncompressed_size())
+                .filter(|total| *total <= MAX_UNCOMPRESSED_AGGREGATE_BYTES)
+                .ok_or_else(|| {
+                    Error::new(
+                        "LIMIT_UNCOMPRESSED_AGGREGATE",
+                        Category::Limit,
+                        "aggregate uncompressed size exceeds the archive ceiling",
+                    )
+                })?;
+        }
 
         let layout = validate_layout(&index, footer.index_offset())?;
 
@@ -544,6 +584,60 @@ mod tests {
     }
 
     #[test]
+    fn parse_rejects_duplicate_paths() {
+        let archive = archive_with_entries(&[("a.eld", 10), ("a.eld", 10)]);
+        let e = ArchiveListing::parse(&archive).unwrap_err();
+        assert_eq!(e.code(), "INDEX_DUPLICATE_PATH");
+        assert_eq!(e.category(), Category::Index);
+    }
+
+    #[test]
+    fn parse_enforces_bytewise_path_order() {
+        let archive = archive_with_entries(&[("a.eld", 10), ("Z.eld", 10)]);
+        assert_eq!(
+            ArchiveListing::parse(&archive).unwrap_err().code(),
+            "INDEX_PATH_NOT_SORTED"
+        );
+        let sorted = archive_with_entries(&[("Z.eld", 10), ("a.eld", 10), ("é.eld", 10)]);
+        assert!(ArchiveListing::parse(&sorted).is_ok());
+    }
+
+    #[test]
+    fn parse_enforces_the_per_resource_size_ceiling() {
+        let max = elang_core::limits::MAX_GENERIC_RESOURCE_BYTES;
+        let at_ceiling = archive_with_entries(&[("a.eld", max)]);
+        assert!(ArchiveListing::parse(&at_ceiling).is_ok());
+        for size in [max + 1, u64::MAX] {
+            let archive = archive_with_entries(&[("a.eld", size)]);
+            let e = ArchiveListing::parse(&archive).unwrap_err();
+            assert_eq!(e.code(), "INDEX_SIZE_OVER_CEILING");
+            assert_eq!(e.category(), Category::Index);
+        }
+    }
+
+    #[test]
+    fn parse_enforces_the_aggregate_size_ceiling() {
+        let max = elang_core::limits::MAX_GENERIC_RESOURCE_BYTES;
+        let mut entries: Vec<_> = ('a'..='h').map(|c| (format!("{c}.eld"), max)).collect();
+        let borrowed: Vec<_> = entries
+            .iter()
+            .map(|(p, size)| (p.as_str(), *size))
+            .collect();
+        let at_ceiling = archive_with_entries(&borrowed);
+        assert!(ArchiveListing::parse(&at_ceiling).is_ok());
+
+        entries.push(("i.eld".to_owned(), 1));
+        let borrowed: Vec<_> = entries
+            .iter()
+            .map(|(p, size)| (p.as_str(), *size))
+            .collect();
+        let archive = archive_with_entries(&borrowed);
+        let e = ArchiveListing::parse(&archive).unwrap_err();
+        assert_eq!(e.code(), "LIMIT_UNCOMPRESSED_AGGREGATE");
+        assert_eq!(e.category(), Category::Limit);
+    }
+
+    #[test]
     fn parse_rejects_the_fixture_when_the_index_hash_is_wrong() {
         let mut archive = reference_archive();
         // Flip a byte inside the index region (offset INDEX_OFFSET..FOOTER_OFFSET).
@@ -581,6 +675,34 @@ mod tests {
     }
 
     // ---- helpers ----
+
+    /// Build a complete archive with contiguous one-byte frame bodies and a
+    /// real index digest, isolating index invariants from framing failures.
+    fn archive_with_entries(entries: &[(&str, u64)]) -> Vec<u8> {
+        let mut index = Vec::from(crate::INDEX_MAGIC);
+        index.extend_from_slice(&crate::INDEX_VERSION.to_le_bytes());
+        index.extend_from_slice(&crate::ENTRY_FORMAT.to_le_bytes());
+        index.extend_from_slice(&u32::try_from(entries.len()).unwrap().to_le_bytes());
+        let mut offset = HEADER_LEN as u64;
+        for (path, size) in entries {
+            index.extend_from_slice(&u16::try_from(path.len()).unwrap().to_le_bytes());
+            index.extend_from_slice(path.as_bytes());
+            index.extend_from_slice(&offset.to_le_bytes());
+            index.extend_from_slice(&1u64.to_le_bytes());
+            index.extend_from_slice(&size.to_le_bytes());
+            index.push(crate::COMPRESSION_ZSTD);
+            offset += 1;
+        }
+        let mut archive = vec![0; HEADER_LEN + entries.len()];
+        Header::current().encode(&mut archive, 0).unwrap();
+        let digest = Sha256::digest(&index).into();
+        let footer = Footer::new(offset, u64::try_from(index.len()).unwrap(), digest).unwrap();
+        archive.extend_from_slice(&index);
+        let mut footer_bytes = [0; crate::FOOTER_LEN];
+        footer.encode(&mut footer_bytes, 0).unwrap();
+        archive.extend_from_slice(&footer_bytes);
+        archive
+    }
 
     /// Byte position of entry `n`'s `frame_offset` field within an index.
     ///
