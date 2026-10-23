@@ -15,3 +15,8 @@ workspace = true
 elang-core.workspace = true
 elang-unicode.workspace = true
 sha2.workspace = true
+# Pinned via workspace (T0401, REQ-FRAME-001). Use `zstd-safe` for the
+# parameter-driven canonical encoder (T0415–T0418); the high-level `zstd`
+# crate is not used in this crate.
+zstd-safe.workspace = true
+zstd-sys.workspace = true

@@ -46,6 +46,12 @@ sha2 = "=0.11.1"
 # enough structure to enforce no-duplicate-keys and no-unknown-fields.
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.154"
+# Zstandard (T0401, REQ-FRAME-001). The `+zstd.1.5.7` build metadata is the
+# vendored libzstd version; bumping zstd-sys without verifying it carries the
+# locked libzstd would change the canonical frame bytes, so the pin is exact.
+zstd = "=0.14.3"
+zstd-safe = "=8.2.0"
+zstd-sys = "=2.1.2+zstd.1.5.7"
 
 # Workspace-wide lint policy (T0215). Untrusted-input safety is enforced by
 # denying panic-prone constructs. These are inherited via `[lints] workspace = true`.
