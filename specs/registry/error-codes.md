@@ -89,6 +89,7 @@ primary stage(s) at which it can fire.
 
 | Code | Stage | Meaning |
 |---|---|---|
+| `FRAME_BAD_MAGIC` | 7 | Frame magic, descriptor sanity, or windowLog range is invalid. |
 | `FRAME_MISSING_CONTENT_SIZE` | 7 | Frame content size not present. |
 | `FRAME_MISSING_CHECKSUM` | 7 | Frame checksum not present. |
 | `FRAME_WINDOW_TOO_LARGE` | 7 | Window > 128 MiB. |
@@ -99,6 +100,8 @@ primary stage(s) at which it can fire.
 | `FRAME_CONTENT_SIZE_MISMATCH` | 11 | Declared size ≠ index `uncompressed_size`. |
 | `FRAME_CHECKSUM_MISMATCH` | 11 | Zstd checksum fails. |
 | `FRAME_DECOMPRESSED_SIZE_MISMATCH` | 11 | Actual decompressed bytes ≠ index. |
+| `FRAME_DECOMPRESS_FAILED` | 11 | libzstd rejected the frame body during streaming decode. |
+| `FRAME_ENCODE_FAILED` | — | libzstd rejected an encode request (parameter or compress call). |
 | `DECOMPRESSION_BUDGET_EXCEEDED` | 11 | Per-resource or 8 GiB aggregate budget exceeded. |
 
 ### INTEGRITY (stages 9, 11)

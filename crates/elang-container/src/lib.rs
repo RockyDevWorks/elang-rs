@@ -10,6 +10,7 @@
 #![allow(clippy::needless_doctest_main)]
 
 pub mod footer;
+pub mod frame;
 pub mod header;
 pub mod index;
 pub mod layout;
