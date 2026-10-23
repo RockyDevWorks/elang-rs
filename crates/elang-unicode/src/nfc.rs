@@ -85,6 +85,16 @@ fn decompose_char(cp: u32, out: &mut Vec<u32>) {
     }
 }
 
+/// Fully canonically decompose one scalar using pinned UCD 18.0.0 data.
+/// Includes algorithmic Hangul decomposition; compatibility mappings are not
+/// applied. This is for structural analysis without rewriting authored NFC.
+#[must_use]
+pub fn canonical_decomposition(scalar: char) -> Vec<char> {
+    let mut decomposed = Vec::new();
+    decompose_char(scalar as u32, &mut decomposed);
+    decomposed.into_iter().filter_map(char::from_u32).collect()
+}
+
 /// Canonical ordering: stable sort of each maximal run of non-starters
 /// (CCC != 0) by CCC (UAX#15 D109). Starters (CCC 0) are fixed points.
 fn canonical_order(scalars: &mut [u32]) {
@@ -211,4 +221,27 @@ pub fn nfc(s: &str) -> String {
 #[must_use]
 pub fn is_nfc(s: &str) -> bool {
     nfc(s) == s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::canonical_decomposition;
+
+    #[test]
+    fn canonical_decomposition_uses_full_pinned_mappings() {
+        for (scalar, expected) in [
+            ('ç', "c\u{0327}"),
+            ('\u{1E09}', "c\u{0327}\u{0301}"),
+            ('\u{212B}', "A\u{030A}"),
+            ('\u{AC01}', "\u{1100}\u{1161}\u{11A8}"),
+            ('\u{FB03}', "\u{FB03}"),
+            ('\u{02B0}', "\u{02B0}"),
+            ('t', "t"),
+        ] {
+            assert_eq!(
+                canonical_decomposition(scalar),
+                expected.chars().collect::<Vec<_>>()
+            );
+        }
+    }
 }
