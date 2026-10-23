@@ -18,7 +18,7 @@
 //!   bases / float / bool / null).
 //! - Slashdash `/-` commenting out.
 //! - Multi-line block comments.
-//! - Multi-fence raw strings (`r#"…"#` / `r##"…"##`).
+//! - Multi-fence raw strings (`#"…"#` / `##"…"##`).
 //! - Unicode escapes (`\u{…}`) and canonical encoder pass-through.
 //! - Canonical double-quoted emitter round-trips through the parser.
 //!
@@ -117,19 +117,19 @@ fn kdl2_value_float() {
 
 #[test]
 fn kdl2_value_bool_true() {
-    let doc = parse_ok(b"node true\n");
+    let doc = parse_ok(b"node #true\n");
     assert_eq!(doc.nodes[0].args().next().unwrap().as_bool(), Some(true));
 }
 
 #[test]
 fn kdl2_value_bool_false() {
-    let doc = parse_ok(b"node false\n");
+    let doc = parse_ok(b"node #false\n");
     assert_eq!(doc.nodes[0].args().next().unwrap().as_bool(), Some(false));
 }
 
 #[test]
 fn kdl2_value_null() {
-    let doc = parse_ok(b"node null\n");
+    let doc = parse_ok(b"node #null\n");
     assert!(doc.nodes[0].args().next().unwrap().is_null());
 }
 
@@ -178,8 +178,9 @@ fn kdl2_vertical_tab_is_not_a_line_terminator() {
     // KDL 2.0 treats U+000B as whitespace, not as a line ending; both
     // nodes must still land on separate statements because the `\n`
     // separates them.
-    let doc = parse_ok(b"node 1\nnode 2\n");
+    let doc = parse_ok(b"node\x0b1\nnode 2\n");
     assert_eq!(doc.nodes.len(), 2);
+    assert_eq!(doc.nodes[0].args().count(), 1);
 }
 
 #[test]
@@ -195,42 +196,42 @@ fn kdl2_unterminated_block_comment_rejected() {
 // --------------------------------------------------------------------
 
 #[test]
-fn kdl2_raw_string_no_hash() {
-    let doc = parse_ok(b"node r\"hello\"\n");
+fn kdl2_raw_string_one_hash() {
+    let doc = parse_ok(b"node #\"hello\"#\n");
     assert_eq!(first_arg_str(&doc), "hello");
 }
 
 #[test]
 fn kdl2_raw_string_one_hash_allows_bare_quote() {
-    // `r#"a"b"#` is the literal `a"b`: one bare `"` is legal because the
+    // `#"a"b"#` is the literal `a"b`: one bare `"` is legal because the
     // closing fence is `"#`, not `"`.
-    let doc = parse_ok(b"node r#\"a\"b\"#\n");
+    let doc = parse_ok(b"node #\"a\"b\"#\n");
     assert_eq!(first_arg_str(&doc), "a\"b");
 }
 
 #[test]
 fn kdl2_raw_string_two_hash_fence_keeps_inner_hash() {
-    let doc = parse_ok(b"node r##\"contains \"# inside\"##\n");
+    let doc = parse_ok(b"node ##\"contains \"# inside\"##\n");
     assert_eq!(first_arg_str(&doc), "contains \"# inside");
 }
 
 #[test]
 fn kdl2_raw_string_no_escape_processing() {
     // `\n` inside a raw string is two literal bytes, not a newline.
-    let doc = parse_ok(b"node r\"a\\nb\"\n");
+    let doc = parse_ok(b"node #\"a\\nb\"#\n");
     assert_eq!(first_arg_str(&doc), "a\\nb");
 }
 
 #[test]
 fn kdl2_raw_string_unicode_preserved() {
-    let doc = parse_ok("node r#\"\u{1F600}\u{00E9}\"#\n".as_bytes());
+    let doc = parse_ok("node #\"\u{1F600}\u{00E9}\"#\n".as_bytes());
     assert_eq!(first_arg_str(&doc), "\u{1F600}\u{00E9}");
 }
 
 #[test]
 fn kdl2_raw_string_unterminated_rejected() {
     assert_eq!(
-        parse_err(b"node r#\"never closed\n"),
+        parse_err(b"node #\"never closed\n"),
         ErrorCode::UnterminatedRawString
     );
 }
@@ -454,13 +455,13 @@ fn kdl2_canonical_emit_is_idempotent() {
 
 #[test]
 fn kdl2_canonical_emit_non_string_values() {
-    assert_eq!(emit_value(&KdlValue::Null(SourceSpan::INVALID)), "null");
+    assert_eq!(emit_value(&KdlValue::Null(SourceSpan::INVALID)), "#null");
     assert_eq!(
         emit_value(&KdlValue::Bool {
             span: SourceSpan::INVALID,
             value: true
         }),
-        "true"
+        "#true"
     );
     assert_eq!(
         emit_value(&KdlValue::Integer {
@@ -552,4 +553,292 @@ fn kdl2_document_span_covers_whole_input() {
     let doc = parse_ok(input);
     assert_eq!(doc.span.start.byte, 0);
     assert_eq!(doc.span.end.byte as usize, input.len());
+}
+
+#[test]
+fn kdl2_bare_identifiers_are_arguments_until_a_terminator() {
+    let doc = parse_ok(b"first one two; second three\n");
+    assert_eq!(doc.nodes.len(), 2);
+    assert_eq!(
+        doc.nodes[0]
+            .args()
+            .map(|v| v.as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["one", "two"]
+    );
+    assert_eq!(doc.nodes[1].name(), "second");
+    assert_eq!(parse_err(b"first {} second\n"), ErrorCode::UnexpectedByte);
+    assert_eq!(
+        parse_err(b"parent { first {} second }\n"),
+        ErrorCode::UnexpectedByte
+    );
+}
+
+#[test]
+fn kdl2_rejects_top_level_close_brace() {
+    for input in [b"}".as_slice(), b"node\n}", b"node {} }"] {
+        assert_eq!(parse_err(input), ErrorCode::UnexpectedByte);
+    }
+}
+
+#[test]
+fn kdl2_slashdash_discards_one_multiline_construct() {
+    let doc = parse_ok(b"/-hidden {\n child 1\n}; shown 2\nnext 3\n");
+    assert_eq!(
+        doc.nodes.iter().map(|n| n.name()).collect::<Vec<_>>(),
+        ["shown", "next"]
+    );
+    let doc =
+        parse_ok(b"n /-\n\"ignored\nargument\" kept /-key=\"ignored\nvalue\" other=ok\nnext\n");
+    assert_eq!(doc.nodes.len(), 2);
+    assert_eq!(first_arg_str(&doc), "kept");
+    assert_eq!(
+        doc.nodes[0].props().map(|(key, _)| key).collect::<Vec<_>>(),
+        ["other"]
+    );
+    let doc = parse_ok(b"n /-{ hidden { nested 1 }\n} { shown 2 } /-{ hidden 3 }\nnext\n");
+    assert_eq!(doc.nodes.len(), 2);
+    let children = doc.nodes[0].children().unwrap();
+    assert_eq!(children.len(), 1);
+    assert_eq!(children[0].name(), "shown");
+    assert_eq!(
+        parse_err(b"n /-{ hidden } argument\n"),
+        ErrorCode::UnexpectedByte
+    );
+}
+
+#[test]
+fn kdl2_slashdash_still_charges_budgets() {
+    let mut budgets = BudgetTracker::new();
+    let doc = parse_with_budgets(
+        b"/-hidden \"ab\" { child #\"c\"# }\nn /-\"de\" /-{ child \"f\" }\n",
+        &mut budgets,
+    )
+    .unwrap();
+    assert_eq!(doc.nodes.len(), 1);
+    assert_eq!(budgets.nodes_resource().current(), 4);
+    assert_eq!(budgets.nodes_archive().current(), 4);
+    assert_eq!(budgets.decoded_string_bytes_resource().current(), 6);
+    assert_eq!(budgets.decoded_string_bytes_archive().current(), 6);
+}
+
+#[test]
+fn kdl2_invalid_utf8_is_rejected_in_all_regions_and_entry_points() {
+    for input in [
+        b"// \xff\nn".as_slice(),
+        b"/* \xff */n",
+        b"n \xc2\n",
+        b"/-n \xff\nnext",
+    ] {
+        assert_eq!(parse_err(input), ErrorCode::InvalidUtf8);
+        assert_eq!(
+            elang_kdl::parse(input).unwrap_err().code,
+            ErrorCode::InvalidUtf8
+        );
+    }
+}
+
+#[test]
+fn kdl2_unicode_whitespace_and_identifiers() {
+    let doc = parse_ok("\u{feff}café\u{a0}東京\u{2003}clé=étoile\nⅣ\u{3000}你好\n".as_bytes());
+    assert_eq!(doc.nodes.len(), 2);
+    assert_eq!(doc.nodes[0].name(), "café");
+    assert_eq!(first_arg_str(&doc), "東京");
+    assert_eq!(doc.nodes[0].props().next().unwrap().0, "clé");
+    assert_eq!(doc.nodes[1].name(), "Ⅳ");
+    for c in [
+        '\u{0}', '\u{7f}', '\u{200e}', '\u{202e}', '\u{2066}', '\u{feff}',
+    ] {
+        assert_eq!(
+            parse_err(format!("n a{c}b\n").as_bytes()),
+            ErrorCode::InvalidIdentifier
+        );
+    }
+}
+
+#[test]
+fn kdl2_space_and_whitespace_escapes() {
+    let doc = parse_ok("n \"a\\sb\\ \t\r\n\u{a0}\u{2003}c\\n\\\\d\"\n".as_bytes());
+    assert_eq!(first_arg_str(&doc), "a bc\n\\d");
+    assert_eq!(parse_err(b"n \"\\/\"\n"), ErrorCode::InvalidEscape);
+}
+
+#[test]
+fn kdl2_node_spans_exclude_trivia_and_lookahead() {
+    let input = b"  first bare key=\"v\"  \n (type)second {\n child 1\n}  \nthird\n";
+    let doc = parse_ok(input);
+    for (node, expected) in doc.nodes.iter().zip([
+        b"first bare key=\"v\"".as_slice(),
+        b"(type)second {\n child 1\n}",
+        b"third",
+    ]) {
+        assert_eq!(node.span.slice(input), Some(expected));
+        assert_eq!(
+            node.span,
+            SourceSpan::from_range(input, node.span.start.byte, node.span.end.byte)
+        );
+    }
+    let child = &doc.nodes[1].children().unwrap()[0];
+    assert_eq!(child.span.slice(input), Some(b"child 1".as_slice()));
+}
+
+#[test]
+fn kdl2_quoted_and_raw_names_enforce_byte_limit() {
+    for len in [256, 257] {
+        let name = "é".repeat(128) + &"a".repeat(len - 256);
+        for quoted in [format!("\"{name}\""), format!("#\"{name}\"#")] {
+            for input in [format!("{quoted}\n"), format!("n {quoted}=1\n")] {
+                if len == 256 {
+                    let doc = parse_ok(input.as_bytes());
+                    assert_eq!(doc.nodes.len(), 1);
+                } else {
+                    assert_eq!(parse_err(input.as_bytes()), ErrorCode::NameTooLong);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn kdl2_257_nodes_with_one_argument_each() {
+    let doc = parse_ok("n bare\n".repeat(257).as_bytes());
+    assert_eq!(doc.nodes.len(), 257);
+    assert!(doc.nodes.iter().all(|n| n.args().count() == 1));
+    let doc = parse_ok(format!("parent {{\n{} }}", "n \"arg\" k=1\n".repeat(257)).as_bytes());
+    assert_eq!(doc.nodes[0].children().unwrap().len(), 257);
+}
+
+#[test]
+fn kdl2_accepts_exactly_256_props_and_counts_shorthand() {
+    let props = (0..256).map(|i| format!(" k{i}=1")).collect::<String>();
+    assert_eq!(
+        parse_ok(format!("n{props}\n").as_bytes()).nodes[0]
+            .props()
+            .count(),
+        256
+    );
+    assert_eq!(
+        parse_err(format!("n=1{props}\n").as_bytes()),
+        ErrorCode::TooManyProps
+    );
+}
+
+#[test]
+fn kdl2_node_count_limits_reject_resource_and_archive_overflow() {
+    for archive in [false, true] {
+        for input in [b"n\n".as_slice(), b"/-n\n", b"parent { child }\n"] {
+            let mut budgets = BudgetTracker::new();
+            let budget = if archive {
+                budgets.nodes_archive()
+            } else {
+                budgets.nodes_resource()
+            };
+            // Leave exactly one node available at the real configured ceiling.
+            budget.try_add(budget.ceiling() - 1).unwrap();
+            if input == b"parent { child }\n" {
+                let err = parse_with_budgets(input, &mut budgets).unwrap_err();
+                assert_eq!(
+                    err.code,
+                    if archive {
+                        ErrorCode::TooManyNodesArchive
+                    } else {
+                        ErrorCode::TooManyNodesResource
+                    }
+                );
+            } else {
+                parse_with_budgets(input, &mut budgets).unwrap();
+                let err = parse_with_budgets(b"n\n", &mut budgets).unwrap_err();
+                assert_eq!(
+                    err.code,
+                    if archive {
+                        ErrorCode::TooManyNodesArchive
+                    } else {
+                        ErrorCode::TooManyNodesResource
+                    }
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn kdl2_comment_limits_reject_individual_and_cumulative_overflow() {
+    use elang_core::limits::MAX_COMMENT_BYTES;
+    for line in [false, true] {
+        let exact = if line {
+            format!("//{}", "x".repeat(MAX_COMMENT_BYTES - 2))
+        } else {
+            format!("/*{}*/", "x".repeat(MAX_COMMENT_BYTES - 4))
+        };
+        parse_ok(exact.as_bytes());
+        let over = exact.replacen('x', "xx", 1);
+        assert_eq!(parse_err(over.as_bytes()), ErrorCode::CommentTooLong);
+    }
+    let mut budgets = BudgetTracker::new();
+    let budget = budgets.comment_bytes_resource();
+    budget.try_add(budget.ceiling() - 4).unwrap();
+    parse_with_budgets(b"/**/", &mut budgets).unwrap();
+    assert_eq!(
+        parse_with_budgets(b"/**/", &mut budgets).unwrap_err().code,
+        ErrorCode::CommentBudgetExceeded
+    );
+    budgets.reset();
+    parse_with_budgets(b"/**/", &mut budgets).unwrap();
+}
+
+#[test]
+fn kdl2_decoded_string_budgets_charge_decoded_bytes_and_reject_overflow() {
+    for archive in [false, true] {
+        for literal in ["\"\\u{e9}\"", "#\"é\"#", "é"] {
+            let mut budgets = BudgetTracker::new();
+            let budget = if archive {
+                budgets.decoded_string_bytes_archive()
+            } else {
+                budgets.decoded_string_bytes_resource()
+            };
+            budget.try_add(budget.ceiling() - 2).unwrap();
+            let input = format!("n {literal}\n");
+            parse_with_budgets(input.as_bytes(), &mut budgets).unwrap();
+            let err = parse_with_budgets(input.as_bytes(), &mut budgets).unwrap_err();
+            assert_eq!(
+                err.code,
+                if archive {
+                    ErrorCode::StringBudgetArchiveExceeded
+                } else {
+                    ErrorCode::StringBudgetResourceExceeded
+                }
+            );
+            budgets.reset();
+            if archive {
+                assert_eq!(
+                    parse_with_budgets(input.as_bytes(), &mut budgets)
+                        .unwrap_err()
+                        .code,
+                    ErrorCode::StringBudgetArchiveExceeded
+                );
+            } else {
+                parse_with_budgets(input.as_bytes(), &mut budgets).unwrap();
+            }
+            budgets.reset_all();
+            parse_with_budgets(input.as_bytes(), &mut budgets).unwrap();
+        }
+    }
+}
+
+#[test]
+fn kdl2_keyword_values_round_trip() {
+    let doc = parse_ok(b"n #true #false #null\n");
+    for value in doc.nodes[0].args() {
+        let reparsed = parse_ok(format!("n {}\n", emit_value(value)).as_bytes());
+        let actual = reparsed.nodes[0].args().next().unwrap();
+        assert_eq!(emit_value(actual), emit_value(value));
+    }
+    assert_eq!(parse_err(b"n #truex\n"), ErrorCode::UnexpectedByte);
+}
+
+#[test]
+fn kdl2_line_comment_preserves_node_terminator() {
+    let doc = parse_ok(b"first arg // comment\nsecond arg\n");
+    assert_eq!(doc.nodes.len(), 2);
+    assert!(doc.nodes.iter().all(|n| n.args().count() == 1));
 }

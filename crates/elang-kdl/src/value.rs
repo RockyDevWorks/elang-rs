@@ -60,7 +60,7 @@ pub enum KdlValue {
         /// Best-effort `f64` value; `None` if unrepresentable.
         approx: Option<f64>,
     },
-    /// A string literal. `raw` records whether the source used `r#"…"#`
+    /// A string literal. `raw` records whether the source used `#"…"#`
     /// form so diagnostics and schema layers can enforce a policy about raw
     /// strings; the canonical emitter ignores it and always emits a standard
     /// double-quoted string.

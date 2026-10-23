@@ -1,33 +1,19 @@
 //! Per-resource budget tracker (T0503–T0510).
 //!
-//! Every limit from steering §10 that the parser or lexer must enforce
-//! before allocating past it is routed through this tracker. The tracker
-//! holds the **current count or byte total**, the **ceiling**, and the
-//! [`ErrorCode`] that should be returned when the ceiling is breached.
+//! The lexer and parser charge cumulative node, decoded-string and comment
+//! totals through this tracker. Ceilings reference [`elang_core::limits`].
+//! Nesting depth and per-node entry counts are checked locally by the parser;
+//! token, name and individual comment sizes are checked at their use sites.
 //!
-//! The tracker never panics; it never grows past its ceiling; it never
-//! returns `Ok(false)` for a count that has exceeded the ceiling. If a
-//! caller keeps incrementing after a breach, the first error is preserved
-//! and subsequent calls are no-ops until [`BudgetTracker::reset`] runs.
-//!
-//! This is the layer that lets the parser fail-closed on adversarial input:
-//! a 10-million-deep nested `(a (a (a ...)))` document returns
-//! `KDL_NESTING_TOO_DEEP` on the 65th level, having allocated 64 nested
-//! nodes — bounded, not unbounded.
-//!
-//! All the ceilings here mirror the constants in `elang_core::limits`
-//! exactly; they are intentionally duplicated (rather than referenced) so
-//! that a future budget change in `elang_core` forces a deliberate review
-//! of this file before the parser accepts different inputs.
+//! Each failed increment clamps that counter to its ceiling and returns its
+//! error code. Errors are not stored: later calls are evaluated independently.
+//! [`BudgetTracker::reset`] clears resource totals while preserving archive
+//! totals; [`BudgetTracker::reset_all`] clears both.
 
 use crate::error::ErrorCode;
 use elang_core::limits;
 
-/// A single numeric or byte budget. Saturating on increment means the
-/// parser can keep running past the breach to gather **all** the errors
-/// in a document instead of stopping at the first one. The first error
-/// produced by the first breach is sticky on the parent
-/// [`BudgetTracker`].
+/// A numeric or byte budget with a ceiling and an error code.
 #[derive(Debug, Clone, Copy)]
 pub struct Budget {
     /// Current value, clamped to `ceiling`.
@@ -86,38 +72,21 @@ impl Budget {
     }
 }
 
-/// Per-resource budget tracker. Carries every parser budget that the
-/// steering contract requires; consumed by both the lexer (for
-/// encoded-token size and comment bytes) and the parser (for everything
-/// else).
-///
-/// All counters live on this struct; the parser borrows it mutably. There
-/// is no global mutable state. When the parser is finished with a
-/// resource, the caller invokes [`BudgetTracker::reset`] to zero the
-/// counters before parsing the next resource.
+/// Cumulative resource and archive budgets shared by the lexer and parser.
+/// Call [`BudgetTracker::reset`] between resources in the same archive.
 #[derive(Debug)]
 pub struct BudgetTracker {
-    nesting_depth: Budget,
     nodes_resource: Budget,
     nodes_archive: Budget,
-    args_per_node: Budget,
-    props_per_node: Budget,
     decoded_string_bytes_resource: Budget,
     decoded_string_bytes_archive: Budget,
     comment_bytes_resource: Budget,
-    /// Per-comment ceiling is checked by the lexer; the cumulative
-    /// per-resource comment total is the budget below.
-    comment_bytes_total: Budget,
 }
 
 impl BudgetTracker {
     /// Construct a tracker using the limits pinned in `elang_core::limits`.
     pub fn new() -> BudgetTracker {
         BudgetTracker {
-            nesting_depth: Budget::new(
-                limits::MAX_KDL_NESTING_DEPTH as u64,
-                ErrorCode::NestingTooDeep,
-            ),
             nodes_resource: Budget::new(
                 limits::MAX_NODES_PER_RESOURCE,
                 ErrorCode::TooManyNodesResource,
@@ -126,8 +95,6 @@ impl BudgetTracker {
                 limits::MAX_NODES_PER_ARCHIVE,
                 ErrorCode::TooManyNodesArchive,
             ),
-            args_per_node: Budget::new(limits::MAX_ARGS_PER_NODE as u64, ErrorCode::TooManyArgs),
-            props_per_node: Budget::new(limits::MAX_PROPS_PER_NODE as u64, ErrorCode::TooManyProps),
             decoded_string_bytes_resource: Budget::new(
                 limits::MAX_DECODED_STRING_BYTES_PER_RESOURCE,
                 ErrorCode::StringBudgetResourceExceeded,
@@ -140,16 +107,7 @@ impl BudgetTracker {
                 limits::MAX_COMMENT_BYTES_PER_RESOURCE,
                 ErrorCode::CommentBudgetExceeded,
             ),
-            comment_bytes_total: Budget::new(
-                limits::MAX_COMMENT_BYTES_PER_RESOURCE,
-                ErrorCode::CommentBudgetExceeded,
-            ),
         }
-    }
-
-    /// Nesting depth budget.
-    pub fn nesting_depth(&mut self) -> &mut Budget {
-        &mut self.nesting_depth
     }
 
     /// Per-resource node-count budget.
@@ -163,16 +121,6 @@ impl BudgetTracker {
     /// between resources.
     pub fn nodes_archive(&mut self) -> &mut Budget {
         &mut self.nodes_archive
-    }
-
-    /// Per-node positional-arg-count budget.
-    pub fn args_per_node(&mut self) -> &mut Budget {
-        &mut self.args_per_node
-    }
-
-    /// Per-node property-count budget.
-    pub fn props_per_node(&mut self) -> &mut Budget {
-        &mut self.props_per_node
     }
 
     /// Per-resource decoded-string-byte budget.
@@ -196,13 +144,9 @@ impl BudgetTracker {
     /// continuously. Call [`BudgetTracker::reset_all`] to also zero the
     /// archive counters.
     pub fn reset(&mut self) {
-        self.nesting_depth.reset();
         self.nodes_resource.reset();
-        self.args_per_node.reset();
-        self.props_per_node.reset();
         self.decoded_string_bytes_resource.reset();
         self.comment_bytes_resource.reset();
-        self.comment_bytes_total.reset();
     }
 
     /// Reset every counter, including the archive-wide ones. Use this
@@ -268,7 +212,6 @@ mod tests {
     #[test]
     fn tracker_uses_limits_constants() {
         let t = BudgetTracker::new();
-        assert_eq!(t.nesting_depth.ceiling(), 64);
         assert_eq!(t.nodes_resource.ceiling(), 2_000_000);
         assert_eq!(t.decoded_string_bytes_resource.ceiling(), 256 * 1024 * 1024);
         assert_eq!(t.comment_bytes_resource.ceiling(), 16 * 1024 * 1024);

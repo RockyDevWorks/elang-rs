@@ -15,24 +15,9 @@
 //! and must report every failure through the `ParseError` / `ErrorCode`
 //! path rather than crashing.
 //!
-//! This harness is **not** a substitute for `cargo-fuzz` (libFuzzer +
-//! nightly); it exists so the CI test pass has fuzz coverage without
-//! pulling nightly Rust or a system `clang` into the build. When the
-//! project later standardises on `cargo-fuzz`, the per-corpus logic
-//! below ports 1:1 to `arbitrary`.
-//!
-//! Bounded time: each iteration's `run_one` work is bounded by the
-//! `BudgetTracker` ceilings, so a 64 KiB random buffer cannot drive the
-//! parser past `MAX_KDL_NESTING_DEPTH`, `MAX_ENCODED_TOKEN_BYTES`, or
-//! any of the byte-count ceilings.
-//!
-//! Bounded memory: every allocation goes through a parser-internal
-//! `Box<str>` / `Vec<u8>` path whose growth is gated on the budgets.
-//! Random inputs that would otherwise allocate gigabytes get clipped to
-//! the corresponding ceiling inside the first iteration that crosses it.
-//!
-//! Run with `cargo test -p elang-kdl --test fuzz -- --ignored` to run
-//! the long iterations; the default 256 iterations run in <100ms.
+//! This is a deterministic randomized test suite run by `cargo test`, not a
+//! libFuzzer harness. It checks for panics and bounded diagnostic spans; it
+//! does not measure allocations or prove that all allocation paths are bounded.
 
 use elang_kdl::{parse_with_budgets, BudgetTracker, ErrorCode};
 
@@ -54,13 +39,33 @@ impl Prng {
     /// sprinkling of C0 controls, escapes, and pathological bytes.
     fn gen_kdl_ish(&mut self, len: usize) -> Vec<u8> {
         let mut out = Vec::with_capacity(len);
+        // Keep a share of inputs syntactically valid so whole-input UTF-8
+        // validation cannot keep all long cases away from recursive parsing.
+        if len >= 5 && self.next().is_multiple_of(4) {
+            out.extend_from_slice(b"n {");
+            let fragments: &[&[u8]] = &[b"n 1; ", b"n k=#true; ", b"n #\"text\"#; ", b"n {}; "];
+            loop {
+                let fragment = fragments[self.next() as usize % fragments.len()];
+                if out.len() + fragment.len() + 2 > len {
+                    break;
+                }
+                out.extend_from_slice(fragment);
+            }
+            out.resize(len - 2, b' ');
+            out.extend_from_slice(b"}\n");
+            return out;
+        }
         while out.len() < len {
-            let roll = self.next() % 8;
+            let roll = self.next() % 12;
             let b = match roll {
                 0..=3 => b'a' + (self.next() % 26) as u8,
                 4 => b'"',
                 5 => b'\\',
-                6 => match self.next() % 5 {
+                6..=9 => {
+                    let structural = b"{}=()/;#0123456789   ";
+                    structural[self.next() as usize % structural.len()]
+                }
+                10 => match self.next() % 5 {
                     0 => b'\n',
                     1 => b'\r',
                     2 => b'\t',
@@ -115,15 +120,13 @@ fn fuzz_long_inputs_never_panic() {
 fn fuzz_pathological_repeats_never_panic() {
     // Patterns that have historically crashed or wedged KDL parsers:
     let patterns: &[&[u8]] = &[
-        // Deeply nested: 200 `{` with no matching `}`.
-        &b"{".repeat(200),
-        // Alternating `{` `}` (forces the parser to allocate a node
-        // per level — should hit MAX_KDL_NESTING_DEPTH well before OOM).
+        // Deeply nested valid node prefixes with no matching `}`.
+        &b"n {".repeat(200),
+        // Repeated empty nodes exercise children-block parsing.
         &{
             let mut v = Vec::with_capacity(2 * 200);
             for _ in 0..200 {
-                v.push(b'{');
-                v.push(b'}');
+                v.extend_from_slice(b"n {}; ");
             }
             v
         },
@@ -137,11 +140,11 @@ fn fuzz_pathological_repeats_never_panic() {
             }
             v
         },
-        // Long sequence of `r#` opening raw strings with no close.
+        // Long sequence of `#"` opening raw strings with no close.
         &{
             let mut v = Vec::with_capacity(1024);
             for _ in 0..256 {
-                v.extend_from_slice(b"r#\"");
+                v.extend_from_slice(b"#\"");
             }
             v
         },
@@ -165,27 +168,23 @@ fn fuzz_pathological_repeats_never_panic() {
 
 #[test]
 fn fuzz_archive_budget_rejects_but_does_not_panic() {
-    // Two 10-node resources where the *archive* budget is set tight:
-    // T0507 archive-wide cap (10 M) is huge — we drive a custom tracker
-    // with a tighter ceiling through the public budget accessors.
-    //
-    // We assert the parser returns a `TooManyNodesArchive` error (or
-    // any error — the contract is "fails closed, no panic") when the
-    // archive ceiling is breached.
-    //
-    // The public API does not currently let callers mutate a single
-    // ceiling after construction, so this test exercises the
-    // *saturating* behaviour instead: feed a tiny input, ensure the
-    // tracker rejects only after the ceiling is genuinely exceeded.
     let mut budgets = BudgetTracker::new();
-    // Sanity: a tiny valid input parses cleanly.
-    let input = b"node \"value\"\n";
-    let doc = parse_with_budgets(input, &mut budgets).expect("simple parse succeeds");
-    assert_eq!(doc.nodes.len(), 1);
-    assert!(budgets.nodes_resource().current() <= budgets.nodes_resource().ceiling());
-    assert!(budgets.nodes_archive().current() <= budgets.nodes_archive().ceiling());
-    assert!(
-        budgets.decoded_string_bytes_resource().current()
-            <= budgets.decoded_string_bytes_resource().ceiling()
-    );
+    let budget = budgets.nodes_archive();
+    budget.try_add(budget.ceiling() - 1).unwrap();
+    parse_with_budgets(b"node \"value\"\n", &mut budgets).expect("last node fits");
+    budgets.reset();
+    let err = parse_with_budgets(b"node \"value\"\n", &mut budgets).unwrap_err();
+    assert_eq!(err.code, ErrorCode::TooManyNodesArchive);
+}
+
+#[test]
+fn generated_inputs_reach_children_parsing() {
+    assert!((0..32).any(|seed| {
+        let input = Prng::new(seed).gen_kdl_ish(128);
+        parse_with_budgets(&input, &mut BudgetTracker::new()).is_ok_and(|doc| {
+            doc.nodes
+                .iter()
+                .any(|n| n.children().is_some_and(|c| !c.is_empty()))
+        })
+    }));
 }

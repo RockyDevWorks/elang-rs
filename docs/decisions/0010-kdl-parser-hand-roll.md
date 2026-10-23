@@ -41,9 +41,9 @@ default formatter).
 
 Hand-roll the KDL 2.0 parser inside `elang-kdl` as a single-crate, zero-extra-
 dependency lexer + recursive-descent parser + AST + canonical emitter + fuzz
-harness. The parser **fails closed** at every budget boundary by returning a
-structured `ParseError` (carrying category `Limit`) before allocating the
-oversized payload.
+tests. Budget rejections return a structured `ParseError` with an `ErrorCode`
+whose category is `Limit`. The implementation and tests below describe the
+checks currently in place; this ADR is not a proof of allocation bounds.
 
 The implementation is split into:
 
@@ -52,27 +52,29 @@ The implementation is split into:
 | `span` | `SourceSpan` / `Position` (byte offsets + line/column, UTF-8 boundary safe) |
 | `value` | `KdlValue` enum (Null / Bool / Integer / Float / String) |
 | `ast` | `KdlDocument`, `KdlNode`, `KdlEntry`, `KdlChildren` |
-| `escape` | KDL 2.0 escape processing (`\n`, `\u{...}`, `\t`, `\"`, `\\`, …) and raw-string parsing |
+| `escape` | KDL 2.0 escape processing (`\n`, `\u{...}`, `\t`, `\"`, `\\`, …) and canonical encoding |
 | `lex` | Token stream with budget-aware failure |
-| `budget` | `BudgetTracker` enforcing all ten steering-§10 limits, integrated into both lexer and parser |
-| `error` | `ParseError` + `ParseErrorKind` (wraps `elang_core::error::Category`) |
+| `budget` | `BudgetTracker` for cumulative node, string and comment totals; other limits checked locally |
+| `error` | `ParseError` + `ErrorCode` (wraps `elang_core::error::Category`) |
 | `parse` | Recursive-descent parser building an AST |
 | `canon` | Canonical double-quoted string emitter for `KdlValue::String` |
 | `tests` | Inline unit tests for each module + KDL 2.0 spec fixtures + boundary tests |
 
 External dependency surface: only `elang-core` (for limits, errors, ids). No
-new third-party crates. The parser is fuzzed via a `cargo-fuzz` harness that
-lives under `crates/elang-kdl/fuzz/` and is wired into CI as a build-only
-smoke test; long fuzz campaigns are scheduled under Phase 15 (T0515 body).
+new third-party crates. `crates/elang-kdl/tests/fuzz.rs` uses a deterministic
+PRNG and pathological byte patterns in ordinary `cargo test` tests. It is not
+a `cargo-fuzz`/libFuzzer harness, and no separate CI fuzzing job is configured.
 
 ## Consequences
 
-- **Strongest possible guarantees on the budget list:** every limit is checked
-  at the layer that would allocate past it. The lexer refuses to grow a token
-  past `MAX_ENCODED_TOKEN_BYTES`; the parser refuses to recurse past
-  `MAX_KDL_NESTING_DEPTH`; the budget tracker refuses to accept a node past
-  `MAX_NODES_PER_RESOURCE`. There is no path through the parser that can
-  cause unbounded allocation as a result of attacker-controlled input.
+- **Budget checks have distinct scopes.** `BudgetTracker` charges cumulative
+  resource/archive node and decoded-string totals and resource comment bytes.
+  Nesting depth is checked by `parse_node`'s depth parameter, not charged to a
+  `nesting_depth` budget. Per-node argument/property counters reject an entry
+  before adding it to the entries vector (replacing the earlier implementation
+  that collected properties before counting). Lexer checks bound encoded
+  token, individual comment and name sizes. These checks do not establish a
+  general guarantee about all allocations from attacker-controlled input.
 - **Source spans are exact and stable** for every AST node because the parser
   carries a single `(start, end)` pair from tokenisation through AST
   construction. Schema layers (`elang-epf`, `elang-eld`, `elang-integrity`)
@@ -83,9 +85,10 @@ smoke test; long fuzz campaigns are scheduled under Phase 15 (T0515 body).
   always escaped; control characters `\b`, `\f`, `\n`, `\r`, `\t` and U+0000
   escaped; other C0 / C1 escaped via `\u{...}`).
 - **Correctness is now our problem.** The KDL 2.0 grammar is non-trivial; the
-  unit + spec-fixture + boundary + fuzz test suite is the safety net. The
-  reference corpus is the published KDL 2.0 spec test set, embedded under
-  `crates/elang-kdl/tests/fixtures/`.
+  unit + spec-fixture + boundary + fuzz test suite is the safety net.
+  Representative spec fixtures and boundary tests live in
+  `crates/elang-kdl/tests/spec_fixtures.rs`; they are not the full published
+  reference corpus.
 - **No third-party parsing dep added.** Keeps the supply-chain surface flat
   (consistent with ADR 0007 / 0008).
 - **Schema-layer rejection (T0511) lives at the consumer** (`elang-epf`,

@@ -87,6 +87,13 @@ pub fn decode_string(
         ));
     }
     let body = &input[start..end];
+    let body_text = core::str::from_utf8(body).map_err(|_| {
+        ParseError::at(
+            ErrorCode::InvalidUtf8,
+            SourceSpan::from_range(input, content_start, content_end),
+            "string is not valid UTF-8",
+        )
+    })?;
     if out.len() < body.len() {
         // Caller asked for a too-small buffer; this is a programming error.
         return Err(ParseError::new(
@@ -150,8 +157,8 @@ pub fn decode_string(
                 w += 1;
                 r += 2;
             }
-            b'/' => {
-                out[w] = b'/';
+            b's' => {
+                out[w] = b' ';
                 w += 1;
                 r += 2;
             }
@@ -247,6 +254,16 @@ pub fn decode_string(
                 let enc = ch.encode_utf8(&mut out[w..]);
                 w += enc.len();
                 r = hex_end + 1;
+            }
+            _ if body_text
+                .get(r + 1..)
+                .and_then(|s| s.chars().next())
+                .is_some_and(char::is_whitespace) =>
+            {
+                r += 1; // backslash
+                for c in body_text[r..].chars().take_while(|c| c.is_whitespace()) {
+                    r += c.len_utf8();
+                }
             }
             _ => {
                 return Err(ParseError::at(

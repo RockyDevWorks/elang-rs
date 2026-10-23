@@ -175,9 +175,8 @@ impl KdlNode {
 
 /// The optional `/kdl-version` pragma that precedes the document.
 ///
-/// KDL 2.0 requires the pragma to appear before any node. The parser
-/// enforces its presence (T0501) and rejects documents that omit it or
-/// that name a version other than `2.0`.
+/// When present, the pragma precedes all nodes and must name version `2.0`.
+/// Documents without a pragma are accepted.
 #[derive(Debug, Clone, PartialEq)]
 pub struct KdlVersionPragma {
     /// Source span of the full pragma.
@@ -191,7 +190,7 @@ pub struct KdlVersionPragma {
 pub struct KdlDocument {
     /// Span of the full document.
     pub span: SourceSpan,
-    /// The `/kdl-version "2.0"` pragma, if present (mandatory for KDL 2.0).
+    /// The `/kdl-version "2.0"` pragma, if present.
     pub version: Option<KdlVersionPragma>,
     /// Document nodes, in source order.
     pub nodes: Box<[KdlNode]>,
@@ -208,7 +207,7 @@ impl KdlDocument {
         &self.nodes
     }
 
-    /// The version pragma, if the parser required and found one.
+    /// The version pragma, if present in the input.
     pub fn version(&self) -> Option<&KdlVersionPragma> {
         self.version.as_ref()
     }

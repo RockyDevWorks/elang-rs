@@ -1,8 +1,8 @@
 //! KDL 2.0 recursive-descent parser (T0501–T0512).
 //!
 //! Consumes a token stream from [`crate::lex::Lexer`] and produces a
-//! [`KdlDocument`]. The parser enforces every steering-§10 budget via
-//! the shared [`BudgetTracker`] and refuses to recurse past
+//! [`KdlDocument`]. Cumulative budgets use the shared [`BudgetTracker`];
+//! entry counts are checked per node. The parser refuses to recurse past
 //! `MAX_KDL_NESTING_DEPTH`.
 //!
 //! Grammar (simplified):
@@ -48,46 +48,39 @@ pub fn validate_utf8(input: &[u8]) -> Result<&[u8], ParseError> {
 
 /// Parse `input` as a KDL 2.0 document.
 ///
-/// Validates UTF-8 first; then runs the lexer + parser with the shared
-/// budget tracker. Resets the budget tracker on entry, so the same
-/// tracker can be reused for sequential resources.
+/// Validates UTF-8 first, then runs the lexer and parser with fresh budgets.
 pub fn parse(input: &[u8]) -> Result<KdlDocument, ParseError> {
-    let _ = validate_utf8(input)?;
     let mut budgets = BudgetTracker::new();
     parse_with_budgets(input, &mut budgets)
 }
 
 /// Parse `input` with a caller-supplied budget tracker. The tracker is
 /// **not** reset on entry; callers that parse multiple resources should
-/// invoke [`BudgetTracker::reset`] between them.
+/// invoke [`BudgetTracker::reset`] between them. UTF-8 is validated before parsing.
 pub fn parse_with_budgets(
     input: &[u8],
     budgets: &mut BudgetTracker,
 ) -> Result<KdlDocument, ParseError> {
+    let input = validate_utf8(input)?;
     let mut parser = Parser::new(input, budgets);
     parser.parse_document()
 }
 
 /// A pre-validated KDL 2.0 parser.
 struct Parser<'a> {
-    input: &'a [u8],
     lexer: Lexer<'a>,
-    /// Two-element lookahead buffer. `peek[0]` is the next token the parser
-    /// would consume; `peek[1]` is the one after that. Used by `parse_node`
-    /// to disambiguate property keys from sibling-node names.
-    peek: [Option<Token>; 2],
-    /// Whether the document still has to consume a node terminator before
-    /// the next node begins.
-    pending_newline: bool,
+    /// The next token, which may already have advanced the lexer.
+    peek: Option<Token>,
+    /// End byte of the last token consumed by `bump`, excluding lookahead.
+    last_end: usize,
 }
 
 impl<'a> Parser<'a> {
     fn new(input: &'a [u8], budgets: &'a mut BudgetTracker) -> Parser<'a> {
         Parser {
-            input,
             lexer: Lexer::new(input, budgets),
-            peek: [None, None],
-            pending_newline: false,
+            peek: None,
+            last_end: 0,
         }
     }
 
@@ -95,85 +88,58 @@ impl<'a> Parser<'a> {
         self.lexer.budgets()
     }
 
-    /// Fill `peek[0]` if it is empty, materialising a fresh token from the
+    /// Fill `peek` if it is empty, materialising a fresh token from the
     /// lexer.
     fn fill_peek(&mut self) -> Result<(), ParseError> {
-        if self.peek[0].is_none() {
-            self.peek[0] = Some(self.lexer.next_token()?);
+        if self.peek.is_none() {
+            self.peek = Some(self.lexer.next_token()?);
         }
         Ok(())
     }
 
-    /// Fill `peek[1]` if it is empty.
-    fn fill_peek2(&mut self) -> Result<(), ParseError> {
-        if self.peek[1].is_none() {
-            self.peek[1] = Some(self.lexer.next_token()?);
-        }
-        Ok(())
-    }
-
-    /// Consume the next token. Slides `peek[1]` into `peek[0]`, so any
-    /// previously-materialised 2-token lookahead is preserved. The
+    /// Consume the next token and record its end byte. The
     /// `.unwrap()` is provably safe: `fill_peek` ran first and only
-    /// returns `Ok(())` when `peek[0]` is `Some`.
+    /// returns `Ok(())` when `peek` is `Some`.
     #[allow(
         clippy::unwrap_used,
-        reason = "`bump` is only called after `fill_peek` returns Ok, which guarantees `peek[0]` is Some"
+        reason = "`bump` is only called after `fill_peek` returns Ok, which guarantees `peek` is Some"
     )]
     fn bump(&mut self) -> Result<Token, ParseError> {
         self.fill_peek()?;
-        let t = self.peek[0].take().unwrap();
-        self.peek[0] = self.peek[1].take();
+        let t = self.peek.take().unwrap();
+        self.last_end = t.span().end.byte as usize;
         Ok(t)
     }
 
     #[allow(
         clippy::unwrap_used,
-        reason = "`peek` is only called after `fill_peek` returns Ok, which guarantees `peek[0]` is Some"
+        reason = "`peek` is only called after `fill_peek` returns Ok, which guarantees `peek` is Some"
     )]
     fn peek(&mut self) -> Result<&Token, ParseError> {
         self.fill_peek()?;
-        Ok(self.peek[0].as_ref().unwrap())
+        Ok(self.peek.as_ref().unwrap())
     }
 
-    /// Two-token lookahead. Returns the token after the next one.
-    /// Used by `parse_node` to disambiguate a property key
-    /// (`Ident = value`) from the start of a sibling node
-    /// (`Ident` followed by anything else).
-    #[allow(
-        clippy::unwrap_used,
-        reason = "`peek_token_after_peek` is only called after `fill_peek`+`fill_peek2` return Ok, which guarantees `peek[1]` is Some"
-    )]
-    fn peek_token_after_peek(&mut self) -> Result<&Token, ParseError> {
-        self.fill_peek()?;
-        self.fill_peek2()?;
-        Ok(self.peek[1].as_ref().unwrap())
-    }
-
-    /// Consume the `/-` token and everything up to (but not past) the
-    /// next `\n`. Implements KDL 2.0 slashdash line comments.
-    fn skip_slashdash_to_eol(&mut self) -> Result<(), ParseError> {
-        // Drop the SlashDash token.
+    /// Slashdash permits newlines between the prefix and its single target.
+    fn slashdash_target(&mut self) -> Result<(), ParseError> {
         let _ = self.bump()?;
-        self.lexer.skip_to_eol();
+        while matches!(self.peek()?, Token::Newline(_)) {
+            let _ = self.bump()?;
+        }
         Ok(())
     }
 
     fn error_here(&self, code: ErrorCode, message: &str) -> ParseError {
         let pos = self.lexer.pos();
-        ParseError::at(
-            code,
-            SourceSpan::from_range(self.input, pos as u32, pos as u32),
-            message,
-        )
+        ParseError::at(code, self.lexer.span_range(pos, pos), message)
     }
 
     /// `document := version-pragma? node*`
     fn parse_document(&mut self) -> Result<KdlDocument, ParseError> {
-        let start = 0u32;
+        let start = 0usize;
         let mut version: Option<KdlVersionPragma> = None;
 
-        // KDL 2.0 requires the version pragma; we enforce this.
+        // The version pragma is optional; validate its value when present.
         let first = self.bump()?;
         match &first {
             Token::Slash(s) => {
@@ -195,9 +161,9 @@ impl<'a> Parser<'a> {
                 // canonical forms produced by EPF/ELD/integrity always
                 // include the pragma; consumers that need it can detect
                 // its absence via `KdlDocument::version()`.
-                let end = self.lexer.pos() as u32;
+                let end = self.last_end;
                 return Ok(KdlDocument {
-                    span: SourceSpan::from_range(self.input, start, end),
+                    span: self.lexer.span_range(start, end),
                     version,
                     nodes: Box::new([]),
                 });
@@ -205,52 +171,36 @@ impl<'a> Parser<'a> {
             other => {
                 // No pragma; push the token back so `parse_node` can pick
                 // it up. We model "pushback" by stashing the token.
-                self.peek[0] = Some(other.clone());
+                self.peek = Some(other.clone());
             }
         }
 
         let mut nodes: Vec<KdlNode> = Vec::new();
         loop {
-            // Skip an optional terminator between nodes.
-            if self.pending_newline {
-                self.pending_newline = false;
-                if matches!(self.peek()?, Token::Newline(_)) {
-                    let _ = self.bump()?;
-                }
-            }
             match self.peek()? {
-                Token::Eof(_) | Token::CloseBrace(_) => break,
+                Token::Eof(_) => break,
+                Token::CloseBrace(span) => {
+                    return Err(ParseError::at(
+                        ErrorCode::UnexpectedByte,
+                        *span,
+                        "unexpected top-level `}`",
+                    ))
+                }
                 Token::Newline(_) => {
                     // Stray newlines are tolerated.
                     let _ = self.bump()?;
                 }
                 Token::SlashDash(_) => {
-                    // KDL 2.0 slashdash comment: consume `/-` plus the rest
-                    // of the current line so the next iteration sees the
-                    // following node or newline.
-                    self.skip_slashdash_to_eol()?;
+                    self.slashdash_target()?;
+                    let _ = self.parse_node(0)?;
                 }
-                _ => {
-                    let n = self.parse_node(0)?;
-                    self.budgets().nodes_resource().try_add(1).map_err(|code| {
-                        ParseError::at(code, n.span, "too many nodes in resource")
-                    })?;
-                    // Archive-wide node ceiling (T0507). The container layer
-                    // drives this across sequential resources via
-                    // `BudgetTracker::reset` (per-resource) without resetting
-                    // `nodes_archive`, so the aggregate is enforced.
-                    self.budgets().nodes_archive().try_add(1).map_err(|code| {
-                        ParseError::at(code, n.span, "too many nodes in archive")
-                    })?;
-                    nodes.push(n);
-                    self.pending_newline = true;
-                }
+                _ => nodes.push(self.parse_node(0)?),
             }
         }
 
-        let end = self.lexer.pos() as u32;
+        let end = self.lexer.pos();
         Ok(KdlDocument {
-            span: SourceSpan::from_range(self.input, start, end),
+            span: self.lexer.span_range(start, end),
             version,
             nodes: nodes.into_boxed_slice(),
         })
@@ -290,9 +240,9 @@ impl<'a> Parser<'a> {
                 "only KDL 2.0 is supported",
             ));
         }
-        let end = self.lexer.pos() as u32;
+        let end = self.last_end;
         Ok(KdlVersionPragma {
-            span: SourceSpan::from_range(self.input, slash_span.start.byte, end),
+            span: self.lexer.span_range(slash_span.start.byte as usize, end),
             version: value.clone(),
         })
     }
@@ -306,7 +256,16 @@ impl<'a> Parser<'a> {
             ));
         }
 
-        let start = self.lexer.pos();
+        let start = self.peek()?.span().start.byte as usize;
+        let name_span = self.peek()?.span();
+        self.budgets()
+            .nodes_resource()
+            .try_add(1)
+            .map_err(|code| ParseError::at(code, name_span, "too many nodes in resource"))?;
+        self.budgets()
+            .nodes_archive()
+            .try_add(1)
+            .map_err(|code| ParseError::at(code, name_span, "too many nodes in archive"))?;
 
         // Optional type annotation `(type)`.
         let ty = if matches!(self.peek()?, Token::OpenParen(_)) {
@@ -338,8 +297,16 @@ impl<'a> Parser<'a> {
         // Name (bare ident or quoted string).
         let name = match self.bump()? {
             Token::Ident(s, t) => (s, t),
-            Token::Str(s, t) => (s, t),
-            Token::RawStr(s, t) => (s, t),
+            Token::Str(s, t) | Token::RawStr(s, t) => {
+                if t.len() > elang_core::limits::MAX_NAME_BYTES {
+                    return Err(ParseError::at(
+                        ErrorCode::NameTooLong,
+                        s,
+                        "node name exceeds MAX_NAME_BYTES",
+                    ));
+                }
+                (s, t)
+            }
             other => {
                 return Err(ParseError::at(
                     ErrorCode::UnexpectedByte,
@@ -351,12 +318,15 @@ impl<'a> Parser<'a> {
 
         // Optional `= value` shorthand.
         let mut entries: Vec<KdlEntry> = Vec::new();
+        let mut arg_count = 0;
+        let mut prop_count = 0;
         if matches!(self.peek()?, Token::Equals(_)) {
             let eq = self.bump()?;
             let value = self.parse_value()?;
             // The `=value` shorthand is equivalent to a property whose key
             // equals the node name. We store it as a synthetic prop so the
             // AST is uniform.
+            prop_count += 1;
             entries.push(KdlEntry::Prop {
                 key_span: name.0,
                 key: name.1.clone(),
@@ -365,64 +335,85 @@ impl<'a> Parser<'a> {
             let _ = eq;
         }
 
-        // Entries (arg | prop), terminated by newline / `;` / `{` / EOF / `}`.
-        // Lookahead: an Ident/Str/RawStr that is NOT followed by `=` starts a
-        // new sibling node, so we stop here.
+        // Discard exactly one entry after each slashdash. Children blocks
+        // are handled below, since only blocks may follow a discarded block.
         loop {
-            match self.peek()? {
-                Token::Eof(_) | Token::Newline(_) | Token::OpenBrace(_) | Token::CloseBrace(_) => {
-                    break
+            let discard = matches!(self.peek()?, Token::SlashDash(_));
+            if discard {
+                self.slashdash_target()?;
+                if matches!(self.peek()?, Token::OpenBrace(_)) {
+                    // Discard this block and enter the children-only phase.
+                    let _ = self.bump()?;
+                    let _ = self.parse_children(depth + 1)?;
+                    break;
                 }
-                Token::SlashDash(_) | Token::Slash(_) => break,
-                _ => {}
-            }
-            // If next token is a bare Ident and the one after it is not `=`,
-            // this is a sibling node — stop here. Bare identifiers are
-            // never values in KDL 2.0 (only `Str` / `RawStr` / numeric
-            // / bool / null are).
-            if matches!(self.peek()?, Token::Ident(_, _))
-                && !matches!(self.peek_token_after_peek()?, Token::Equals(_))
-            {
+            } else if matches!(
+                self.peek()?,
+                Token::Eof(_) | Token::Newline(_) | Token::OpenBrace(_) | Token::CloseBrace(_)
+            ) {
                 break;
             }
             let entry = self.parse_entry()?;
-            entries.push(entry);
+            let (count, max, code) = if entry.is_arg() {
+                (
+                    &mut arg_count,
+                    elang_core::limits::MAX_ARGS_PER_NODE,
+                    ErrorCode::TooManyArgs,
+                )
+            } else {
+                (
+                    &mut prop_count,
+                    elang_core::limits::MAX_PROPS_PER_NODE,
+                    ErrorCode::TooManyProps,
+                )
+            };
+            if *count >= max {
+                return Err(ParseError::at(
+                    code,
+                    entry.span(),
+                    "too many entries in node",
+                ));
+            }
+            *count += 1;
+            if !discard {
+                entries.push(entry);
+            }
         }
 
-        // Children block.
-        let children = if matches!(self.peek()?, Token::OpenBrace(_)) {
-            let _ = self.bump()?;
-            Some(self.parse_children(depth + 1)?)
-        } else {
-            None
-        };
-
-        let end = self.lexer.pos();
-        let span = SourceSpan::from_range(self.input, start as u32, end as u32);
-        // Enforce per-node arg/prop counts *before* constructing the node
-        // so the error carries the offending spans.
-        let arg_count = entries.iter().filter(|e| e.is_arg()).count();
-        let prop_count = entries.iter().filter(|e| e.is_prop()).count();
-        if arg_count > elang_core::limits::MAX_ARGS_PER_NODE {
-            return Err(ParseError::at(
-                ErrorCode::TooManyArgs,
-                span,
-                format!(
-                    "node has {} args, max {}",
-                    arg_count,
-                    elang_core::limits::MAX_ARGS_PER_NODE
-                ),
-            ));
+        // At most one retained children block; slashdash blocks are parsed
+        // for validation and budget accounting, then discarded.
+        let mut children = None;
+        loop {
+            let discard = matches!(self.peek()?, Token::SlashDash(_));
+            if discard {
+                self.slashdash_target()?;
+            }
+            if matches!(self.peek()?, Token::OpenBrace(_)) && (discard || children.is_none()) {
+                let _ = self.bump()?;
+                let block = self.parse_children(depth + 1)?;
+                if !discard {
+                    children = Some(block);
+                }
+            } else if discard {
+                return Err(self.error_here(
+                    ErrorCode::UnexpectedByte,
+                    "expected children block after slashdash",
+                ));
+            } else {
+                break;
+            }
         }
-        if prop_count > elang_core::limits::MAX_PROPS_PER_NODE {
+
+        let end = self.last_end;
+        let span = self.lexer.span_range(start, end);
+        if !matches!(
+            self.peek()?,
+            Token::Newline(_) | Token::CloseBrace(_) | Token::Eof(_)
+        ) {
             return Err(ParseError::at(
-                ErrorCode::TooManyProps,
-                span,
-                format!(
-                    "node has {} props, max {}",
-                    prop_count,
-                    elang_core::limits::MAX_PROPS_PER_NODE
-                ),
+                ErrorCode::UnexpectedByte,
+                self.peek()?.span(),
+                "expected node terminator",
             ));
         }
 
@@ -454,27 +445,38 @@ impl<'a> Parser<'a> {
                     ));
                 }
                 Token::SlashDash(_) => {
-                    // KDL 2.0 slashdash line comment inside a children
-                    // block: consume `/-` plus the rest of the line.
-                    self.skip_slashdash_to_eol()?;
+                    self.slashdash_target()?;
+                    let _ = self.parse_node(depth)?;
                 }
-                _ => {
-                    let n = self.parse_node(depth)?;
-                    self.budgets().nodes_resource().try_add(1).map_err(|code| {
-                        ParseError::at(code, n.span, "too many nodes in resource")
-                    })?;
-                    self.budgets().nodes_archive().try_add(1).map_err(|code| {
-                        ParseError::at(code, n.span, "too many nodes in archive")
-                    })?;
-                    nodes.push(n);
-                }
+                _ => nodes.push(self.parse_node(depth)?),
             }
         }
     }
 
     fn parse_value(&mut self) -> Result<KdlValue, ParseError> {
         let tok = self.bump()?;
-        Lexer::token_to_value(&tok).ok_or_else(|| {
+        self.value_from_token(&tok)
+    }
+
+    fn value_from_token(&mut self, tok: &Token) -> Result<KdlValue, ParseError> {
+        // Quoted/raw strings were charged during lexing. Bare identifiers
+        // become strings only in value positions, so charge them here.
+        if let Token::Ident(span, text) = tok {
+            let bytes = text.len() as u64;
+            self.budgets()
+                .decoded_string_bytes_resource()
+                .try_add(bytes)
+                .map_err(|code| {
+                    ParseError::at(code, *span, "bare string exceeds resource string budget")
+                })?;
+            self.budgets()
+                .decoded_string_bytes_archive()
+                .try_add(bytes)
+                .map_err(|code| {
+                    ParseError::at(code, *span, "bare string exceeds archive string budget")
+                })?;
+        }
+        Lexer::token_to_value(tok).ok_or_else(|| {
             ParseError::at(
                 ErrorCode::UnexpectedByte,
                 tok.span(),
@@ -485,7 +487,6 @@ impl<'a> Parser<'a> {
 
     fn parse_entry(&mut self) -> Result<KdlEntry, ParseError> {
         // Look for `name = value` first.
-        let saved_pos = self.lexer.pos();
         let first = self.bump()?;
         match &first {
             Token::Ident(_, _) | Token::Str(_, _) | Token::RawStr(_, _) => {
@@ -495,6 +496,13 @@ impl<'a> Parser<'a> {
                         Token::Ident(_, t) | Token::Str(_, t) | Token::RawStr(_, t) => t.clone(),
                         _ => unreachable!(),
                     };
+                    if key.len() > elang_core::limits::MAX_NAME_BYTES {
+                        return Err(ParseError::at(
+                            ErrorCode::NameTooLong,
+                            key_span,
+                            "property key exceeds MAX_NAME_BYTES",
+                        ));
+                    }
                     let _ = self.bump()?; // =
                     let value = self.parse_value()?;
                     return Ok(KdlEntry::Prop {
@@ -503,38 +511,10 @@ impl<'a> Parser<'a> {
                         value,
                     });
                 }
-                // Otherwise the consumed token is the value.
-                if let Some(v) = Lexer::token_to_value(&first) {
-                    // Charge the args-per-node budget on a *successful*
-                    // value parse — entries counted here are positional
-                    // args; properties are charged elsewhere by the
-                    // property-count check in `parse_node`.
-                    self.budgets().args_per_node().try_add(1).map_err(|code| {
-                        ParseError::at(code, first.span(), "too many args in node")
-                    })?;
-                    return Ok(KdlEntry::Arg(v));
-                }
-                // Fall through to error.
-                let _ = saved_pos;
-                Err(ParseError::at(
-                    ErrorCode::UnexpectedByte,
-                    first.span(),
-                    format!("unexpected {} in entries", first.kind()),
-                ))
+                self.value_from_token(&first).map(KdlEntry::Arg)
             }
             Token::Null(_) | Token::Bool(..) | Token::Integer(..) | Token::Float(..) => {
-                if let Some(v) = Lexer::token_to_value(&first) {
-                    self.budgets().args_per_node().try_add(1).map_err(|code| {
-                        ParseError::at(code, first.span(), "too many args in node")
-                    })?;
-                    return Ok(KdlEntry::Arg(v));
-                }
-                let _ = saved_pos;
-                Err(ParseError::at(
-                    ErrorCode::UnexpectedByte,
-                    first.span(),
-                    format!("unexpected {} in entries", first.kind()),
-                ))
+                self.value_from_token(&first).map(KdlEntry::Arg)
             }
             _ => Err(ParseError::at(
                 ErrorCode::UnexpectedByte,
@@ -592,7 +572,7 @@ mod tests {
 
     #[test]
     fn parses_children_block() {
-        let d = parse(b"parent { child1 child2 }").unwrap();
+        let d = parse(b"parent { child1; child2 }").unwrap();
         let n = &d.nodes[0];
         assert_eq!(n.name(), "parent");
         let c = n.children().expect("children");

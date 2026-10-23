@@ -59,7 +59,8 @@ pub enum ErrorCode {
     UnexpectedEof,
     /// Bare identifier contains an invalid character.
     InvalidIdentifier,
-    /// `/kdl-version` pragma is missing or wrong.
+    /// Reserved for consumers requiring the optional `/kdl-version` pragma.
+    /// The parser does not emit this code.
     MissingVersionPragma,
     /// `/kdl-version` pragma value is not `"2.0"`.
     UnsupportedVersion,

@@ -1,7 +1,6 @@
 //! KDL 2.0 lexer (T0501–T0512).
 //!
-//! Produces a token stream on demand; nothing is pre-materialised, so a
-//! 1 MiB document that fails on byte 3 costs three bytes of work.
+//! Produces tokens on demand and indexes line starts once for efficient spans.
 //!
 //! ## Budget enforcement
 //!
@@ -22,8 +21,8 @@
 //! ## Whitespace and comments (T0512)
 //!
 //! All KDL 2.0 whitespace forms are accepted and discarded: space, tab,
-//! CR, LF, U+000B (vertical tab), U+000C (form feed), and U+00A0 /
-//! U+FEFF (treated as whitespace per the spec). Comment forms:
+//! CR, LF, U+000B (vertical tab), U+000C (form feed), and U+00A0 and
+//! other Unicode whitespace. An initial U+FEFF BOM is skipped. Comment forms:
 //!
 //! - `// …` line comment
 //! - `/* … */` block comment
@@ -45,7 +44,7 @@
 
 use crate::budget::BudgetTracker;
 use crate::error::{ErrorCode, ParseError};
-use crate::span::SourceSpan;
+use crate::span::{Position, SourceSpan};
 use crate::value::KdlValue;
 use elang_core::limits::{
     MAX_COMMENT_BYTES, MAX_DECODED_STRING_BYTES, MAX_ENCODED_TOKEN_BYTES, MAX_NAME_BYTES,
@@ -56,9 +55,9 @@ use elang_core::limits::{
 pub enum Token {
     /// Bare identifier (not a keyword, not a number).
     Ident(SourceSpan, Box<str>),
-    /// `true` or `false`.
+    /// `#true` or `#false`.
     Bool(SourceSpan, bool),
-    /// `null`.
+    /// `#null`.
     Null(SourceSpan),
     /// Integer literal; lexeme preserved verbatim.
     Integer(SourceSpan, Box<str>),
@@ -66,7 +65,7 @@ pub enum Token {
     Float(SourceSpan, Box<str>),
     /// Standard double-quoted string; value already decoded.
     Str(SourceSpan, Box<str>),
-    /// Raw string `r#"…"#`; value is the raw content (no escapes).
+    /// Raw string `#"…"#`; value is the raw content (no escapes).
     RawStr(SourceSpan, Box<str>),
     /// Line terminator: `\n`, `\r\n`, `\r`, U+000C, or `;`.
     Newline(SourceSpan),
@@ -139,6 +138,7 @@ pub struct Lexer<'a> {
     input: &'a [u8],
     pos: usize,
     budgets: &'a mut BudgetTracker,
+    line_starts: Vec<usize>,
     /// Buffer reused across string decodes to avoid per-token allocation.
     scratch: Vec<u8>,
 }
@@ -152,18 +152,14 @@ impl<'a> Lexer<'a> {
             pos: 0,
             budgets,
             scratch: Vec::new(),
-        }
-    }
-
-    /// Advance the lexer past the rest of the current line. Used after
-    /// seeing a `Token::SlashDash` so the parser can treat `/- node "x"`
-    /// as a comment that runs to end-of-line, per KDL 2.0.
-    pub fn skip_to_eol(&mut self) {
-        while let Some(b) = self.byte() {
-            self.pos += 1;
-            if b == b'\n' {
-                break;
-            }
+            line_starts: core::iter::once(0)
+                .chain(
+                    input
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, b)| (*b == b'\n').then_some(i + 1)),
+                )
+                .collect(),
         }
     }
 
@@ -183,7 +179,41 @@ impl<'a> Lexer<'a> {
     }
 
     fn span(&self, start: usize) -> SourceSpan {
-        SourceSpan::from_range(self.input, start as u32, self.pos as u32)
+        self.span_range(start, self.pos)
+    }
+
+    /// Resolve both endpoints using the line-start index (byte columns).
+    pub(crate) fn span_range(&self, start: usize, end: usize) -> SourceSpan {
+        let position = |byte: usize| {
+            if byte > self.input.len() {
+                return Position::INVALID;
+            }
+            let line = self.line_starts.partition_point(|offset| *offset <= byte) - 1;
+            Position {
+                byte: byte as u32,
+                line: line as u32 + 1,
+                column: (byte - self.line_starts[line]) as u32 + 1,
+            }
+        };
+        SourceSpan {
+            start: position(start),
+            end: position(end),
+        }
+    }
+
+    fn char_at(&self, pos: usize) -> Option<char> {
+        let first = *self.input.get(pos)?;
+        let len = match first {
+            0..=0x7f => 1,
+            0xc2..=0xdf => 2,
+            0xe0..=0xef => 3,
+            0xf0..=0xf4 => 4,
+            _ => return None,
+        };
+        core::str::from_utf8(self.input.get(pos..pos + len)?)
+            .ok()?
+            .chars()
+            .next()
     }
 
     fn byte(&self) -> Option<u8> {
@@ -194,55 +224,25 @@ impl<'a> Lexer<'a> {
         self.input.get(self.pos + offset).copied()
     }
 
-    /// Returns `true` for bytes KDL 2.0 treats as whitespace.
-    fn is_ws(b: u8) -> bool {
-        matches!(
-            b,
-            b' ' | b'\t'
-                | b'\r'
-                | b'\n'
-                | 0x0B // vertical tab
-                | 0x0C // form feed
-                | 0xC2 // first byte of U+00A0 NBSP
-                | 0xEF // first byte of U+FEFF BOM
-        )
+    /// Classify decoded Unicode scalar values, never individual UTF-8 bytes.
+    fn is_ws(c: char) -> bool {
+        c.is_whitespace()
     }
 
-    /// Returns `true` for bytes that may appear in a bare identifier.
-    ///
-    /// KDL 2.0 identifiers permit any non-ASCII-Unicode-whitespace,
-    /// non-control character except the reserved set `{ } ( ) \ " / = ; [ ]`
-    /// and the comment introducers `/*` and `//`. Hyphens and dots are
-    /// allowed.
-    fn is_ident_byte(b: u8) -> bool {
-        if b < 0x80 {
-            !(matches!(
-                b,
-                b' ' | b'\t'
-                    | b'\r'
-                    | b'\n'
-                    | 0x0B
-                    | 0x0C
-                    | b'"'
-                    | b'\\'
-                    | b'/'
-                    | b'{'
-                    | b'}'
-                    | b'('
-                    | b')'
-                    | b'='
-                    | b';'
-                    | b'['
-                    | b']'
-                    | b','
-            ) || b < 0x20
-                || b == 0x7F)
-        } else {
-            // Non-ASCII: reject C1 controls and NBSP. Full Unicode
-            // whitespace classification is delegated to the later
-            // `validate` pass, which uses `char::is_whitespace`.
-            !(b == 0xC2 || b == 0xE2 || b == 0xEF)
-        }
+    /// KDL 2.0's disallowed literal code points (BOM is allowed only initially).
+    fn is_disallowed(c: char) -> bool {
+        matches!(c, '\u{0}'..='\u{8}' | '\u{e}'..='\u{1f}' | '\u{7f}'
+            | '\u{200e}'..='\u{200f}' | '\u{202a}'..='\u{202e}'
+            | '\u{2066}'..='\u{2069}' | '\u{feff}')
+    }
+
+    fn is_ident_char(c: char) -> bool {
+        !Self::is_ws(c)
+            && !Self::is_disallowed(c)
+            && !matches!(
+                c,
+                '"' | '\\' | '/' | '{' | '}' | '(' | ')' | '=' | ';' | '[' | ']' | '#'
+            )
     }
 
     /// Skips horizontal whitespace and comments. **Newlines are
@@ -254,8 +254,13 @@ impl<'a> Lexer<'a> {
                 None => return Ok(()),
                 // Newlines are statement terminators, not trivia.
                 Some(b'\n') | Some(b'\r') | Some(0x0C) => return Ok(()),
-                Some(b) if Lexer::is_ws(b) => {
-                    self.pos += 1;
+                Some(_) if self.pos == 0 && self.input.starts_with(b"\xef\xbb\xbf") => {
+                    self.pos += 3;
+                }
+                Some(_) if self.char_at(self.pos).is_some_and(Self::is_ws) => {
+                    if let Some(c) = self.char_at(self.pos) {
+                        self.pos += c.len_utf8();
+                    }
                 }
                 Some(b'/') if self.peek(1) == Some(b'/') => {
                     let start = self.pos;
@@ -273,21 +278,6 @@ impl<'a> Lexer<'a> {
                                 "line comment exceeds MAX_COMMENT_BYTES",
                             ));
                         }
-                    }
-                    // Consume the terminating newline so the caller never
-                    // sees a `Newline` token between a line comment and
-                    // the next statement.
-                    match self.byte() {
-                        Some(b'\r') => {
-                            self.pos += 1;
-                            if self.byte() == Some(b'\n') {
-                                self.pos += 1;
-                            }
-                        }
-                        Some(b'\n') => {
-                            self.pos += 1;
-                        }
-                        _ => {}
                     }
                     self.charge_comment(start)?;
                 }
@@ -329,6 +319,13 @@ impl<'a> Lexer<'a> {
 
     fn charge_comment(&mut self, start: usize) -> Result<(), ParseError> {
         let len = (self.pos - start) as u64;
+        if len > MAX_COMMENT_BYTES as u64 {
+            return Err(ParseError::at(
+                ErrorCode::CommentTooLong,
+                self.span(start),
+                "comment exceeds MAX_COMMENT_BYTES",
+            ));
+        }
         self.budgets
             .comment_bytes_resource()
             .try_add(len)
@@ -376,7 +373,8 @@ impl<'a> Lexer<'a> {
                 Ok(Token::Newline(self.span(start)))
             }
             b'"' => self.lex_string(start),
-            b'r' if matches!(self.peek(1), Some(b'"') | Some(b'#')) => self.lex_raw_string(start),
+            b'#' if matches!(self.peek(1), Some(b'"') | Some(b'#')) => self.lex_raw_string(start),
+            b'#' => self.lex_keyword(start),
             b'/' if self.peek(1) == Some(b'-') => {
                 self.pos += 2;
                 Ok(Token::SlashDash(self.span(start)))
@@ -390,36 +388,32 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn lex_ident(&mut self, start: usize) -> Result<Token, ParseError> {
-        // KDL 2.0 keywords.
-        let rest = &self.input[start..];
-        if rest.starts_with(b"true") {
-            let after = self.input.get(start + 4).copied();
-            let word_end = after.is_none_or(|c| !Lexer::is_ident_byte(c));
-            if word_end {
-                self.pos = start + 4;
-                return Ok(Token::Bool(self.span(start), true));
+    fn lex_keyword(&mut self, start: usize) -> Result<Token, ParseError> {
+        for word in [b"#true".as_slice(), b"#false", b"#null"] {
+            let end = start + word.len();
+            if self.input[start..].starts_with(word)
+                && self.char_at(end).is_none_or(|c| !Self::is_ident_char(c))
+            {
+                self.pos = end;
+                let span = self.span(start);
+                return Ok(match word {
+                    b"#true" => Token::Bool(span, true),
+                    b"#false" => Token::Bool(span, false),
+                    _ => Token::Null(span),
+                });
             }
         }
-        if rest.starts_with(b"false") {
-            let after = self.input.get(start + 5).copied();
-            let word_end = after.is_none_or(|c| !Lexer::is_ident_byte(c));
-            if word_end {
-                self.pos = start + 5;
-                return Ok(Token::Bool(self.span(start), false));
-            }
-        }
-        if rest.starts_with(b"null") {
-            let after = self.input.get(start + 4).copied();
-            let word_end = after.is_none_or(|c| !Lexer::is_ident_byte(c));
-            if word_end {
-                self.pos = start + 4;
-                return Ok(Token::Null(self.span(start)));
-            }
-        }
+        self.pos += 1;
+        Err(ParseError::at(
+            ErrorCode::UnexpectedByte,
+            self.span(start),
+            "unknown KDL keyword",
+        ))
+    }
 
-        while self.byte().is_some_and(Lexer::is_ident_byte) {
-            self.pos += 1;
+    fn lex_ident(&mut self, start: usize) -> Result<Token, ParseError> {
+        while let Some(c) = self.char_at(self.pos).filter(|c| Self::is_ident_char(*c)) {
+            self.pos += c.len_utf8();
             let len = self.pos - start;
             if len > MAX_ENCODED_TOKEN_BYTES {
                 return Err(ParseError::at(
@@ -439,7 +433,7 @@ impl<'a> Lexer<'a> {
 
         if self.pos == start {
             // No progress: the byte is not a valid identifier start.
-            self.pos += 1;
+            self.pos += self.char_at(self.pos).map_or(1, char::len_utf8);
             return Err(ParseError::at(
                 ErrorCode::InvalidIdentifier,
                 self.span(start),
@@ -647,8 +641,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_raw_string(&mut self, start: usize) -> Result<Token, ParseError> {
-        // `r` then `#`* then `"`.
-        self.pos += 1; // r
+        // One or more `#` bytes followed by `"`.
         let mut hash_count = 0usize;
         while self.byte() == Some(b'#') {
             hash_count += 1;
@@ -662,11 +655,11 @@ impl<'a> Lexer<'a> {
             }
         }
         if self.byte() != Some(b'"') {
-            // `r#` not followed by `"` — treat `r` as an identifier.
-            self.pos = start + 1;
-            let raw = &self.input[start..self.pos];
-            let s = core::str::from_utf8(raw).unwrap_or("r");
-            return Ok(Token::Ident(self.span(start), s.into()));
+            return Err(ParseError::at(
+                ErrorCode::UnexpectedByte,
+                self.span(start),
+                "expected quote after raw string hashes",
+            ));
         }
         self.pos += 1; // opening quote
 
@@ -721,6 +714,16 @@ impl<'a> Lexer<'a> {
                     "raw string bytes exceed MAX_DECODED_STRING_BYTES_PER_RESOURCE",
                 )
             })?;
+        self.budgets
+            .decoded_string_bytes_archive()
+            .try_add(s.len() as u64)
+            .map_err(|code| {
+                ParseError::at(
+                    code,
+                    self.span(start),
+                    "raw string bytes exceed MAX_DECODED_STRING_BYTES_PER_ARCHIVE",
+                )
+            })?;
         Ok(Token::RawStr(self.span(start), s.into()))
     }
 
@@ -742,7 +745,7 @@ impl<'a> Lexer<'a> {
                 lexeme: lex.clone(),
                 approx: parse_float(lex),
             }),
-            Token::Str(s, v) => Some(KdlValue::String {
+            Token::Ident(s, v) | Token::Str(s, v) => Some(KdlValue::String {
                 span: *s,
                 value: v.clone(),
                 raw: false,
@@ -828,10 +831,10 @@ mod tests {
 
     #[test]
     fn lexes_keywords() {
-        let toks = lex_all("true false null").unwrap();
+        let toks = lex_all("#true #false #null").unwrap();
         assert_eq!(
             toks[0],
-            Token::Bool(SourceSpan::from_range(b"true false null", 0, 4), true)
+            Token::Bool(SourceSpan::from_range(b"#true #false #null", 0, 5), true)
         );
         assert!(matches!(toks[1], Token::Bool(_, false)));
         assert!(matches!(toks[2], Token::Null(_)));
@@ -868,7 +871,7 @@ mod tests {
 
     #[test]
     fn lexes_raw_string() {
-        let toks = lex_all(r##"r#"a\"b"#"##).unwrap();
+        let toks = lex_all(r##"#"a\"b"#"##).unwrap();
         match &toks[0] {
             Token::RawStr(_, v) => assert_eq!(v.as_ref(), r#"a\"b"#),
             other => panic!("expected raw string, got {other:?}"),
@@ -878,7 +881,8 @@ mod tests {
     #[test]
     fn lexes_comments_and_skips_them() {
         let toks = lex_all("// hi\n/* block */ foo").unwrap();
-        assert!(matches!(toks[0], Token::Ident(..)));
+        assert!(matches!(toks[0], Token::Newline(_)));
+        assert!(matches!(toks[1], Token::Ident(..)));
     }
 
     #[test]
@@ -936,5 +940,24 @@ mod tests {
         assert!(matches!(toks[1], Token::Newline(_)));
         assert!(matches!(toks[3], Token::Newline(_)));
         assert!(matches!(toks[5], Token::Newline(_)));
+    }
+    #[test]
+    fn indexed_spans_match_byte_positions_across_multiline_tokens() {
+        let input = "  α \n/* two\nlines */ β \"three\nlines\" #\"raw\ntext\"#\nγ";
+        for token in lex_all(input).unwrap() {
+            let span = token.span();
+            assert_eq!(
+                span,
+                SourceSpan::from_range(input.as_bytes(), span.start.byte, span.end.byte)
+            );
+        }
+    }
+
+    #[test]
+    fn bare_keywords_are_identifiers() {
+        let tokens = lex_all("true false null").unwrap();
+        assert!(tokens[..3]
+            .iter()
+            .all(|token| matches!(token, Token::Ident(..))));
     }
 }

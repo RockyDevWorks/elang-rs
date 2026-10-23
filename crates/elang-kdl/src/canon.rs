@@ -11,9 +11,9 @@ use crate::value::KdlValue;
 /// Emit a canonical KDL 2.0 double-quoted string for `value`.
 ///
 /// Non-string values are emitted in their canonical KDL form:
-/// - `Null` → `null`
-/// - `Bool { true }` → `true`
-/// - `Bool { false }` → `false`
+/// - `Null` → `#null`
+/// - `Bool { true }` → `#true`
+/// - `Bool { false }` → `#false`
 /// - `Integer` → the original lexeme (preserving base prefix and `_`
 ///   separators). If the lexeme is empty, falls back to a placeholder;
 ///   such values should not reach this function in practice.
@@ -22,8 +22,8 @@ use crate::value::KdlValue;
 /// String values are emitted via [`escape::encode_string`].
 pub fn emit_value(value: &KdlValue) -> String {
     match value {
-        KdlValue::Null(_) => "null".to_string(),
-        KdlValue::Bool { value: b, .. } => if *b { "true" } else { "false" }.to_string(),
+        KdlValue::Null(_) => "#null".to_string(),
+        KdlValue::Bool { value: b, .. } => if *b { "#true" } else { "#false" }.to_string(),
         KdlValue::Integer { lexeme, .. } => lexeme.to_string(),
         KdlValue::Float { lexeme, .. } => lexeme.to_string(),
         KdlValue::String { value, .. } => escape::encode_string(value),
@@ -61,7 +61,7 @@ mod tests {
     #[test]
     fn emits_null() {
         let v = KdlValue::Null(sp());
-        assert_eq!(emit_value(&v), "null");
+        assert_eq!(emit_value(&v), "#null");
     }
 
     #[test]
@@ -70,12 +70,12 @@ mod tests {
             span: sp(),
             value: true,
         };
-        assert_eq!(emit_value(&v), "true");
+        assert_eq!(emit_value(&v), "#true");
         let v = KdlValue::Bool {
             span: sp(),
             value: false,
         };
-        assert_eq!(emit_value(&v), "false");
+        assert_eq!(emit_value(&v), "#false");
     }
 
     #[test]

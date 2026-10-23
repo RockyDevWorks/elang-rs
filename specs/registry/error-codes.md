@@ -245,7 +245,7 @@ error model.
 | `KDL_UNEXPECTED_BYTE` | LIMIT | Byte outside the KDL grammar where a token was expected. |
 | `KDL_UNEXPECTED_EOF` | LIMIT | End-of-input reached where a token was expected. |
 | `KDL_INVALID_IDENTIFIER` | LIMIT | Bare identifier contains an invalid character (e.g. reserved punctuation). |
-| `KDL_MISSING_VERSION_PRAGMA` | LIMIT | First non-trivial document must start with `/kdl-version "2.0"`. |
+| `KDL_MISSING_VERSION_PRAGMA` | LIMIT | Reserved for consumers requiring the optional `/kdl-version "2.0"` pragma; parsing accepts its absence and does not emit this code. |
 | `KDL_UNSUPPORTED_VERSION` | LIMIT | `/kdl-version` value is not the pinned `"2.0"`. |
 | `KDL_OTHER` | LIMIT | Catch-all for unmodelled failures. |
 
