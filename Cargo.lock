@@ -131,6 +131,8 @@ version = "0.1.0"
 dependencies = [
  "elang-core",
  "elang-kdl",
+ "elang-unicode",
+ "sha2",
 ]
 
 [[package]]
