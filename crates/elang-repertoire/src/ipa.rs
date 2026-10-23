@@ -199,25 +199,65 @@ pub fn validate(identifier: &str, rep: &Repertoire) -> Result<IpaIdentifier, Ipa
     let mut scalars = Vec::new();
     for c in identifier.chars() {
         let kind = cls.classify(c);
-        if let Kind::Base = kind {
-            // Approved precomposed bases (ç in v1) carry an implicit
-            // modification. Keep its provenance: a cedilla inside ç counts
-            // as a modifier, but an authored cedilla is not allowlisted.
-            for (index, part) in elang_unicode::nfc::canonical_decomposition(c)
-                .into_iter()
-                .enumerate()
-            {
-                scalars.push((
-                    part,
-                    if index == 0 {
-                        Kind::Base
-                    } else {
-                        Kind::Combining
-                    },
-                ));
+        match kind {
+            Kind::Base => {
+                // Approved precomposed bases (ç in v1) carry an implicit
+                // modification. Keep its provenance: a cedilla inside ç counts
+                // as a modifier, but an authored cedilla is not allowlisted.
+                for (index, part) in elang_unicode::nfc::canonical_decomposition(c)
+                    .into_iter()
+                    .enumerate()
+                {
+                    scalars.push((
+                        part,
+                        if index == 0 {
+                            Kind::Base
+                        } else {
+                            Kind::Combining
+                        },
+                    ));
+                }
             }
-        } else {
-            scalars.push((c, kind));
+            Kind::Unknown => {
+                // Not in any approved inventory: interpret it by its full
+                // canonical decomposition (steering §7, ADR 0008 §7).
+                // - No canonical decomposition → not approved.
+                // - First element not an approved base → not approved.
+                // - Exactly one approved base plus exactly one approved
+                //   combining mark → an approved composition pair.
+                // - One approved base plus two or more combining marks →
+                //   "more than one modification" on one unit.
+                // - One approved base plus one mark that is not an approved
+                //   combining diacritic → the inherited mark is not in the
+                //   user allowlist, so the scalar is not approved.
+                let decomposition = elang_unicode::nfc::canonical_decomposition(c);
+                match decomposition.as_slice() {
+                    // Exactly one approved base plus exactly one approved
+                    // combining mark: an approved composition pair.
+                    [base, mark] if cls.bases.contains(base) && cls.combining.contains(mark) => {
+                        scalars.push((*base, Kind::Base));
+                        scalars.push((*mark, Kind::Combining));
+                    }
+                    // One approved base plus two or more combining marks:
+                    // more than one modification on a single unit. If any
+                    // inherited mark is outside the approved inventory the
+                    // scalar is not in the repertoire at all.
+                    [base, first, rest @ ..]
+                        if cls.bases.contains(base)
+                            && cls.combining.contains(first)
+                            && rest.iter().all(|m| cls.combining.contains(m)) =>
+                    {
+                        scalars.push((*base, Kind::Base));
+                        scalars.push((*first, Kind::Combining));
+                        for mark in rest {
+                            scalars.push((*mark, Kind::Combining));
+                        }
+                    }
+                    // Anything else is not in the repertoire.
+                    _ => scalars.push((c, Kind::Unknown)),
+                }
+            }
+            _ => scalars.push((c, kind)),
         }
     }
     let mut units: Vec<Unit> = Vec::new();
@@ -366,7 +406,38 @@ mod tests {
             validate("çp\u{0327}", &r),
             Err(IpaError::BaseNotApproved('\u{0327}'))
         );
-        assert_eq!(validate("ã", &r), Err(IpaError::BaseNotApproved('ã')));
+        // A precomposed scalar that is not itself in the inventory is
+        // approved only through the composition-pair rule: exactly one
+        // approved base plus exactly one approved combining mark.
+        let id = validate("ã", &r).expect("ã is a+̃, an approved composition pair");
+        assert_eq!(
+            id.units,
+            vec![Unit {
+                bases: vec!['a'],
+                tie: None,
+                modifier: Some('\u{0303}'),
+            }]
+        );
+        assert_eq!(id.original, "ã", "authored bytes are preserved");
+        // A single inherited mark outside the approved inventory does not
+        // grant approval.
+        assert_eq!(validate("à", &r), Err(IpaError::BaseNotApproved('à')));
+    }
+
+    #[test]
+    fn multi_mark_precomposed_scalar_is_too_many_modifications() {
+        let r = rep();
+        // ṏ = o + U+0303 + U+0308: two approved marks on one base.
+        assert_eq!(
+            validate("\u{1E4F}", &r),
+            Err(IpaError::TooManyModifications)
+        );
+        // ḉ = c + U+0327 + U+0301: an inherited mark outside the approved
+        // inventory, so the scalar is not in the repertoire at all.
+        assert_eq!(
+            validate("\u{1E09}", &r),
+            Err(IpaError::BaseNotApproved('\u{1E09}'))
+        );
     }
 
     #[test]

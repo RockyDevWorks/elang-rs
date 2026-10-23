@@ -48,37 +48,53 @@ Still open — **blocked on later phases**, must not be fabricated:
    ordering) is published; the fixtures themselves depend on the writer
    landing.
 2. **Formal freeze + spec checksum/release tag (OA-17)** — depends on (1).
-   Until the freeze lands, no schema or repertoire version is final.
+   The freeze *mechanism* lands with this PR (ADR 0011): a generated
+   normative-artifact manifest under `specs/registry/`, its RFC 8785 JCS
+   "spec checksum" pinned as `PINNED_SPEC_CHECKSUM` in
+   `elang-conformance::normative_manifest` and asserted by test. The
+   **release tag itself is not created** here — it waits on (1), and the
+   pinned checksum is regenerated at that point. Until the freeze lands,
+   no schema or repertoire version is final.
 
 Ratified in Phase 1 (decision-only / contract-derived artifacts):
 
-3. The complete `META-INF/integrity.kdl` grammar and canonical serialization —
+1. The complete `META-INF/integrity.kdl` grammar and canonical serialization —
    ADR 0004, `specs/grammar/integrity-0.1.0.md`.
-4. The canonical EPF serializer profile — ADR 0005,
+2. The canonical EPF serializer profile — ADR 0005,
    `specs/canonical/epf-canonical-serialization.md`.
-5. Machine-checkable ELD/EPF grammars and the repertoire JSON Schema —
+3. Machine-checkable ELD/EPF grammars and the repertoire JSON Schema —
    `specs/grammar/{epf,eld}-0.1.0.md` and
    `specs/schema/elang-ipa-repertoire-v1.schema.json`.
-6. The error-code registry — `specs/registry/error-codes.md` +
+4. **The IPA repertoire inventory (T0106–T0115, OA-1/OA-4/OA-5)** — ADR 0008;
+   `specs/schema/ipa-v1.json` (107 base symbols, 27 combining diacritics,
+   9 spacing modifiers) generated from the pinned UNITIPA 2020 chart and
+   cross-checked against an independent chart transcription. The diacritic
+   and spacing-modifier inventories carry a named human sign-off — reviewer
+   of record: the repository owner, 2026-10-23 (`specs/sources/SOURCES.md`
+   §7). The canonical RFC 8785 JCS SHA-256 is pinned as the
+   `PINNED_JCS_SHA256` constant in
+   `crates/elang-repertoire/src/repertoire.rs` and asserted by test
+   (`crates/elang-repertoire/src/repertoire.rs`, `pinned_digest_matches`).
+5. The error-code registry — `specs/registry/error-codes.md` +
    `error-codes.json`. Reference golden fixtures and reproducibility hashes
    still depend on the ELD goldens (OA-14) and remain open.
-7. **Binary header/index/footer reference vectors and offsets (T0118, OA-11)**
+6. **Binary header/index/footer reference vectors and offsets (T0118, OA-11)**
    — `specs/registry/binary-reference-vectors.json` +
    `fixtures/valid/container/minimal-archive/`. All offsets, sizes and
    SHA-256 digests are computed by the deterministic
    `elang-conformance::binary_vectors` builder and asserted by tests.
-8. **Tie-bar equivalence and IPA comparison-key test vectors (T0117, OA-12)**
+7. **Tie-bar equivalence and IPA comparison-key test vectors (T0117, OA-12)**
    — 12 published vectors
    (`specs/registry/ipa-tie-bar-vectors.json`) across positive,
    equivalence and negative cases, driven by the `elang-repertoire`
    integration test `tie_bar_vectors.rs`.
-9. **Residual KDL canonicalization edge cases (T0122, OA-16)** — ADR 0009
-    pins the authored-byte vs comparison-key views for ordering (E-1),
-    the condition sort key (E-2), the exact `"`/`\` escaping set (E-3),
-    bare-vs-block allophone emission (E-4/E-5) and layout invariants (E-6).
-10. **Unicode 18.0.0 data (T0116, OA-13)** — first-party `elang-unicode`
-    generated from the pinned UCD 18.0.0; NFC passes the official
-    `NormalizationTest.txt` (20,171 rows); ADR 0007.
+8. **Residual KDL canonicalization edge cases (T0122, OA-16)** — ADR 0009
+   pins the authored-byte vs comparison-key views for ordering (E-1),
+   the condition sort key (E-2), the exact `"\`/`\` escaping set (E-3),
+   bare-vs-block allophone emission (E-4/E-5) and layout invariants (E-6).
+9. **Unicode 18.0.0 data (T0116, OA-13)** — first-party `elang-unicode`
+   generated from the pinned UCD 18.0.0; NFC passes the official
+   `NormalizationTest.txt` (20,171 rows); ADR 0007.
 
 Until each open item is ratified, the corresponding code path must not embed
 guessed inventories or fabricated hashes.

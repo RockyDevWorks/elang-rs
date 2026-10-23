@@ -26,7 +26,7 @@
 | OA-14 | Canonical ELD golden files + SHA-256 | §9 | canonical writer conformance | T1121 | Open |
 | OA-15 | Policy for extra indexed resources / manifest coverage in v0.1.0 (no invented modules) | §2 | REQ-PKG-005 | T0121 | **Ratified** — ADR 0006, [`specs/registry/resource-policy-v0.1.0.md`](../specs/registry/resource-policy-v0.1.0.md) |
 | OA-16 | Residual KDL canonicalization edge cases ratified as ADRs | §12.4 | canonical serialization freeze | T0122 | **Ratified** — EPF/integrity profiles via ADR 0004/0005; residual ELD canonical edge cases (ordering byte-view, condition-key byte-view, escaping set, bare/block emission, layout) via [ADR 0009](decisions/0009-residual-eld-canonicalization-edge-cases.md) |
-| OA-17 | Frozen reviewed schema/repertoire versions + spec checksum/release tag | §12 | conformance freeze / v0.1.0 | T0123 | Open |
+| OA-17 | Frozen reviewed schema/repertoire versions + spec checksum/release tag | §12 | conformance freeze / v0.1.0 | T0123 | **Mechanism landed; freeze/tag blocked** — the freeze *mechanism* (generated normative manifest + RFC 8785 JCS spec checksum + verification test) shipped with ADR 0011 and `specs/registry/normative-manifest.json`; the pinned `PINNED_SPEC_CHECKSUM` covers the currently ratified OA-1…OA-16 corpus (excluding OA-14). The **freeze itself and the v0.1.0 release tag remain blocked on OA-14** (T1121, Issue #21) and must not be declared here. ADR 0011 requires the manifest and checksum to be regenerated during final T0123 after OA-14 lands. |
 
 ## Rules of engagement
 
@@ -63,9 +63,10 @@
   allophone emission (E-4/E-5) and layout invariants (E-6); EPF/integrity
   profiles were already locked by ADR 0004/0005.
 - **Still open — blocked on later phases:** OA-14 (canonical ELD goldens —
-  depends on Phase 11 canonical writer, T1121), OA-17 (freeze/tag — depends
-  on OA-14 only, since the OA-1/OA-4 second human review closed 2026-10-23).
-  These MUST NOT be fabricated.
+  depends on Phase 11 canonical writer, T1121), OA-17 (freeze/tag — the
+  freeze *mechanism* shipped in ADR 0011, but the freeze declaration and the
+  v0.1.0 release tag depend on OA-14 only, since the OA-1/OA-4 second human
+  review closed 2026-10-23). These MUST NOT be fabricated.
 - **KDL parser (Phase 5, Issue #15) is an implementation of ratified
   artifacts, not a new one.** [ADR 0010](decisions/0010-kdl-parser-hand-roll.md)
   records the hand-roll-vs-`kdl-rs` decision. The parser implements the

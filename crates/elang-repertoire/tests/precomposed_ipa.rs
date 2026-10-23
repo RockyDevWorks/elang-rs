@@ -112,7 +112,7 @@ fn implicit_cedilla_never_approves_authored_cedillas() {
 }
 
 #[test]
-fn nfc_validation_and_original_scalar_allowlist_precede_decomposition() {
+fn nfc_validation_precedes_decomposition_and_unapproved_scalars_stay_rejected() {
     let rep = load().expect("pinned repertoire loads");
     for input in ["c\u{0327}", "t\u{0361}c\u{0327}", "ç\u{0301}"] {
         assert_eq!(
@@ -121,9 +121,24 @@ fn nfc_validation_and_original_scalar_allowlist_precede_decomposition() {
             "non-NFC input must not be silently normalized: {input:?}"
         );
     }
-    // These NFC forms decompose to IPA-like components, but the authored
-    // scalar itself is not approved. Decomposition cannot grant approval.
-    for scalar in ['ã', 'ñ', 'ä', '\u{1E09}', '\u{FB03}'] {
+    // A precomposed scalar whose full canonical decomposition is exactly one
+    // approved base plus one approved combining mark is an approved
+    // composition pair (ADR 0008 §7).
+    for (scalar, base, mark) in [
+        ('ã', 'a', '\u{0303}'),
+        ('ñ', 'n', '\u{0303}'),
+        ('ä', 'a', '\u{0308}'),
+        ('ö', 'o', '\u{0308}'),
+    ] {
+        let input = scalar.to_string();
+        let id = validate(&input, &rep).expect("approved composition pair");
+        assert_eq!(id.units, vec![single_unit(base, mark)], "{input:?}");
+        assert_eq!(id.original, input, "authored bytes must be preserved");
+    }
+    // Decomposition cannot grant approval to a scalar whose inherited mark is
+    // outside the approved inventory, or to one with no canonical
+    // decomposition at all.
+    for scalar in ['\u{1E09}', '\u{FB03}'] {
         assert_eq!(
             validate(&scalar.to_string(), &rep),
             Err(IpaError::BaseNotApproved(scalar)),

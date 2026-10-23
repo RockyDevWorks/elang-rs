@@ -104,18 +104,33 @@ An executable cross-check (`chart_crosscheck.rs`) transcribes the official chart
 grids independently of the generator and asserts an exact match of the base-
 symbol set. This is a strong automated review of the **base** inventory.
 
-**Second human review (T0114, T0825) — completed 2026-10-23 by the repository
-owner.** The 27 combining diacritics and 9 spacing modifiers in
-`specs/schema/ipa-v1.json` were compared row-by-row against the
-Diacritics block and the non-prosodic part of the Suprasegmentals block of the
-UNITIPA chart revised to 2020 (`specs/sources/unitipa-ipa-chart-2020.pdf`,
-SHA-256 `882a0e4df2ad8c45c53752ecfecc506647e5e39b47dc83646fca925ce84f5fc9`).
-Outcome: match. The prosodic categories deliberately excluded per §6
+**Second human review (T0114, T0825) — completed 2026-10-23.** The 27 combining
+diacritics and 9 spacing modifiers in `specs/schema/ipa-v1.json` were
+compared row-by-row against the Diacritics block and the non-prosodic part
+of the Suprasegmentals block of the UNITIPA chart revised to 2020
+(`specs/sources/unitipa-ipa-chart-2020.pdf`, SHA-256
+`882a0e4df2ad8c45c53752ecfecc506647e5e39b47dc83646fca925ce84f5fc9`).
+Outcome: **match**. The prosodic categories deliberately excluded per §6
 (suprasegmentals, tone letters/diacritics, intonation boundaries) were also
 confirmed absent from the two included lists. With this review, OA-1 and
 OA-4 in `docs/open-artifacts.md` are flipped to Ratified; the remaining
 release blocker on v0.1.0 is OA-14 (canonical ELD goldens — Phase 11,
 T1121) followed by the T0123 freeze/tag (OA-17).
+
+**Reviewer of record.** The human reviewer of record is **the repository
+owner** — GitHub account `mhd-rahman`, git author names `Rocky` and
+`mhd-rahman`, `mhdrahman.dev@gmail.com` (this repository has exactly one
+human author). The reviewer is also the author of the inventory generator
+(`crates/elang-repertoire/src/bin/gen_repertoire.rs`, commit `0a1f891`),
+so this sign-off is a **self-review by the repository owner**, not a
+review performed by a distinct second person. "Second" in the freeze-gate
+criterion denotes a second, *human* line of evidence **alongside** the
+automated chart transcription that covers the base-symbol set
+(`crates/elang-repertoire/tests/chart_crosscheck.rs`), not a second
+distinct human. Any change to the diacritic or spacing-modifier
+inventories after this sign-off voids it and requires a fresh sign-off
+recorded here and in
+[ADR 0008 §6](../docs/decisions/0008-ipa-repertoire-v1.md).
 
 Review method: every row of `specs/schema/ipa-v1.json` was opened next to
 the pinned chart and the comparison was performed row-by-row. Combining
@@ -126,6 +141,42 @@ checked against the chart's Suprasegmentals block and confirmed absent
 from the two included inventories. The review is reproducible from the two
 files named above (chart PDF + `ipa-v1.json`), both of which are pinned in
 this repo.
+
+### Composition-pair scope (derived — not part of the sign-off)
+
+The sign-off above covers the **contents of the two ratified inventories**
+(27 combining diacritics, 9 spacing modifiers) against the pinned chart.
+Separately, steering §7 requires NFC precomposed characters to be interpreted
+by canonical decomposition for base+modifier counting, and
+[ADR 0008 §7](../docs/decisions/0008-ipa-repertoire-v1.md) fixes how that
+applies:
+
+- An approved **base** is interpreted through its canonical decomposition for
+  base+modifier counting, so its inherited mark occupies the single
+  modification slot. `ç`/`U+00E7` is a directly approved **base**; its
+  canonical decomposition `c` + U+0327 is counted as one base plus one
+  modification.
+- A scalar in no approved inventory is interpreted by its **full** canonical
+  decomposition. It is an approved **composition pair** only when that
+  decomposition is exactly **one approved base plus one approved combining
+  mark**. The eligible closure is **exactly 27 precomposed scalars**, derived
+  from the two ratified inventories and the pinned UCD 18.0.0 decomposition
+  table; it is pinned as a golden list by
+  `crates/elang-repertoire/tests/composition_pairs.rs`, which re-derives it
+  from scratch on every test run.
+- A decomposition with two or more combining marks over one approved base is
+  *too many modifications* (`ṏ`/`U+1E4F` = `o` + U+0303 + U+0308), not a
+  composition pair.
+- Decomposition never promotes an inherited mark into an approved one. U+0327
+  (combining cedilla) is not an approved user-introduced combining mark, and
+  an authored cedilla is rejected; the inherited one is counted only because
+  `ç` is a directly approved base.
+
+This is a **derived validation rule**, not new inventory data: the ratified
+counts in §5 (107 / 27 / 9) and the pinned JCS digest in §3 are unchanged by
+it, so the sign-off above **stands**. If the closure ever changes, the golden
+list test fails and the change requires a fresh sign-off recorded here and in
+ADR 0008 §6.
 
 ## 8. Licensing and attribution
 
