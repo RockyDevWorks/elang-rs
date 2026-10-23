@@ -326,8 +326,12 @@ mod tests {
         );
         // The message carries both the computed and declared hex so an
         // operator can diagnose without re-reading the manifest.
-        assert!(err.diagnostic.message.contains(SHA256_ABC_HEX));
-        assert!(err.diagnostic.message.contains(SHA256_EMPTY_HEX));
+        assert_eq!(
+            err.diagnostic.message,
+            format!(
+                "resource 'Header/format.version': computed digest {SHA256_EMPTY_HEX} != declared digest {SHA256_ABC_HEX}"
+            )
+        );
     }
 
     #[test]

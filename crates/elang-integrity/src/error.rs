@@ -2,8 +2,8 @@
 //!
 //! Every diagnostic surfaced by `elang-integrity` carries a code from
 //! `specs/registry/error-codes.{md,json}` under the `INTEGRITY` category
-//! (stage 9 for structural validation; stage 11 for hash verification — added
-//! in the follow-up PR), except for:
+//! (stage 9 for structural validation; stage 11 for per-resource hash
+//! verification via `verify_one`), except for:
 //!
 //! - KDL parser errors, which retain their own category (`LIMIT` for budget
 //!   failures, `CONTAINER` for `KDL_INVALID_UTF8`, etc.) and are routed
@@ -48,13 +48,13 @@ pub(crate) fn integrity_err(code: &'static str, message: impl Into<String>) -> E
     integrity_err_at(code, message, SourceSpan::INVALID)
 }
 
-/// Map a `KdlSpan` carried by `Diagnostic` onto a [`KdlSpan`].
+/// Map a [`SourceSpan`] onto a diagnostic [`KdlSpan`].
 ///
 /// Returns `None` for any invalid span (one whose endpoints carry the
 /// `Position::INVALID` sentinel); the KDL span records 1-based line/column
 /// plus byte length, matching every other diagnostic in the reference
 /// implementation.
-fn span_to_kdl(span: SourceSpan) -> Option<KdlSpan> {
+pub(crate) fn span_to_kdl(span: SourceSpan) -> Option<KdlSpan> {
     if span.is_invalid() {
         return None;
     }

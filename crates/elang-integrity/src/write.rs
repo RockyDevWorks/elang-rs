@@ -70,6 +70,10 @@ integrity {
 /// - The `sha256` property value is lowercase hex (per ADR 0004 §3 / grammar §4).
 /// - The file ends with exactly one LF (`}\n`).
 ///
+/// Parsed or otherwise invariant-valid manifests round-trip through
+/// `canonical_bytes` and [`crate::parse::parse`] within the parser budgets.
+/// This guarantee does not apply to arbitrary caller-assembled models.
+///
 /// # Non-goals
 ///
 /// The writer does not validate the manifest (validation is [`mod@crate::parse`]'s
@@ -298,10 +302,10 @@ mod tests {
 
     #[test]
     fn canonical_bytes_escapes_quote_and_backslash() {
-        // ResourcePath::new forbids `\` in paths, so we test `"` directly and
-        // `\n` (LF) as the closest equivalent for backslash-escape behavior.
-        // The full escape surface (`\"`, `\\`, `\n`, `\r`, `\t`, `\u{..}`) is
-        // exercised by push_kdl_string's own coverage in the implementation.
+        // This tests quote escaping for a valid integrity path.
+        // ResourcePath::new forbids backslashes; control-character escapes
+        // such as `\n`, `\r`, `\t` and `\u{..}` for control characters are
+        // outside the integrity path domain enforced by the parser.
         let mut resources = BTreeMap::new();
         let path = ResourcePath::new("weird\"path.eld".to_string()).expect("valid path");
         let digest = [0u8; SHA256_LEN];

@@ -15,25 +15,33 @@
 //!   exactly one `integrity` node, exactly one `algorithm` node with the
 //!   `"sha-256"` arg, one `resource` per entry with a single `sha256`
 //!   64-lowercase-hex property, no duplicates, no unknown constructs.
-//! - [`IntegrityManifest`] / [`IntegrityEntry`] / [`Algorithm`] — the validated
-//!   semantic model.
+//! - [`IntegrityManifest`] / [`IntegrityEntry`] / [`Algorithm`] — the semantic
+//!   model; parsed manifests satisfy the parser invariants.
 //! - [`verify_coverage`] — enforce constraint C-04: every indexed resource
 //!   except `META-INF/integrity.kdl` has exactly one entry, and there are no
 //!   entries for non-indexed paths.
-//! - [`Hasher`] — streaming SHA-256 accumulator fed by the container's
-//!   decompressor (stage 11).
+//! - [`Hasher`] — streaming SHA-256 accumulator for the container's
+//!   decompressor (stage 11); container wiring is deferred below.
 //! - [`verify_one`] — per-resource constant-time digest comparison; emits
 //!   `INTEGRITY_HASH_MISMATCH` at stage 11 with the resource path attached
 //!   on mismatch.
 //! - [`canonical_bytes`] — emit the canonical byte sequence per ADR 0004
 //!   §"Canonical serialization". [`CANONICAL_GOLDEN`] is the byte-for-byte
-//!   fixture; [`parse()`] + [`canonical_bytes`] form a stable roundtrip.
+//!   fixture; parsed or otherwise invariant-valid manifests round-trip through
+//!   [`canonical_bytes`] + [`parse()`] within the parser budgets.
 //!
 //! ### Deferred
 //!
-//! None — all of Phase 7 (T0701..T0711, REQ-INTEGRITY-001..008) lands in
-//! this crate. T1618 (release-notes language about integrity vs publisher
-//! authenticity) is Phase 16 and is owned by the release-management work.
+//! - Container stage-11 wiring in `elang-container`: feed decompressed chunks
+//!   to [`Hasher`] and call [`verify_one`] for indexed resources other than
+//!   the manifest itself (T0706/T0707, tracked by T1202).
+//! - Footer index hash verification in the integrated reader (T0708, tracked
+//!   by T1201/T1202) remains separate from resource hashes and outside this PR.
+//!   `elang-container` already provides `Footer::verify_index_hash` (T0308),
+//!   called by `ArchiveListing::parse`.
+//!
+//! T1618 (release-notes language about integrity vs publisher authenticity) is
+//! Phase 16 and is owned by the release-management work.
 //!
 //! ## Error model
 //!

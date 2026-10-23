@@ -1,11 +1,10 @@
 //! Integrity manifest model and per-entry coverage verification.
 //!
 //! The semantic model returned by [`crate::parse::parse_document`] and the
-//! cross-field check [`verify_coverage`] live here. The model is intentionally
-//! read-only: every field is `pub` for inspection, but the only way to obtain
-//! a value is through [`crate::parse::parse`] (or the lower-level
-//! [`crate::parse::parse_document`]), so an `IntegrityManifest` is
-//! unrepresentable-if-invalid.
+//! cross-field check [`verify_coverage`] live here. Fields are public so
+//! callers can inspect and construct manifests. Parsed models satisfy the
+//! parser invariants; callers assembling models must preserve those invariants
+//! for round trips through [`crate::write::canonical_bytes`] and the parser.
 //!
 //! # Coverage semantics
 //!
@@ -101,11 +100,17 @@ impl IntegrityEntry {
     }
 }
 
-/// The validated integrity manifest.
+/// The integrity manifest semantic model.
 ///
-/// The algorithm and resource entries are populated by
-/// [`crate::parse::parse_document`]. `resources` is a [`BTreeMap`] so iteration
-/// over entries is in canonical (sorted) order — matching the bytewise-sorted
+/// Models returned by [`crate::parse::parse_document`] satisfy the parser
+/// invariants. Fields remain public for caller construction; for round trips,
+/// callers must preserve those invariants, including a nonempty resource map,
+/// keys equal to each entry's `path`, and paths satisfying the parser's Unicode
+/// and resource-path constraints. The serialized manifest must also fit the
+/// parser budgets. [`crate::write::canonical_bytes`] does not validate models.
+///
+/// `resources` is a [`BTreeMap`] so iteration over entries is in canonical
+/// (sorted) order when keys match entry paths — matching the bytewise-sorted
 /// index and the canonical writer's required sort order (grammar §4).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IntegrityManifest {
@@ -113,8 +118,9 @@ pub struct IntegrityManifest {
     pub algorithm: Algorithm,
     /// The declared entries, keyed by validated [`ResourcePath`].
     ///
-    /// Iteration order is bytewise ascending by path (BTreeMap ordering),
-    /// matching the canonical writer's required child order.
+    /// Callers must keep each key equal to its entry's `path`. Iteration order
+    /// is then bytewise ascending by path (BTreeMap ordering), matching the
+    /// canonical writer's required child order.
     pub resources: BTreeMap<ResourcePath, IntegrityEntry>,
 }
 

@@ -29,7 +29,7 @@ use elang_kdl::parse_with_budgets as kdl_parse_with_budgets;
 use elang_kdl::KdlValue;
 use elang_unicode::UnicodeViolation;
 
-use crate::error::{from_kdl, integrity_err, integrity_err_at};
+use crate::error::{from_kdl, integrity_err, integrity_err_at, span_to_kdl};
 use crate::manifest::{parse_hex64, Algorithm, IntegrityEntry, IntegrityManifest, SHA_256_LITERAL};
 
 /// Build a `LIMIT` diagnostic pointing at the integrity input size cap
@@ -129,6 +129,13 @@ pub fn parse_document(doc: &KdlDocument) -> Result<IntegrityManifest, Error> {
             integ.span(),
         ));
     }
+    if integ.ty().is_some() {
+        return Err(integrity_err_at(
+            "INTEGRITY_STRUCTURE_INVALID",
+            "integrity node must have no type annotation",
+            integ.span(),
+        ));
+    }
     // C-01: zero args, zero properties on the integrity node.
     if integ.args().next().is_some() {
         return Err(integrity_err_at(
@@ -167,6 +174,13 @@ pub fn parse_document(doc: &KdlDocument) -> Result<IntegrityManifest, Error> {
     for child in children.iter() {
         match child.name() {
             "algorithm" => {
+                if child.ty().is_some() {
+                    return Err(integrity_err_at(
+                        "INTEGRITY_STRUCTURE_INVALID",
+                        "algorithm node must have no type annotation",
+                        child.span(),
+                    ));
+                }
                 if algorithm.is_some() {
                     return Err(integrity_err_at(
                         "INTEGRITY_BAD_ALGORITHM",
@@ -226,6 +240,13 @@ pub fn parse_document(doc: &KdlDocument) -> Result<IntegrityManifest, Error> {
                 }
             }
             "resource" => {
+                if child.ty().is_some() {
+                    return Err(integrity_err_at(
+                        "INTEGRITY_STRUCTURE_INVALID",
+                        "resource node must have no type annotation",
+                        child.span(),
+                    ));
+                }
                 if child.children().is_some() {
                     return Err(integrity_err_at(
                         "INTEGRITY_STRUCTURE_INVALID",
@@ -324,7 +345,7 @@ pub fn parse_document(doc: &KdlDocument) -> Result<IntegrityManifest, Error> {
                 let digest = parse_hex64(hex_str).map_err(|e| {
                     // Re-stage any parse_hex64 error to point at the property span.
                     let mut d = e.diagnostic;
-                    d.span = span_to_kdl_opt(*hex_span);
+                    d.span = span_to_kdl(*hex_span);
                     Error { diagnostic: d }
                 })?;
 
@@ -397,7 +418,7 @@ fn unicode_to_error(violation: UnicodeViolation, span: elang_kdl::span::SourceSp
         ),
     };
     let mut d = elang_core::error::Diagnostic::new(code, Category::Unicode, message).with_stage(9);
-    if let Some(s) = span_to_kdl_opt(span) {
+    if let Some(s) = span_to_kdl(span) {
         d = d.with_span(s);
     }
     Error { diagnostic: d }
@@ -405,17 +426,6 @@ fn unicode_to_error(violation: UnicodeViolation, span: elang_kdl::span::SourceSp
 
 fn span_of(v: &KdlValue) -> elang_kdl::span::SourceSpan {
     v.span()
-}
-
-fn span_to_kdl_opt(span: elang_kdl::span::SourceSpan) -> Option<elang_core::error::KdlSpan> {
-    if span.is_invalid() {
-        return None;
-    }
-    Some(elang_core::error::KdlSpan {
-        line: span.start.line,
-        column: span.start.column,
-        length: span.len(),
-    })
 }
 
 #[cfg(test)]
@@ -491,6 +501,39 @@ integrity {
             assert_ne!(
                 e.diagnostic.code, "LIMIT_INTEGRITY_BYTES",
                 "input at exactly MAX_INTEGRITY_BYTES must not trip the cap"
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_type_annotations_on_integrity_nodes() {
+        for name in ["integrity", "algorithm", "resource"] {
+            let input = GOLDEN.replacen(name, &format!("(custom){name}"), 1);
+            let doc = kdl_parse(&input);
+            let root = doc.nodes().first().expect("integrity node");
+            let annotated = if name == "integrity" {
+                root
+            } else {
+                root.children()
+                    .expect("integrity block")
+                    .iter()
+                    .find(|node| node.name() == name)
+                    .expect("annotated child")
+            };
+            assert_eq!(annotated.ty(), Some("custom"));
+            let span = annotated.span();
+            let err = parse_document(&doc).expect_err("type annotations are outside the grammar");
+            assert_eq!(err.diagnostic.code, "INTEGRITY_STRUCTURE_INVALID", "{name}");
+            assert_eq!(err.diagnostic.category, Category::Integrity, "{name}");
+            assert_eq!(err.diagnostic.stage, Some(9), "{name}");
+            assert_eq!(
+                err.diagnostic.span,
+                Some(elang_core::error::KdlSpan {
+                    line: span.start.line,
+                    column: span.start.column,
+                    length: span.len(),
+                }),
+                "{name}"
             );
         }
     }

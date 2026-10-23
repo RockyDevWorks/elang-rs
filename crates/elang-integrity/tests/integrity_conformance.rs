@@ -1,8 +1,8 @@
-//! Integration tests for `elang-integrity` (T0705, partial T0710).
+//! Integration tests for `elang-integrity` (T0705, T0706–T0710).
 //!
 //! Exercises the public API as the reader SDK and package writer will:
-//! parse → validate → coverage check. Per-resource SHA-256 verification and
-//! the canonical writer land in the follow-up PRs (T0706–T0709).
+//! parse → validate → coverage check, per-resource SHA-256 verification,
+//! and canonical writing with byte-exact and round-trip checks.
 //!
 //! The unit tests in `src/parse.rs` and `src/manifest.rs` cover the grammar
 //! in isolation; this file covers the composed pipeline and the boundaries
@@ -362,8 +362,6 @@ fn canonical_writer_digest_matches_verify_one() {
     let mut hasher = Hasher::new();
     hasher.update(body);
     let digest = hasher.finalize();
-    let hex = elang_integrity::write::CANONICAL_GOLDEN; // borrow module path
-    let _ = hex; // (silence unused-import warning if any)
 
     // Build a 2-entry manifest (algorithm + 1 resource, plus mimetype/package.epf
     // placeholders that the writer will emit in sorted order).
