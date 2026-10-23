@@ -153,13 +153,13 @@ primary stage(s) at which it can fire.
 | `ELD_UNKNOWN_FIELD` | 12 | `frequency`/`distribution`/`description`/unknown child. |
 | `ELD_IPA_DUPLICATE` | 12 | Global IPA identifier collision (incl. tie-bar aliases). |
 
-### UNICODE (stage 12)
+### UNICODE (stages 9, 10, 12)
 
 | Code | Stage | Meaning |
 |---|---|---|
-| `UNICODE_NOT_NFC` | 12 | ELD string not NFC. |
-| `UNICODE_FORBIDDEN_CATEGORY` | 12 | Cc/Cf/Co/Cn character. |
-| `UNICODE_NONCHARACTER` | 12 | Unicode noncharacter. |
+| `UNICODE_NOT_NFC` | 9/10/12 | Schema-layer string not NFC (integrity manifest at 9, EPF at 10, ELD at 12). |
+| `UNICODE_FORBIDDEN_CATEGORY` | 9/10/12 | Cc/Cf/Co/Cn character. |
+| `UNICODE_NONCHARACTER` | 9/10/12 | Unicode noncharacter. |
 | `UNICODE_INVALID_SCALAR` | 12 | Surrogate / invalid scalar / invalid UTF-8. |
 
 ### IPA (stage 12)
@@ -202,6 +202,7 @@ primary stage(s) at which it can fire.
 | `LIMIT_NESTING_DEPTH` | KDL nesting > 64. |
 | `LIMIT_TOKEN_BYTES` | Encoded token > 1 MiB. |
 | `LIMIT_EPF_BYTES` | `package.epf` input > 1 MiB uncompressed. |
+| `LIMIT_INTEGRITY_BYTES` | `META-INF/integrity.kdl` input > 16 MiB uncompressed. |
 | `LIMIT_STRING_BYTES` | Decoded string > 1 MiB (or per-resource/archive cap). |
 | `LIMIT_NAME_BYTES` | Node/property name > 256 bytes. |
 | `LIMIT_ARGS` | > 256 args per node. |

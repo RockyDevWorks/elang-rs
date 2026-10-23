@@ -193,11 +193,11 @@
 
 ## Phase 7 — Integrity manifest and verification
 
-- [ ] **T0701 BLOCKER** Implement only after `META-INF/integrity.kdl` schema is frozen.
-- [ ] **T0702** Parse required manifest resource with KDL 2.0 and 16 MiB cap.
-- [ ] **T0703** Validate manifest entries, SHA-256 encoding and unknown/duplicate fields.
-- [ ] **T0704** Require coverage of every indexed resource **except integrity.kdl itself**.
-- [ ] **T0705** Reject entries for missing resources and missing hashes for indexed resources.
+- [x] **T0701 BLOCKER** Implement only after `META-INF/integrity.kdl` schema is frozen. _(Schema frozen; elang-integrity crate implements the reader side in Phase 7, this PR.)_
+- [x] **T0702** Parse required manifest resource with KDL 2.0 and 16 MiB cap.
+- [x] **T0703** Validate manifest entries, SHA-256 encoding and unknown/duplicate fields.
+- [x] **T0704** Require coverage of every indexed resource **except integrity.kdl itself**.
+- [x] **T0705** Reject entries for missing resources and missing hashes for indexed resources.
 - [ ] **T0706** Stream SHA-256 over exact uncompressed resource bytes.
 - [ ] **T0707** Compare digests in constant-time where appropriate and report resource-specific failures.
 - [ ] **T0708** Verify footer index hash separately from resource integrity hashes.

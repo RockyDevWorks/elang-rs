@@ -14,3 +14,9 @@ workspace = true
 [dependencies]
 elang-core.workspace = true
 elang-kdl.workspace = true
+# Required for NFC + forbidden-category enforcement on `resource` path args
+# (grammar §1: "KDL 2.0, strict UTF-8, enforced NFC"). The KDL parser is
+# syntax-only; the schema layer is responsible for NFC. `design.md` row for
+# `elang-integrity` is corrected to include `unicode` in this PR (it was an
+# oversight when the crate stub was created).
+elang-unicode.workspace = true
