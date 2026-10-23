@@ -256,6 +256,11 @@ impl<'a> Parser<'a> {
             ));
         }
 
+        // Node span start comes from the **peeked token's span**, not from
+        // the lexer's byte position: `parse_document` and the children
+        // loop both materialise one token of lookahead before handing off
+        // to `parse_node`, so `self.lexer.pos()` would already be past the
+        // node name and the span would start after it.
         let start = self.peek()?.span().start.byte as usize;
         let name_span = self.peek()?.span();
         self.budgets()
@@ -268,9 +273,16 @@ impl<'a> Parser<'a> {
             .map_err(|code| ParseError::at(code, name_span, "too many nodes in archive"))?;
 
         // Optional type annotation `(type)`.
+        //
+        // KDL 2.0 accepts **either** a bare identifier *or* a string inside
+        // the parens: `(u8)port 8080` and `("u8")port 8080` are both legal.
+        // A bare identifier is *not* a `KdlValue` (KDL 2.0 reserves bare
+        // identifiers for node/property names), so we must accept the token
+        // directly rather than routing through `parse_value`, which would
+        // reject it.
         let ty = if matches!(self.peek()?, Token::OpenParen(_)) {
-            let _ = self.bump()?;
-            let ty_value = self.parse_value()?;
+            let _ = self.bump()?; // `(`
+            let ty_token = self.bump()?;
             let close = self.bump()?;
             if !matches!(close, Token::CloseParen(_)) {
                 return Err(ParseError::at(
@@ -279,13 +291,16 @@ impl<'a> Parser<'a> {
                     "expected `)` to close type annotation",
                 ));
             }
-            let (span, lexeme) = match ty_value {
-                KdlValue::String { span, value, .. } => (span, value),
-                _ => {
+            let (span, lexeme) = match &ty_token {
+                Token::Ident(s, t) | Token::Str(s, t) | Token::RawStr(s, t) => (*s, t.clone()),
+                other => {
                     return Err(ParseError::at(
-                        ErrorCode::InvalidNumber,
-                        ty_value.span(),
-                        "type annotation must be a string",
+                        ErrorCode::UnexpectedByte,
+                        other.span(),
+                        format!(
+                            "type annotation must be an identifier or string, got {}",
+                            other.kind()
+                        ),
                     ));
                 }
             };
