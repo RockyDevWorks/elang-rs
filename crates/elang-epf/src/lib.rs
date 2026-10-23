@@ -13,7 +13,7 @@
 //!
 //! ## Entry points
 //!
-//! - [`parse`] / [`parse_with_budgets`] — parse + validate the EPF document
+//! - [`parse()`] / [`parse_with_budgets`] — parse + validate the EPF document
 //!   (constraints C-01..C-11).
 //! - [`manifest::resolve_phonemes`] — perform the cross-field C-12 check that
 //!   the declared phoneme resource exists in the archive index.

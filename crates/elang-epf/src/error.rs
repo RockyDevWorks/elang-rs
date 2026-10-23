@@ -93,10 +93,13 @@ pub(crate) fn from_core(err: Error) -> Error {
     use Category::*;
     let code = err.code();
     let mapped = match (err.category(), code) {
-        (EpfSchema, "EPF_IDENTIFIER_EMPTY"
+        (
+            EpfSchema,
+            "EPF_IDENTIFIER_EMPTY"
             | "EPF_IDENTIFIER_TOO_LONG"
             | "EPF_IDENTIFIER_BAD_URN"
-            | "EPF_IDENTIFIER_BAD_SLUG") => "EPF_BAD_URN",
+            | "EPF_IDENTIFIER_BAD_SLUG",
+        ) => "EPF_BAD_URN",
         (EpfSchema, "EPF_NAME_EMPTY" | "EPF_NAME_TOO_LONG" | "EPF_DESCRIPTION_TOO_LONG") => {
             "EPF_BAD_METADATA_FIELD"
         }

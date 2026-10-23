@@ -32,12 +32,23 @@ pub fn to_string(pkg: &model::EpfPackage) -> String {
     let mut out = String::with_capacity(256);
 
     // 1. Top-level order: epf, eld, language-version, metadata, manifest.
-    push_line(&mut out, 0, &format!("epf {}", quote(&pkg.epf_version().to_string())));
-    push_line(&mut out, 0, &format!("eld {}", quote(&pkg.eld_version().to_string())));
     push_line(
         &mut out,
         0,
-        &format!("language-version {}", quote(&pkg.language_version().to_string())),
+        &format!("epf {}", quote(&pkg.epf_version().to_string())),
+    );
+    push_line(
+        &mut out,
+        0,
+        &format!("eld {}", quote(&pkg.eld_version().to_string())),
+    );
+    push_line(
+        &mut out,
+        0,
+        &format!(
+            "language-version {}",
+            quote(&pkg.language_version().to_string())
+        ),
     );
 
     // 2. metadata block.

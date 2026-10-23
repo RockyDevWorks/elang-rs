@@ -104,15 +104,14 @@ fn validate_top_level(
         match node.name() {
             "epf" => assign_once(&mut epf_node, node, "EPF_DUPLICATE_NODE", "epf")?,
             "eld" => assign_once(&mut eld_node, node, "EPF_DUPLICATE_NODE", "eld")?,
-            "language-version" => {
-                assign_once(&mut lang_node, node, "EPF_DUPLICATE_NODE", "language-version")?
-            }
-            "metadata" => {
-                assign_once(&mut metadata_node, node, "EPF_DUPLICATE_NODE", "metadata")?
-            }
-            "manifest" => {
-                assign_once(&mut manifest_node, node, "EPF_DUPLICATE_NODE", "manifest")?
-            }
+            "language-version" => assign_once(
+                &mut lang_node,
+                node,
+                "EPF_DUPLICATE_NODE",
+                "language-version",
+            )?,
+            "metadata" => assign_once(&mut metadata_node, node, "EPF_DUPLICATE_NODE", "metadata")?,
+            "manifest" => assign_once(&mut manifest_node, node, "EPF_DUPLICATE_NODE", "manifest")?,
             _ => {
                 return Err(epf_err_at(
                     "EPF_UNKNOWN_NODE",
@@ -151,7 +150,10 @@ fn reject_type_annotation(node: &KdlNode) -> Result<(), Error> {
         // still precise enough to locate the offending construct.
         return Err(epf_err_at(
             "EPF_BAD_ARITY",
-            format!("node `{}` has an unexpected type annotation `({ty})`", node.name()),
+            format!(
+                "node `{}` has an unexpected type annotation `({ty})`",
+                node.name()
+            ),
             node.span(),
         ));
     }
@@ -249,9 +251,12 @@ fn validate_metadata(node: &KdlNode) -> Result<model::Metadata, Error> {
                 assign_once(&mut identifier, child, "EPF_DUPLICATE_NODE", "identifier")?
             }
             "name" => assign_once(&mut name_node, child, "EPF_DUPLICATE_NODE", "name")?,
-            "description" => {
-                assign_once(&mut description_node, child, "EPF_DUPLICATE_NODE", "description")?
-            }
+            "description" => assign_once(
+                &mut description_node,
+                child,
+                "EPF_DUPLICATE_NODE",
+                "description",
+            )?,
             other => {
                 return Err(epf_err_at(
                     "EPF_UNKNOWN_NODE",
@@ -308,9 +313,7 @@ fn validate_manifest(node: &KdlNode) -> Result<String, Error> {
     for child in children.iter() {
         reject_type_annotation(child)?;
         match child.name() {
-            "phonemes" => {
-                assign_once(&mut phonemes, child, "EPF_MANIFEST_INVALID", "phonemes")?
-            }
+            "phonemes" => assign_once(&mut phonemes, child, "EPF_MANIFEST_INVALID", "phonemes")?,
             // `modules` is the canonical banned entry (registry row); any
             // other unknown child is rejected with the same code so a typo
             // can't slip through as a different diagnostic.
@@ -545,7 +548,10 @@ fn unicode_to_error(v: UnicodeViolation) -> Error {
             u32::from(scalar)
         ),
         UnicodeViolation::Noncharacter { scalar } => {
-            format!("string contains Unicode noncharacter U+{:04X}", u32::from(scalar))
+            format!(
+                "string contains Unicode noncharacter U+{:04X}",
+                u32::from(scalar)
+            )
         }
     };
     Error::new(code, Category::Unicode, message)
@@ -716,10 +722,9 @@ manifest {
         // Drop `manifest` entirely.
         let mut f = Fixture::canonical();
         f.description = None;
-        let src = f.render().replace(
-            "manifest { phonemes \"Linguistics/phonemes.eld\" }\n",
-            "",
-        );
+        let src = f
+            .render()
+            .replace("manifest { phonemes \"Linguistics/phonemes.eld\" }\n", "");
         assert_eq!(parse_err(&src).code(), "EPF_MISSING_NODE");
     }
 

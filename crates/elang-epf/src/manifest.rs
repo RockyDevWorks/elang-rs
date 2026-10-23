@@ -3,7 +3,7 @@
 //! Constraint **C-12** of `specs/grammar/epf-0.1.0.md` splits into two halves:
 //!
 //! * *Syntactic* — the path is a safe package-relative resource path ending in
-//!   `.eld`. That is checked during EPF parse (see [`crate::parse`]).
+//!   `.eld`. That is checked during EPF parse (see [`crate::parse()`]).
 //! * *Semantic* — the path **exists** in the archive index already parsed at
 //!   reader stage 5. That check needs external data, so it lives here and is
 //!   performed by the caller once both the EPF and the index are available.
@@ -68,10 +68,7 @@ impl<T: IndexLookup> IndexLookup for [T] {
 /// On failure the diagnostic is `EPF_MANIFEST_PATH_NOT_INDEXED` and names the
 /// path that was looked up, so a consumer can report exactly which declaration
 /// is dangling.
-pub fn resolve_phonemes<L: IndexLookup + ?Sized>(
-    path: &str,
-    index: &L,
-) -> Result<(), Error> {
+pub fn resolve_phonemes<L: IndexLookup + ?Sized>(path: &str, index: &L) -> Result<(), Error> {
     if index.contains(path) {
         Ok(())
     } else {

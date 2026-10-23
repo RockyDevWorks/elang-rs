@@ -126,11 +126,7 @@ fn eld_extension_gate() {
 // ---- boundary cases ------------------------------------------------------
 
 /// A package builder for probing the byte-length boundaries of each field.
-fn package_with(
-    identifier: &str,
-    name: &str,
-    description: Option<&str>,
-) -> String {
+fn package_with(identifier: &str, name: &str, description: Option<&str>) -> String {
     let desc_line = description.map_or(String::new(), |d| format!("\n    description {d:?}"));
     format!(
         "epf \"0.1.0\"\n\
@@ -146,7 +142,10 @@ fn name_at_and_over_the_256_byte_boundary() {
     // 256 bytes exactly → OK; 257 → EPF_BAD_METADATA_FIELD.
     let id = "urn:elang:language:r:n:1.0.0";
     let ok = package_with(id, &"x".repeat(256), None);
-    assert!(parse(ok.as_bytes()).is_ok(), "256-byte name is at the limit");
+    assert!(
+        parse(ok.as_bytes()).is_ok(),
+        "256-byte name is at the limit"
+    );
     let over = package_with(id, &"x".repeat(257), None);
     assert_eq!(
         parse(over.as_bytes()).expect_err("257 exceeds").code(),
@@ -256,7 +255,11 @@ fn modules_declaration_is_rejected() {
 
 #[test]
 fn duplicate_every_top_level_node_is_rejected() {
-    for dup in ["epf \"0.1.0\"", "eld \"0.1.0\"", "language-version \"1.0.0\""] {
+    for dup in [
+        "epf \"0.1.0\"",
+        "eld \"0.1.0\"",
+        "language-version \"1.0.0\"",
+    ] {
         let src = format!(
             "epf \"0.1.0\"\neld \"0.1.0\"\nlanguage-version \"1.0.0\"\n{dup}\n\
              metadata {{\n    identifier \"urn:elang:language:r:n:1.0.0\"\n    name \"N\"\n}}\n\
