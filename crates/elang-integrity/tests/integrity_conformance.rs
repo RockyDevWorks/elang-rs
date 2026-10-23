@@ -22,7 +22,10 @@
 use std::collections::BTreeSet;
 
 use elang_core::ids::ResourcePath;
-use elang_integrity::{parse, verify_coverage, verify_one, Hasher, IntegrityEntry};
+use elang_integrity::{
+    parse, verify_coverage, verify_one, write::canonical_bytes, write::CANONICAL_GOLDEN, Hasher,
+    IntegrityEntry,
+};
 
 /// The canonical golden manifest. Byte-for-byte stable; matches the source
 /// shape that the canonical writer (T0709) must reproduce.
@@ -323,4 +326,69 @@ integrity {
 ";
     let err = parse(input.as_bytes()).unwrap_err();
     assert_eq!(err.diagnostic.code, "INTEGRITY_BAD_ALGORITHM");
+}
+
+// ---- T0709: canonical writer end-to-end ----------------------------------
+
+#[test]
+fn canonical_writer_emits_golden_vector() {
+    // Round-trip the golden fixture through the canonical writer and
+    // assert byte-for-byte equality with the locked fixture (T0709).
+    let m = parse(GOLDEN.as_bytes()).expect("golden must parse");
+    let bytes = canonical_bytes(&m);
+    assert_eq!(
+        bytes, CANONICAL_GOLDEN,
+        "writer must reproduce the canonical vector byte-for-byte"
+    );
+}
+
+#[test]
+fn canonical_writer_roundtrip_re_parsing() {
+    // write → parse must produce the same manifest (idempotence of the
+    // canonical profile, REQ-FRAME-010).
+    let m1 = parse(GOLDEN.as_bytes()).expect("golden must parse");
+    let bytes = canonical_bytes(&m1);
+    let m2 = parse(&bytes).expect("written bytes must re-parse");
+    assert_eq!(m1, m2);
+}
+
+#[test]
+fn canonical_writer_digest_matches_verify_one() {
+    // End-to-end: compute the SHA-256 of an arbitrary resource body, build
+    // a manifest, write it, re-parse, then verify_one with the computed
+    // digest. Confirms the writer + parser + verify chain is internally
+    // consistent.
+    let body = b"some resource content";
+    let mut hasher = Hasher::new();
+    hasher.update(body);
+    let digest = hasher.finalize();
+    let hex = elang_integrity::write::CANONICAL_GOLDEN; // borrow module path
+    let _ = hex; // (silence unused-import warning if any)
+
+    // Build a 2-entry manifest (algorithm + 1 resource, plus mimetype/package.epf
+    // placeholders that the writer will emit in sorted order).
+    let input = format!(
+        "integrity {{\n    algorithm \"sha-256\"\n    resource \"mimetype\" sha256=\"{hex_digest}\"\n    resource \"Header/format.version\" sha256=\"{hex_digest}\"\n}}\n",
+        hex_digest = digest_hex(&digest),
+    );
+    let manifest = parse(input.as_bytes()).expect("must parse");
+    let bytes = canonical_bytes(&manifest);
+    let reparsed = parse(&bytes).expect("written bytes must re-parse");
+
+    // The re-parsed manifest's entry for "Header/format.version" must
+    // verify against the digest we computed above.
+    let entry = reparsed
+        .resources
+        .values()
+        .find(|e| e.path.as_str() == "Header/format.version")
+        .expect("entry present");
+    verify_one(entry, &digest).expect("declared digest matches computed");
+}
+
+fn digest_hex(d: &[u8; 32]) -> String {
+    let mut s = String::with_capacity(64);
+    for b in d {
+        let _ = std::fmt::Write::write_fmt(&mut s, format_args!("{b:02x}"));
+    }
+    s
 }

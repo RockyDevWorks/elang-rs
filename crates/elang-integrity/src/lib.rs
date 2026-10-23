@@ -25,14 +25,15 @@
 //! - [`verify_one`] — per-resource constant-time digest comparison; emits
 //!   [`INTEGRITY_HASH_MISMATCH`] at stage 11 with the resource path attached
 //!   on mismatch.
+//! - [`canonical_bytes`] — emit the canonical byte sequence per ADR 0004
+//!   §"Canonical serialization". [`CANONICAL_GOLDEN`] is the byte-for-byte
+//!   fixture; [`parse`] + [`canonical_bytes`] form a stable roundtrip.
 //!
-//! ### Deferred to the writer-and-docs PR (T0709, T0711)
+//! ### Deferred
 //!
-//! - [`canonical_bytes`](crate::write) — T0709 canonical manifest writer
-//!   (lock-step with the grammar's serialization rules, ADR 0004 §"Canonical
-//!   serialization").
-//! - The "SHA-256 is not a publisher signature" doc page — T0711,
-//!   REQ-INTEGRITY-008.
+//! None — all of Phase 7 (T0701..T0711, REQ-INTEGRITY-001..008) lands in
+//! this crate. T1618 (release-notes language about integrity vs publisher
+//! authenticity) is Phase 16 and is owned by the release-management work.
 //!
 //! ## Error model
 //!
@@ -51,7 +52,16 @@
 //! `.eld` files (that is `elang-eld`); it does not own the container header,
 //! footer, frame I/O or Zstd reader (that is `elang-container`); and it does
 //! **not** verify publisher authenticity — SHA-256 resource hashes prove
-//! integrity, not identity (steering §0.8, REQ-INTEGRITY-008).
+//! integrity, not identity.
+//!
+//! **SHA-256 integrity is not a publisher signature.** A matching digest
+//! proves the package's contents are intact and unaltered; it does **not**
+//! identify who produced the package. URN-like language identifiers do not
+//! prove ownership; ELANG v0.1.0 defines no publisher signatures; a verified
+//! hash is not a trust decision about the publisher. This is the explicit
+//! non-goal of REQ-INTEGRITY-008 / T0711; see
+//! [`docs/public/format/integrity.md`](../../../docs/public/format/integrity.md#integrity-is-not-authorship)
+//! for the user-facing treatment.
 //!
 //! Implemented in Phase 7 (Issue #17). See `specs/grammar/integrity-0.1.0.md`,
 //! `specs/grammar/integrity-0.1.0.abnf` and
@@ -65,6 +75,7 @@ pub mod error;
 pub mod manifest;
 pub mod parse;
 pub mod verify;
+pub mod write;
 
 pub use elang_core::ids::ResourcePath;
 
@@ -73,3 +84,4 @@ pub use crate::manifest::{
 };
 pub use crate::parse::{parse, parse_document, parse_with_budgets};
 pub use crate::verify::{verify_one, Hasher};
+pub use crate::write::{canonical_bytes, CANONICAL_GOLDEN};

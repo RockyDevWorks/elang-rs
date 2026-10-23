@@ -201,9 +201,9 @@
 - [x] **T0706** Stream SHA-256 over exact uncompressed resource bytes. _(Implemented via `Hasher` in `elang-integrity`; container stage 11 drives `update()` per decompressed chunk.)_
 - [x] **T0707** Compare digests in constant-time where appropriate and report resource-specific failures. _(Constant-time `ct_eq_32` XOR-fold over the 32 digest bytes; `verify_one` emits `INTEGRITY_HASH_MISMATCH` at stage 11 with `resource_path` attached.)_
 - [x] **T0708** Verify footer index hash separately from resource integrity hashes. _(Structural: `IntegrityEntry` carries no footer slot; C-05 rejects any `footer_hash` property. See `verify.rs` module docs and `parse_rejects_footer_hash_property_on_resource` conformance test.)_
-- [ ] **T0709** Implement canonical integrity manifest writer from finalized grammar.
+- [x] **T0709** Implement canonical integrity manifest writer from finalized grammar. _(Implemented via `canonical_bytes` in `elang-integrity::write`; the `CANONICAL_GOLDEN` byte fixture is the byte-for-byte reference. Roundtrip `parse → write → parse` is identity.)_
 - [x] **T0710** Test byte mutation, hash mismatch, omitted/duplicate/extra entries and resource swaps. _(Streaming/mutation/swap/empty-body tests in `tests/integrity_conformance.rs`; coverage + duplicate tests already in `parse.rs`.)_
-- [ ] **T0711** Document that SHA-256 integrity is **not** a publisher signature.
+- [x] **T0711** Document that SHA-256 integrity is **not** a publisher signature. _(Already covered user-facing in `docs/public/format/integrity.md` "Integrity is not authorship"; cross-link added from `elang-integrity` crate-level docs to the doc anchor. REQ-INTEGRITY-008 satisfied.)_
 
 **Acceptance:** verify mode checks every resource against integrity inventory; self-hash cycles excluded by rule.
 
