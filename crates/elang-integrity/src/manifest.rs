@@ -39,6 +39,14 @@ use crate::error::integrity_err;
 /// defined in v0.1.0").
 const SHA256_LEN: usize = 32;
 
+/// The KDL argument string for [`Algorithm::Sha256`].
+///
+/// Locked by [ADR 0004](https://github.com/RockyDevWorks/elang-rs/blob/main/docs/decisions/0004-integrity-manifest-grammar.md):
+/// "Only SHA-256 is defined in v0.1.0". Single source of truth so the
+/// literal cannot drift between [`Algorithm::as_str`], the parse layer's
+/// `match` arm, and the future canonical writer (T0709).
+pub const SHA_256_LITERAL: &str = "sha-256";
+
 /// The hash algorithm declared by the manifest's `algorithm` node.
 ///
 /// Only SHA-256 is defined in v0.1.0 ([ADR 0004]); any other value is
@@ -47,7 +55,8 @@ const SHA256_LEN: usize = 32;
 /// future versions add algorithms.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Algorithm {
-    /// The only variant in v0.1.0. Maps to the literal `"sha-256"` arg.
+    /// The only variant in v0.1.0. Maps to the literal
+    /// [`SHA_256_LITERAL`] arg.
     Sha256,
 }
 
@@ -56,7 +65,7 @@ impl Algorithm {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Algorithm::Sha256 => "sha-256",
+            Algorithm::Sha256 => SHA_256_LITERAL,
         }
     }
 }

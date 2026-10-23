@@ -30,7 +30,7 @@ use elang_kdl::KdlValue;
 use elang_unicode::UnicodeViolation;
 
 use crate::error::{from_kdl, integrity_err, integrity_err_at};
-use crate::manifest::{parse_hex64, Algorithm, IntegrityEntry, IntegrityManifest};
+use crate::manifest::{parse_hex64, Algorithm, IntegrityEntry, IntegrityManifest, SHA_256_LITERAL};
 
 /// Build a `LIMIT` diagnostic pointing at the integrity input size cap
 /// (`Category::Limit` with the stage-9 reader pipeline tag).
@@ -213,13 +213,13 @@ pub fn parse_document(doc: &KdlDocument) -> Result<IntegrityManifest, Error> {
                     ));
                 };
                 match value.as_ref() {
-                    "sha-256" => {
+                    SHA_256_LITERAL => {
                         algorithm = Some((Algorithm::Sha256, child.span()));
                     }
                     other => {
                         return Err(integrity_err_at(
                             "INTEGRITY_BAD_ALGORITHM",
-                            format!("algorithm must be \"sha-256\", got \"{other}\""),
+                            format!("algorithm must be \"{SHA_256_LITERAL}\", got \"{other}\""),
                             child.span(),
                         ));
                     }
@@ -685,6 +685,12 @@ integrity {
         let err = parse_document(&doc).unwrap_err();
         assert_eq!(err.diagnostic.category, Category::ResourcePath);
         assert_eq!(err.diagnostic.code, "PATH_ABSOLUTE");
+        // PATH_* codes are constructed stage-less by `ResourcePath::new`;
+        // every caller re-stamps the pipeline position. Stage 9 here is the
+        // integrity manifest validator — a future refactor that drops the
+        // re-stage trips this assertion instead of silently changing the
+        // diagnostic stream.
+        assert_eq!(err.diagnostic.stage, Some(9));
     }
 
     // ---- C-05: duplicates and unknown constructs -----------------------
