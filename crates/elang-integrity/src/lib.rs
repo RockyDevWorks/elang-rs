@@ -8,7 +8,7 @@
 //!
 //! ### Done in this crate
 //!
-//! - [`parse`] / [`parse_with_budgets`] — parse the manifest under the 16 MiB
+//! - [`parse()`] / [`parse_with_budgets`] — parse the manifest under the 16 MiB
 //!   cap (`MAX_INTEGRITY_BYTES`) using KDL 2.0 with parser budgets.
 //! - [`parse_document`] — enforce constraints C-01..C-05 from
 //!   [`specs/grammar/integrity-0.1.0.md`](../../../specs/grammar/integrity-0.1.0.md):
@@ -23,11 +23,11 @@
 //! - [`Hasher`] — streaming SHA-256 accumulator fed by the container's
 //!   decompressor (stage 11).
 //! - [`verify_one`] — per-resource constant-time digest comparison; emits
-//!   [`INTEGRITY_HASH_MISMATCH`] at stage 11 with the resource path attached
+//!   `INTEGRITY_HASH_MISMATCH` at stage 11 with the resource path attached
 //!   on mismatch.
 //! - [`canonical_bytes`] — emit the canonical byte sequence per ADR 0004
 //!   §"Canonical serialization". [`CANONICAL_GOLDEN`] is the byte-for-byte
-//!   fixture; [`parse`] + [`canonical_bytes`] form a stable roundtrip.
+//!   fixture; [`parse()`] + [`canonical_bytes`] form a stable roundtrip.
 //!
 //! ### Deferred
 //!
@@ -40,7 +40,7 @@
 //! Every diagnostic carries a code from `specs/registry/error-codes.{md,json}`.
 //! Stage-9 codes (`INTEGRITY_STRUCTURE_INVALID`, `INTEGRITY_BAD_ALGORITHM`,
 //! `INTEGRITY_BAD_HEX`, `INTEGRITY_MISSING_ENTRY`, `INTEGRITY_EXTRA_ENTRY`,
-//! `INTEGRITY_DUPLICATE_ENTRY`) are emitted from [`parse`] /
+//! `INTEGRITY_DUPLICATE_ENTRY`) are emitted from [`parse()`] /
 //! [`parse_document`]. Stage-11 codes (`INTEGRITY_HASH_MISMATCH`) are emitted
 //! from [`verify_one`]. KDL parser errors propagate with their own category.
 //! NFC / forbidden-category violations on `resource` path args surface with

@@ -13,7 +13,7 @@
 //!   [`Hasher::update`] on each chunk of uncompressed bytes as the
 //!   decompressor emits it.
 //! - [`verify_one`] — constant-time compare of a computed digest against a
-//!   manifest entry's declared digest; emits [`INTEGRITY_HASH_MISMATCH`] at
+//!   manifest entry's declared digest; emits `INTEGRITY_HASH_MISMATCH` at
 //!   stage 11 with the offending resource's path attached on mismatch.
 //!
 //! ## Constant-time discipline (T0707)
@@ -149,7 +149,7 @@ pub fn ct_eq_32(a: &[u8; SHA256_LEN], b: &[u8; SHA256_LEN]) -> bool {
 ///
 /// # Errors
 ///
-/// - [`INTEGRITY_HASH_MISMATCH`] (stage 11) when `computed != expected`,
+/// - `INTEGRITY_HASH_MISMATCH` (stage 11) when `computed != expected`,
 ///   with `resource_path` set to `entry.path`.
 pub fn verify_one(entry: &IntegrityEntry, computed: &[u8; SHA256_LEN]) -> Result<(), Error> {
     if ct_eq_32(computed, &entry.digest) {

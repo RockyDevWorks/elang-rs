@@ -72,7 +72,7 @@ integrity {
 ///
 /// # Non-goals
 ///
-/// The writer does not validate the manifest (validation is [`crate::parse`]'s
+/// The writer does not validate the manifest (validation is [`mod@crate::parse`]'s
 /// job) and does not check coverage against an index (that is
 /// [`crate::manifest::verify_coverage`]'s job). It emits whatever entries
 /// the caller has assembled, in the canonical order.

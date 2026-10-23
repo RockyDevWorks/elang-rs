@@ -7,7 +7,7 @@
 //!
 //! - KDL parser errors, which retain their own category (`LIMIT` for budget
 //!   failures, `CONTAINER` for `KDL_INVALID_UTF8`, etc.) and are routed
-//!   through [`from_kdl`].
+//!   through `from_kdl`.
 //! - `ResourcePath` construction errors, which carry the `RESOURCE_PATH`
 //!   category and propagate unchanged.
 //! - NFC / forbidden-category violations on string values (grammar §1), which

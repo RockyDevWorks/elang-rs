@@ -17,14 +17,14 @@
 //! [`verify_coverage`] takes the index's set of paths, the manifest's self
 //! path, and the parsed manifest; it rejects:
 //!
-//! - An entry for `self_path` itself ([`INTEGRITY_EXTRA_ENTRY`]).
+//! - An entry for `self_path` itself (`INTEGRITY_EXTRA_ENTRY`).
 //! - A missing entry for an indexed resource that is not the self
-//!   ([`INTEGRITY_MISSING_ENTRY`]).
+//!   (`INTEGRITY_MISSING_ENTRY`).
 //! - An entry for any path that is not in the index
-//!   ([`INTEGRITY_EXTRA_ENTRY`]).
+//!   (`INTEGRITY_EXTRA_ENTRY`).
 //!
 //! Duplicate paths are detected during parse and surface as
-//! [`INTEGRITY_DUPLICATE_ENTRY`] before this module is ever called.
+//! `INTEGRITY_DUPLICATE_ENTRY` before this module is ever called.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -51,7 +51,7 @@ pub const SHA_256_LITERAL: &str = "sha-256";
 /// The hash algorithm declared by the manifest's `algorithm` node.
 ///
 /// Only SHA-256 is defined in v0.1.0 ([ADR 0004]); any other value is
-/// rejected at parse time with [`INTEGRITY_BAD_ALGORITHM`]. The enum is
+/// rejected at parse time with `INTEGRITY_BAD_ALGORITHM`. The enum is
 /// defined now so the verify path can switch on it without an `as` cast when
 /// future versions add algorithms.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -90,7 +90,7 @@ impl IntegrityEntry {
     ///
     /// # Errors
     ///
-    /// Returns [`INTEGRITY_BAD_HEX`] if `hex` is not exactly 64 bytes of
+    /// Returns `INTEGRITY_BAD_HEX` if `hex` is not exactly 64 bytes of
     /// `[0-9a-f]`. The path is constructed via [`ResourcePath::new`], which
     /// rejects empty, absolute, backslash, NUL, too-long and bad-segment
     /// paths with the `RESOURCE_PATH` category.
@@ -184,9 +184,9 @@ fn hex_nibble(b: u8) -> Result<u8, elang_core::error::Error> {
 ///
 /// # Errors
 ///
-/// - [`INTEGRITY_MISSING_ENTRY`] if an indexed resource other than
+/// - `INTEGRITY_MISSING_ENTRY` if an indexed resource other than
 ///   `self_path` has no manifest entry.
-/// - [`INTEGRITY_EXTRA_ENTRY`] if the manifest has an entry for `self_path`
+/// - `INTEGRITY_EXTRA_ENTRY` if the manifest has an entry for `self_path`
 ///   itself, or for any path not in `indexed_paths`.
 pub fn verify_coverage(
     manifest: &IntegrityManifest,
