@@ -1,8 +1,60 @@
 //! # elang-eld
 //!
-//! ELD phoneme-inventory v0.1.0: group/root/allophone structural schema, IPA
-//! identifier parsing, the `when` condition language with its evaluator, and the
-//! byte-deterministic canonical ELD serializer.
+//! ELD phoneme-inventory v0.1.0 Phase 9: structural schema (groups, roots,
+//! allophones, romanization) validation.
 //!
-//! Implemented across Phases 8 (IPA), 9 (structure), 10 (conditions) and 11
-//! (canonical writer).
+//! This crate implements constraints **C-01..C-16** from
+//! `specs/grammar/eld-0.1.0.md`, covering:
+//!
+//! * Document and group structure (C-01..C-05),
+//! * Root phoneme shape and cardinality (C-06..C-08),
+//! * Allophone shape and cardinality (C-10..C-12),
+//! * Romanization syntax and uniqueness (C-13..C-15),
+//! * Romanization inheritance (C-16),
+//! * Global IPA uniqueness including tie-bar aliases (C-09).
+//!
+//! ## What Phase 9 does NOT do
+//!
+//! * The `when` condition language (C-20..C-27) — **Phase 10**.
+//! * Canonical serialization (steering §9) — **Phase 11**.
+//!
+//! ## Phase 10 handoff
+//!
+//! Phase 9 carries `when` blocks **verbatim** in
+//! [`crate::model::WhenBlock`]. See that type's documentation for the
+//! handoff contract.
+//!
+//! ## IPA validity
+//!
+//! The Phase 8 IPA validator (`elang_repertoire::ipa::validate`) is the sole
+//! authority for IPA validity, tie-bar normalisation and comparison keys.
+//!
+//! ## KDL input constraint
+//!
+//! The `elang-kdl` parser (Phase 5) implements a KDL-1.0-shaped node grammar
+//! in which a node is terminated by a newline, `}` or EOF. A bare identifier
+//! that follows a node on the same line is **not** recognised as a sibling
+//! node: the parser consumes it as a string argument of the preceding node, so
+//! `roman "ph" when { … }` parses as a single `roman` node carrying the
+//! arguments `"ph"` and `"when"`. Every ELD document must therefore place at
+//! most one node per line, matching the canonical ELD serialisation profile
+//! (steering §9, Phase 11). This is a Phase 5 conformance gap, not a Phase 9
+//! defect; it may be lifted when the KDL parser is updated to KDL 2.0. The
+//! absorbed argument is not silently accepted — the ELD validator rejects the
+//! node's argument count — but the diagnostic names the shape error rather
+//! than the misplaced sibling.
+//!
+//! Implemented in Phase 9 (Issue #19).
+
+#![deny(unsafe_code)]
+#![warn(missing_docs)]
+
+pub mod error;
+pub mod model;
+pub mod parse;
+
+pub use crate::model::{
+    EldAllophone, EldDocument, EldGroup, EldGroupKind, EldRootPhoneme, WhenBlock,
+};
+pub use crate::parse::{parse, parse_document};
+pub use elang_core::error::{Category, Error};
