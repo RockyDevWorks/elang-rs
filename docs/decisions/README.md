@@ -39,3 +39,4 @@ Copy [`0000-template.md`](0000-template.md) to a new numbered file.
 | [0008](0008-ipa-repertoire-v1.md) | ELANG IPA Repertoire v1 — source, generation and digest | Approved |
 | [0009](0009-residual-eld-canonicalization-edge-cases.md) | Residual ELD canonical serialization edge cases | Approved |
 | [0010](0010-kdl-parser-hand-roll.md) | Hand-rolled KDL 2.0 parser for `elang-kdl` | Approved |
+| [0011](0011-normative-manifest-and-spec-checksum.md) | Normative artifact manifest and pinned spec checksum (OA-17 mechanism) | Approved |

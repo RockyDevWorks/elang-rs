@@ -1,19 +1,19 @@
 # Open normative artifacts (release blockers)
 
 > Governed by [ADR 0003](decisions/0003-open-normative-artifacts.md) and
-> REQ-GOV-OPENART-001. These artifacts are **not yet ratified**. Code MUST NOT
-> embed guessed inventories, placeholder/fake hashes or inferred grammars as if
-> they were normative (steering §0.3, §12).
+> REQ-GOV-OPENART-001. Artifacts whose row status is still **Open** are **not
+> yet ratified**. Code MUST NOT embed guessed inventories, placeholder/fake
+> hashes or inferred grammars as if they were normative (steering §0.3, §12).
 >
 > Each row should become a `blocker`-labelled issue using the
 > [normative-artifact issue template](../.github/ISSUE_TEMPLATE/normative_artifact.md).
 
 | # | Artifact | Steering | Blocks | Tasks | Status |
 |---|---|---|---|---|---|
-| OA-1 | Exact approved IPA allowlist (base symbols, combining diacritics, spacing modifiers) for the pinned 2026 IPA chart, with classification and canonical-decomposition handling | §7, §12.1 | IPA validator, full ELD validation, conformance | T0106–T0110 | **Generated & verified** — ADR 0008; `specs/schema/ipa-v1.json` (107/27/9) from UNITIPA 2020; base set cross-checked. Freeze pending Unicode 18.0 + 2nd review. |
+| OA-1 | Exact approved IPA allowlist (base symbols, combining diacritics, spacing modifiers) for the pinned 2026 IPA chart, with classification and canonical-decomposition handling | §7, §12.1 | IPA validator, full ELD validation, conformance | T0106–T0110 | **Ratified** — ADR 0008; `specs/schema/ipa-v1.json` (107/27/9) from UNITIPA 2020; base set cross-checked by `chart_crosscheck.rs`; diacritic + spacing-modifier inventories signed off by the repository owner 2026-10-23 against the Diacritics and (non-prosodic) Suprasegmentals blocks of the UNITIPA chart (`SOURCES.md` §7). |
 | OA-2 | Ambiguous-symbol resolutions (standalone base vs modifier vs excluded prosody/tone) | §7, §12.1 | OA-1 finalization | T0109 | **Resolved** — prosody excluded (see `SOURCES.md` §6); script-g `ɡ` U+0261 chosen over ASCII `g`. |
-| OA-3 | Strict JSON Schema for the repertoire (version metadata + three inventories) | §7, §12.5 | repertoire loader freeze | T0111 | **Ratified** — [`specs/schema/elang-ipa-repertoire-v1.schema.json`](../specs/schema/elang-ipa-repertoire-v1.schema.json) (shape only; inventories still OA-1/OA-4) |
-| OA-4 | Sorted, deduplicated `ipa-v1.json` generated from OA-1 | §7, §12.1 | OA-5 | T0113, T0114 | **Generated** — ADR 0008; `specs/schema/ipa-v1.json`; reproducible via `gen_repertoire`. Independent review of base set automated; 2nd review of diacritics/modifiers pending. |
+| OA-3 | Strict JSON Schema for the repertoire (version metadata + three inventories) | §7, §12.5 | repertoire loader freeze | T0111 | **Ratified** — [`specs/schema/elang-ipa-repertoire-v1.schema.json`](../specs/schema/elang-ipa-repertoire-v1.schema.json) (shape and now-populated inventories; OA-1/OA-4 both Ratified) |
+| OA-4 | Sorted, deduplicated `ipa-v1.json` generated from OA-1 | §7, §12.1 | OA-5 | T0113, T0114 | **Ratified** — ADR 0008; `specs/schema/ipa-v1.json` (107 base / 27 combining / 9 spacing); reproducible via `gen_repertoire`; base set cross-checked by `chart_crosscheck.rs`; second human review of diacritics/modifiers completed 2026-10-23 (`SOURCES.md` §7). |
 | OA-5 | Canonical (RFC 8785 JCS) SHA-256 digest of OA-4 | §7, §12.2 | IPA verification constant | T0115 | **Computed & pinned** — `190aae7b…64aa` (`PINNED_JCS_SHA256`), asserted by test; method in [`json-encoding-policy.md`](../specs/schema/json-encoding-policy.md). |
 | OA-6 | Complete `META-INF/integrity.kdl` normative grammar + canonical serialization + self-exclusion rule | §2, §12.3 | Phase 7 integrity reader/writer, verify, pack | T0103, T0105 | **Ratified** — ADR 0004, [`specs/grammar/integrity-0.1.0.md`](../specs/grammar/integrity-0.1.0.md) |
 | OA-7 | Canonical EPF KDL serializer profile (whitespace, string encoding, field order, comments, newline) | §5, §12.4 | EPF canonical writer | T0104 | **Ratified** — ADR 0005, [`specs/canonical/epf-canonical-serialization.md`](../specs/canonical/epf-canonical-serialization.md) |
@@ -26,7 +26,7 @@
 | OA-14 | Canonical ELD golden files + SHA-256 | §9 | canonical writer conformance | T1121 | Open |
 | OA-15 | Policy for extra indexed resources / manifest coverage in v0.1.0 (no invented modules) | §2 | REQ-PKG-005 | T0121 | **Ratified** — ADR 0006, [`specs/registry/resource-policy-v0.1.0.md`](../specs/registry/resource-policy-v0.1.0.md) |
 | OA-16 | Residual KDL canonicalization edge cases ratified as ADRs | §12.4 | canonical serialization freeze | T0122 | **Ratified** — EPF/integrity profiles via ADR 0004/0005; residual ELD canonical edge cases (ordering byte-view, condition-key byte-view, escaping set, bare/block emission, layout) via [ADR 0009](decisions/0009-residual-eld-canonicalization-edge-cases.md) |
-| OA-17 | Frozen reviewed schema/repertoire versions + spec checksum/release tag | §12 | conformance freeze / v0.1.0 | T0123 | Open |
+| OA-17 | Frozen reviewed schema/repertoire versions + spec checksum/release tag | §12 | conformance freeze / v0.1.0 | T0123 | **Mechanism landed; freeze/tag blocked** — the freeze *mechanism* (generated normative manifest + RFC 8785 JCS spec checksum + verification test) shipped with ADR 0011 and `specs/registry/normative-manifest.json`; the pinned `PINNED_SPEC_CHECKSUM` covers the currently ratified OA-1…OA-16 corpus (excluding OA-14). The **freeze itself and the v0.1.0 release tag remain blocked on OA-14** (T1121, Issue #21) and must not be declared here. ADR 0011 requires the manifest and checksum to be regenerated during final T0123 after OA-14 lands. |
 
 ## Rules of engagement
 
@@ -35,17 +35,22 @@
   independently reviewed against that source and has test vectors. Decision-only
   artifacts (grammars, canonical profiles, policies) are ratified by an ADR
   and/or a published spec file.
-- **Ratified so far (2026-10-23):** OA-3 (schema shape), OA-6 (integrity grammar,
-  ADR 0004), OA-7 (canonical EPF, ADR 0005), OA-8 (EPF grammar), OA-9 (ELD
-  grammar), OA-10 (error registry), OA-11 (binary vectors, byte-exact), OA-12
-  (tie-bar vectors, 12 published cases), OA-13 (Unicode 18.0 data), OA-15
-  (resource policy, ADR 0006), OA-16 (residual ELD canonical edge cases, ADR 0009).
-- **IPA inventory (OA-1/OA-2/OA-4/OA-5) is generated, verified and pinned**
-  (ADR 0008): `specs/schema/ipa-v1.json` (107 base / 27 combining / 9 spacing)
-  from the UNITIPA 2020 chart, with the real JCS digest pinned and the base set
-  cross-checked against an independent chart transcription. Unicode 18.0 data
-  is now ratified (OA-13). It is **not yet frozen** for release pending a second
-  human review of the diacritic/modifier inventories.
+- **Ratified so far (2026-10-23):** OA-1 (IPA allowlist, incl. second human
+  review), OA-3 (schema shape + populated inventories), OA-4 (sorted/deduplicated
+  `ipa-v1.json`), OA-5 (JCS digest), OA-6 (integrity grammar, ADR 0004), OA-7
+  (canonical EPF, ADR 0005), OA-8 (EPF grammar), OA-9 (ELD grammar), OA-10
+  (error registry), OA-11 (binary vectors, byte-exact), OA-12 (tie-bar vectors,
+  12 published cases), OA-13 (Unicode 18.0 data), OA-15 (resource policy,
+  ADR 0006), OA-16 (residual ELD canonical edge cases, ADR 0009).
+  **The IPA/Unicode side of the repertoire is fully ratified.**
+- **IPA inventory (OA-1/OA-2/OA-4/OA-5) is ratified and pinned** (ADR 0008):
+  `specs/schema/ipa-v1.json` (107 base / 27 combining / 9 spacing) from the
+  UNITIPA 2020 chart, with the real JCS digest pinned and the base set
+  cross-checked against an independent chart transcription. The diacritic and
+  spacing-modifier inventories completed their second human review on
+  2026-10-23 (`SOURCES.md` §7). Unicode 18.0 data is ratified (OA-13). The IPA
+  side of the repertoire is now **fully ratified**; the release freeze itself
+  (T0123 / OA-17) remains blocked only by OA-14.
 - **OA-11 (binary vectors) is ratified:** `specs/registry/binary-reference-vectors.json`
   and `fixtures/valid/container/minimal-archive/` publish the byte-exact
   header/index/footer layout and offsets. Every offset, size and SHA-256 is
@@ -57,10 +62,11 @@
   condition sort key (E-2), the exact `"`/`\` escaping set (E-3), bare-vs-block
   allophone emission (E-4/E-5) and layout invariants (E-6); EPF/integrity
   profiles were already locked by ADR 0004/0005.
-- **Still open — blocked on external source data or later phases:** OA-14
-  (canonical ELD goldens — depends on Phase 11 canonical writer, T1121),
-  OA-17 (freeze/tag — depends on OA-14 and on the second human review of
-  OA-1/OA-4 diacritic/modifier inventories). These MUST NOT be fabricated.
+- **Still open — blocked on later phases:** OA-14 (canonical ELD goldens —
+  depends on Phase 11 canonical writer, T1121), OA-17 (freeze/tag — the
+  freeze *mechanism* shipped in ADR 0011, but the freeze declaration and the
+  v0.1.0 release tag depend on OA-14 only, since the OA-1/OA-4 second human
+  review closed 2026-10-23). These MUST NOT be fabricated.
 - **KDL parser (Phase 5, Issue #15) is an implementation of ratified
   artifacts, not a new one.** [ADR 0010](decisions/0010-kdl-parser-hand-roll.md)
   records the hand-roll-vs-`kdl-rs` decision. The parser implements the

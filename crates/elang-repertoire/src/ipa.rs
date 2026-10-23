@@ -123,6 +123,7 @@ impl IpaIdentifier {
 }
 
 /// Classify a scalar against the repertoire.
+#[derive(Clone, Copy)]
 enum Kind {
     Base,
     Combining,
@@ -189,19 +190,83 @@ pub fn validate(identifier: &str, rep: &Repertoire) -> Result<IpaIdentifier, Ipa
         return Err(IpaError::Unicode(v));
     }
 
-    let scalars: Vec<char> = identifier.chars().collect();
-    if scalars.len() > MAX_SCALARS {
-        return Err(IpaError::TooManyScalars(scalars.len()));
+    let scalar_count = identifier.chars().count();
+    if scalar_count > MAX_SCALARS {
+        return Err(IpaError::TooManyScalars(scalar_count));
     }
 
     let cls = Classifier::from_repertoire(rep);
+    let mut scalars = Vec::new();
+    for c in identifier.chars() {
+        let kind = cls.classify(c);
+        match kind {
+            Kind::Base => {
+                // Approved precomposed bases (ç in v1) carry an implicit
+                // modification. Keep its provenance: a cedilla inside ç counts
+                // as a modifier, but an authored cedilla is not allowlisted.
+                for (index, part) in elang_unicode::nfc::canonical_decomposition(c)
+                    .into_iter()
+                    .enumerate()
+                {
+                    scalars.push((
+                        part,
+                        if index == 0 {
+                            Kind::Base
+                        } else {
+                            Kind::Combining
+                        },
+                    ));
+                }
+            }
+            Kind::Unknown => {
+                // Not in any approved inventory: interpret it by its full
+                // canonical decomposition (steering §7, ADR 0008 §7).
+                // - No canonical decomposition → not approved.
+                // - First element not an approved base → not approved.
+                // - Exactly one approved base plus exactly one approved
+                //   combining mark → an approved composition pair.
+                // - One approved base plus two or more combining marks →
+                //   "more than one modification" on one unit.
+                // - One approved base plus one mark that is not an approved
+                //   combining diacritic → the inherited mark is not in the
+                //   user allowlist, so the scalar is not approved.
+                let decomposition = elang_unicode::nfc::canonical_decomposition(c);
+                match decomposition.as_slice() {
+                    // Exactly one approved base plus exactly one approved
+                    // combining mark: an approved composition pair.
+                    [base, mark] if cls.bases.contains(base) && cls.combining.contains(mark) => {
+                        scalars.push((*base, Kind::Base));
+                        scalars.push((*mark, Kind::Combining));
+                    }
+                    // One approved base plus two or more combining marks:
+                    // more than one modification on a single unit. If any
+                    // inherited mark is outside the approved inventory the
+                    // scalar is not in the repertoire at all.
+                    [base, first, rest @ ..]
+                        if cls.bases.contains(base)
+                            && cls.combining.contains(first)
+                            && rest.iter().all(|m| cls.combining.contains(m)) =>
+                    {
+                        scalars.push((*base, Kind::Base));
+                        scalars.push((*first, Kind::Combining));
+                        for mark in rest {
+                            scalars.push((*mark, Kind::Combining));
+                        }
+                    }
+                    // Anything else is not in the repertoire.
+                    _ => scalars.push((c, Kind::Unknown)),
+                }
+            }
+            _ => scalars.push((c, kind)),
+        }
+    }
     let mut units: Vec<Unit> = Vec::new();
     let mut i = 0usize;
 
     // `i` only ever moves forward via `saturating_add` and is always read with
     // `.get()`, so there is no unchecked indexing or overflow on this cursor.
-    while let Some(&c) = scalars.get(i) {
-        match cls.classify(c) {
+    while let Some(&(c, kind)) = scalars.get(i) {
+        match kind {
             Kind::Base => {
                 // Start a new unit with this base.
                 let mut unit = Unit {
@@ -212,38 +277,34 @@ pub fn validate(identifier: &str, rep: &Repertoire) -> Result<IpaIdentifier, Ipa
                 i = i.saturating_add(1);
 
                 // Optional tie bar -> must be followed by a second base.
-                if let Some(&maybe_tie) = scalars.get(i) {
-                    if let Kind::Tie = cls.classify(maybe_tie) {
-                        i = i.saturating_add(1);
-                        // Next must be a base (no modifier between tied bases).
-                        let Some(&next) = scalars.get(i) else {
-                            return Err(IpaError::TieBarInvalid);
-                        };
-                        match cls.classify(next) {
-                            Kind::Base => {
-                                unit.bases.push(next);
-                                unit.tie = Some(maybe_tie);
-                                i = i.saturating_add(1);
-                            }
-                            _ => return Err(IpaError::TieBarInvalid),
+                if let Some(&(maybe_tie, Kind::Tie)) = scalars.get(i) {
+                    i = i.saturating_add(1);
+                    // Next must be a base (no modifier between tied bases).
+                    let Some(&(next, next_kind)) = scalars.get(i) else {
+                        return Err(IpaError::TieBarInvalid);
+                    };
+                    match next_kind {
+                        Kind::Base => {
+                            unit.bases.push(next);
+                            unit.tie = Some(maybe_tie);
+                            i = i.saturating_add(1);
                         }
-                        // No chaining: another tie immediately here is invalid.
-                        if let Some(&after) = scalars.get(i) {
-                            if let Kind::Tie = cls.classify(after) {
-                                return Err(IpaError::TieBarInvalid);
-                            }
-                        }
+                        _ => return Err(IpaError::TieBarInvalid),
+                    }
+                    // No chaining: another tie immediately here is invalid.
+                    if let Some(&(_, Kind::Tie)) = scalars.get(i) {
+                        return Err(IpaError::TieBarInvalid);
                     }
                 }
 
                 // Optional single modification (combining or spacing).
-                if let Some(&m) = scalars.get(i) {
-                    if matches!(cls.classify(m), Kind::Combining | Kind::Spacing) {
+                if let Some(&(m, modifier_kind)) = scalars.get(i) {
+                    if matches!(modifier_kind, Kind::Combining | Kind::Spacing) {
                         unit.modifier = Some(m);
                         i = i.saturating_add(1);
                         // A second modification on the same unit is invalid.
-                        if let Some(&m2) = scalars.get(i) {
-                            if matches!(cls.classify(m2), Kind::Combining | Kind::Spacing) {
+                        if let Some(&(_, next_kind)) = scalars.get(i) {
+                            if matches!(next_kind, Kind::Combining | Kind::Spacing) {
                                 return Err(IpaError::TooManyModifications);
                             }
                         }
@@ -292,6 +353,100 @@ mod tests {
         let id = validate("t", &r).expect("t is valid");
         assert_eq!(id.units.len(), 1);
         assert_eq!(id.units[0].bases, vec!['t']);
+    }
+
+    #[test]
+    fn precomposed_base_is_decomposed_and_original_is_preserved() {
+        let id = validate("ç", &rep()).expect("approved precomposed base");
+        assert_eq!(id.original, "ç");
+        assert_eq!(id.comparison_key(), "ç");
+        assert_eq!(
+            id.units,
+            vec![Unit {
+                bases: vec!['c'],
+                tie: None,
+                modifier: Some('\u{0327}'),
+            }]
+        );
+    }
+
+    #[test]
+    fn precomposed_base_already_uses_its_modification() {
+        let r = rep();
+        for input in ["ç\u{02B0}", "ç\u{0303}"] {
+            assert_eq!(validate(input, &r), Err(IpaError::TooManyModifications));
+        }
+    }
+
+    #[test]
+    fn precomposed_base_obeys_tied_modifier_placement() {
+        let r = rep();
+        for tie in [TIE_UPPER, TIE_LOWER] {
+            assert_eq!(
+                validate(&format!("ç{tie}t"), &r),
+                Err(IpaError::TieBarInvalid)
+            );
+            let id = validate(&format!("t{tie}ç"), &r).expect("modifier after second base");
+            assert_eq!(id.units.len(), 1);
+            assert_eq!(id.units[0].bases, vec!['t', 'c']);
+            assert_eq!(id.units[0].modifier, Some('\u{0327}'));
+            assert_eq!(id.units[0].tie, Some(tie));
+        }
+    }
+
+    #[test]
+    fn decomposition_preserves_nfc_and_allowlist_checks() {
+        let r = rep();
+        assert_eq!(
+            validate("c\u{0327}", &r),
+            Err(IpaError::Unicode(crate::unicode::UnicodeViolation::NotNfc))
+        );
+        // An implicit cedilla in approved ç does not approve an authored one.
+        assert_eq!(
+            validate("çp\u{0327}", &r),
+            Err(IpaError::BaseNotApproved('\u{0327}'))
+        );
+        // A precomposed scalar that is not itself in the inventory is
+        // approved only through the composition-pair rule: exactly one
+        // approved base plus exactly one approved combining mark.
+        let id = validate("ã", &r).expect("ã is a+̃, an approved composition pair");
+        assert_eq!(
+            id.units,
+            vec![Unit {
+                bases: vec!['a'],
+                tie: None,
+                modifier: Some('\u{0303}'),
+            }]
+        );
+        assert_eq!(id.original, "ã", "authored bytes are preserved");
+        // A single inherited mark outside the approved inventory does not
+        // grant approval.
+        assert_eq!(validate("à", &r), Err(IpaError::BaseNotApproved('à')));
+    }
+
+    #[test]
+    fn multi_mark_precomposed_scalar_is_too_many_modifications() {
+        let r = rep();
+        // ṏ = o + U+0303 + U+0308: two approved marks on one base.
+        assert_eq!(
+            validate("\u{1E4F}", &r),
+            Err(IpaError::TooManyModifications)
+        );
+        // ḉ = c + U+0327 + U+0301: an inherited mark outside the approved
+        // inventory, so the scalar is not in the repertoire at all.
+        assert_eq!(
+            validate("\u{1E09}", &r),
+            Err(IpaError::BaseNotApproved('\u{1E09}'))
+        );
+    }
+
+    #[test]
+    fn scalar_limit_counts_original_nfc_input() {
+        // Eight authored scalars, ten decomposed scalars, four logical units.
+        let input = "t\u{0361}çt\u{0361}çab";
+        let id = validate(input, &rep()).expect("eight NFC scalars are permitted");
+        assert_eq!(id.original, input);
+        assert_eq!(id.units.len(), MAX_UNITS);
     }
 
     #[test]

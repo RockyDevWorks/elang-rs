@@ -49,6 +49,29 @@ diacritic **or** one spacing modifier, never both. NFC-precomposed characters ar
 interpreted by their canonical decomposition when counting base-plus-modifier
 units.
 
+### Precomposed forms
+
+A precomposed character is interpreted by its **full canonical decomposition**
+when counting base-plus-modifier units:
+
+- If the decomposition is exactly **one approved base plus one approved
+  combining mark**, the character is an approved **composition pair**. It
+  counts as **one** logical base unit carrying **one** modification — so `ã`
+  is one modified unit, and `ã̃` is invalid (two modifications on one base).
+- If the decomposition carries **two or more** combining marks, it is **not** a
+  composition pair: it is *too many modifications* (e.g. `ṏ` = `o` + U+0303 +
+  U+0308).
+- A character that **is** an approved **base** is interpreted through its own
+  decomposition for counting. `ç` is an approved base, and its inherited
+  cedilla occupies the single modification slot, so `çʰ` is invalid.
+- Decomposition never turns an inherited mark into an approved one. U+0327
+  (combining cedilla) is not an approved combining diacritic, so an authored
+  cedilla is rejected.
+
+The set of approved composition pairs is **derived** from the ratified
+inventories and the pinned Unicode 18.0.0 decomposition table, not stored as
+separate inventory data. It currently contains **27** precomposed characters.
+
 ## Tie bars
 
 The tie bars **U+0361** (upper) and **U+035C** (lower) join **exactly two** IPA
@@ -86,10 +109,18 @@ structural rules.
 | `tʰʷ` | invalid — two modifications on one base |
 | `ʰ` | invalid — standalone modifier |
 | isolated `U+0303` | invalid — standalone combining mark |
+| `ã` | valid — composition pair (`a` + U+0303): 1 unit, 1 modification |
+| `ã̃` | invalid — the pair already carries one modification |
+| `ç` | valid — approved base; inherited cedilla counts as the modification |
+| `çʰ` | invalid — the cedilla already occupies the modification slot |
+| `ṏ` | invalid — two combining marks over one base |
 
 !!! info "Repertoire status"
     The IPA inventory has been generated, cross-checked, and pinned (107 base
     symbols, 27 combining diacritics, 9 spacing modifiers in the current data),
-    with the canonical JCS SHA-256 pinned and asserted by test. It is **not yet
-    frozen for release** pending a second human review. See
+    with the canonical JCS SHA-256 pinned and asserted by test. The second
+    human review of the diacritic and spacing-modifier inventories
+    **completed 2026-10-23** (outcome match; `specs/sources/SOURCES.md` §7).
+    OA-1 and OA-4 are **Ratified**. The IPA side of the repertoire is fully
+    ratified; the only outstanding v0.1.0 freeze blocker is now OA-14. See
     [Specification status](../spec-status.md).

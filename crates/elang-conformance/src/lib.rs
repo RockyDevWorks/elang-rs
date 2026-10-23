@@ -24,3 +24,4 @@
 )]
 
 pub mod binary_vectors;
+pub mod normative_manifest;
