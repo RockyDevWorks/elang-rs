@@ -270,8 +270,8 @@ fn sha256_hex(bytes: &[u8]) -> String {
 ///
 /// Sorted object keys by UTF-16 code units, no insignificant whitespace,
 /// UTF-8 encoding, integers printed without exponent/decimal, and strings
-/// escaped per RFC 8785 §3.2.2.2 (control characters must be escaped using
-/// `\uXXXX`; all other characters may pass through).
+/// escaped per RFC 8785 §3.2.2.2: quotes, backslashes, and control characters
+/// below U+0020 are escaped; all other characters are emitted directly as UTF-8.
 pub fn jcs_canonicalize(value: &serde_json::Value) -> String {
     let mut out = String::new();
     write_jcs(value, &mut out);
@@ -407,13 +407,14 @@ pub fn write_manifest(release_root: &Path) -> Result<(Vec<u8>, String), Manifest
 
 /// Verify the committed manifest against the artifact corpus on disk.
 ///
-/// 1. Reads the committed manifest file and hashes its bytes.
-/// 2. Checks that digest equals `PINNED_SPEC_CHECKSUM`; a mismatch is a
+/// 1. Reads the committed manifest bytes.
+/// 2. Checks their SHA-256 equals `PINNED_SPEC_CHECKSUM`; a mismatch is a
 ///    [`ManifestError::DigestMismatch`].
-/// 3. Parses the manifest and re-canonicalizes it to JCS bytes, which must
-///    be byte-identical to the committed bytes.
-/// 4. For each artifact entry, re-hashes the file on disk and checks it
-///    equals the entry's recorded `sha256`.
+/// 3. Parses the manifest and verifies JCS re-canonicalization reproduces
+///    the committed bytes exactly.
+/// 4. Re-hashes the artifact files on disk and checks each digest equals
+///    the manifest entry's recorded `sha256`. The manifest and [`ARTIFACTS`]
+///    must list exactly the same entries (IDs and paths).
 pub fn verify(release_root: &Path) -> Result<(), ManifestError> {
     let manifest_path = release_root.join(MANIFEST_PATH);
     let committed = fs::read(&manifest_path).map_err(|e| ManifestError::Io {
@@ -516,4 +517,15 @@ pub fn verify(release_root: &Path) -> Result<(), ManifestError> {
         });
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::jcs_canonicalize;
+
+    #[test]
+    fn non_bmp_character_is_emitted_as_raw_utf8() {
+        let value = serde_json::json!("\u{1f600}");
+        assert_eq!(jcs_canonicalize(&value).as_bytes(), b"\"\xf0\x9f\x98\x80\"");
+    }
 }

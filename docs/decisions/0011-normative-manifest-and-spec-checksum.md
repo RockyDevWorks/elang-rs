@@ -60,9 +60,10 @@ later T0123 step will use to declare the final v0.1.0 freeze.
 3. **JCS writer.** The manifest is emitted as RFC 8785 JSON Canonical
    Scheme: object keys sorted by UTF-16 code unit order, no
    insignificant whitespace, UTF-8, integers without exponent/decimal,
-   control characters escaped as `\uXXXX`. Only `"`, `\` and control
-   characters below U+0020 are escaped; every other character — including
-   non-BMP scalars — is emitted literally as UTF-8, per RFC 8785 §3.2.2.2.
+   quotes and backslashes escaped, control characters below U+0020
+   escaped using `\b`, `\t`, `\n`, `\f`, `\r` or lowercase `\uXXXX`,
+   and all other characters (including non-BMP) emitted directly as UTF-8,
+   per RFC 8785 §3.2.2.2.
    The writer is implemented in
    `elang-conformance::normative_manifest::jcs_canonicalize`.
 
