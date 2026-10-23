@@ -25,8 +25,15 @@ and this project uses independent version domains (see
 
 ### Notes
 
-- No normative data (IPA inventory, hashes, integrity grammar) is finalized;
-  open artifacts are tracked in `docs/open-artifacts.md` and are release
-  blockers per ADR 0003.
+- Phase 1 normative-artifact reconciliation (Issue #14): the binary
+  header/index/footer reference vectors (T0118, OA-11), tie-bar equivalence
+  and IPA comparison-key test vectors (T0117, OA-12), and the residual KDL
+  canonicalization edge cases (T0122, OA-16) are now ratified and listed as
+  such in `docs/open-artifacts.md`. The only remaining open artifacts are
+  OA-14 (canonical ELD golden files, Phase 11 deliverable) and OA-17 (formal
+  freeze + spec checksum/release tag, depends on the second human review of
+  the IPA diacritic/modifier inventories per ADR 0008). No new normative
+  contracts introduced; this update reconciles the documentation with the
+  state of the repository.
 
 [Unreleased]: https://github.com/elang-lang/elang-rs/compare/HEAD
