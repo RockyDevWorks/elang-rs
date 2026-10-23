@@ -61,10 +61,15 @@ fn decodes_control_character_escapes() {
 }
 
 #[test]
-fn decodes_solidus_escape() {
-    // `\/` is a legal escape and decodes to a bare `/`; the canonical
-    // encoder then emits it unescaped.
-    assert_eq!(first_string(b"a \"x\\/y\"\n"), "x/y");
+fn rejects_solidus_escape() {
+    // KDL 2.0 string escapes do NOT include `\/` (that is JSON, not KDL).
+    // A `\` followed by `/` is an unknown escape and must be rejected with
+    // `InvalidEscape`.
+    let mut b = BudgetTracker::new();
+    let Err(err) = elang_kdl::parse_with_budgets(b"a \"x\\/y\"\n", &mut b) else {
+        panic!("`\\/` must be rejected");
+    };
+    assert_eq!(err.code, elang_kdl::ErrorCode::InvalidEscape);
 }
 
 #[test]
@@ -87,13 +92,15 @@ fn decodes_mixed_escape_sequence() {
 fn raw_string_does_not_decode_escapes() {
     // A raw string keeps its content verbatim — `\` and `u{...}` are
     // literal bytes, not escapes.
-    assert_eq!(first_string(b"a r#\"\\u{1}\"#\n"), "\\u{1}");
+    assert_eq!(first_string(b"a #\"\\u{1}\"#\n"), "\\u{1}");
 }
 
 #[test]
 fn decoded_string_is_reencoded_canonically() {
     let mut b = BudgetTracker::new();
-    let doc = elang_kdl::parse_with_budgets(b"a \"x\\/y\\u{1}\"\n", &mut b).unwrap();
+    // `\/` is not a KDL 2.0 escape, so use `/` directly. The shortest `\u{1}`
+    // round-trips through the canonical emitter.
+    let doc = elang_kdl::parse_with_budgets(b"a \"x/y\\u{1}\"\n", &mut b).unwrap();
     match &doc.nodes()[0].entries()[0] {
         elang_kdl::KdlEntry::Arg(v) => {
             // `Display` for KdlValue delegates to the canonical emitter.
@@ -160,7 +167,7 @@ fn rejects_unterminated_string() {
 #[test]
 fn rejects_unterminated_raw_string() {
     assert_eq!(
-        expect_err_code(b"a r#\"unclosed\n"),
+        expect_err_code(b"a #\"unclosed\n"),
         elang_kdl::ErrorCode::UnterminatedRawString
     );
 }
@@ -290,7 +297,7 @@ fn rejects_nesting_beyond_the_limit() {
 #[test]
 fn null_and_bool_values_expose_their_accessors() {
     let mut b = BudgetTracker::new();
-    let doc = elang_kdl::parse_with_budgets(b"n null true false\n", &mut b).unwrap();
+    let doc = elang_kdl::parse_with_budgets(b"n #null #true #false\n", &mut b).unwrap();
     let entries = doc.nodes()[0].entries();
     assert!(matches!(entry_value(&entries[0]), KdlValue::Null(_)));
     assert_eq!(entry_value(&entries[1]).as_bool(), Some(true));

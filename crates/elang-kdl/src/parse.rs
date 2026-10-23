@@ -10,7 +10,7 @@
 //! ```text
 //! document    := version-pragma? (node-terminator | node)*
 //! version     := "/kdl-version" string node-terminator
-//! node        := type? name ("=" value)? entries? children-block?
+//! node        := type? name entries? children-block?
 //! type        := "(" value ")"
 //! name        := bare-ident | string
 //! entries     := (whitespace? (value | property))*
@@ -247,7 +247,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    /// `node := type? name ("=" value)? entries? children-block?`
+    /// `node := type? name entries? children-block?`
     fn parse_node(&mut self, depth: usize) -> Result<KdlNode, ParseError> {
         if depth >= elang_core::limits::MAX_KDL_NESTING_DEPTH {
             return Err(self.error_here(
@@ -331,24 +331,9 @@ impl<'a> Parser<'a> {
             }
         };
 
-        // Optional `= value` shorthand.
-        let mut entries: Vec<KdlEntry> = Vec::new();
+        let mut entries = Vec::new();
         let mut arg_count = 0;
         let mut prop_count = 0;
-        if matches!(self.peek()?, Token::Equals(_)) {
-            let eq = self.bump()?;
-            let value = self.parse_value()?;
-            // The `=value` shorthand is equivalent to a property whose key
-            // equals the node name. We store it as a synthetic prop so the
-            // AST is uniform.
-            prop_count += 1;
-            entries.push(KdlEntry::Prop {
-                key_span: name.0,
-                key: name.1.clone(),
-                value,
-            });
-            let _ = eq;
-        }
 
         // Discard exactly one entry after each slashdash. Children blocks
         // are handled below, since only blocks may follow a discarded block.

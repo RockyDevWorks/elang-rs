@@ -10,7 +10,7 @@ use crate::value::KdlValue;
 
 /// Emit a canonical KDL 2.0 double-quoted string for `value`.
 ///
-/// Non-string values are emitted in their canonical KDL form:
+/// Non-string values are emitted in their canonical KDL 2.0 form:
 /// - `Null` → `#null`
 /// - `Bool { true }` → `#true`
 /// - `Bool { false }` → `#false`

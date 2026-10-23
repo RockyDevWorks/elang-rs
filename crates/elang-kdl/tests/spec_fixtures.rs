@@ -116,6 +116,25 @@ fn kdl2_value_float() {
 }
 
 #[test]
+fn kdl2_numeric_keywords_preserve_values_and_lexemes() {
+    let doc = parse_ok(b"node #inf #-inf #nan\n");
+    let args = doc.nodes[0].args().collect::<Vec<_>>();
+    assert_eq!(args.len(), 3);
+    assert_eq!(args[0].as_float(), Some(f64::INFINITY));
+    assert_eq!(args[1].as_float(), Some(f64::NEG_INFINITY));
+    assert!(args[2].as_float().unwrap().is_nan());
+    for (value, keyword) in args.iter().zip(["#inf", "#-inf", "#nan"]) {
+        assert_eq!(value.lexeme(), Some(keyword));
+        assert_eq!(emit_value(value), keyword);
+        let reparsed = parse_ok(format!("node {}\n", emit_value(value)).as_bytes());
+        assert_eq!(
+            reparsed.nodes[0].args().next().unwrap().lexeme(),
+            Some(keyword)
+        );
+    }
+}
+
+#[test]
 fn kdl2_value_bool_true() {
     let doc = parse_ok(b"node #true\n");
     assert_eq!(doc.nodes[0].args().next().unwrap().as_bool(), Some(true));
@@ -174,13 +193,12 @@ fn kdl2_crlf_line_endings() {
 }
 
 #[test]
-fn kdl2_vertical_tab_is_not_a_line_terminator() {
-    // KDL 2.0 treats U+000B as whitespace, not as a line ending; both
-    // nodes must still land on separate statements because the `\n`
-    // separates them.
-    let doc = parse_ok(b"node\x0b1\nnode 2\n");
+fn kdl2_vertical_tab_is_a_line_terminator() {
+    let doc = parse_ok(b"first\x0bsecond\n");
     assert_eq!(doc.nodes.len(), 2);
-    assert_eq!(doc.nodes[0].args().count(), 1);
+    assert_eq!(doc.nodes[0].name(), "first");
+    assert_eq!(doc.nodes[0].args().count(), 0);
+    assert_eq!(doc.nodes[1].name(), "second");
 }
 
 #[test]
@@ -589,7 +607,7 @@ fn kdl2_slashdash_discards_one_multiline_construct() {
         ["shown", "next"]
     );
     let doc =
-        parse_ok(b"n /-\n\"ignored\nargument\" kept /-key=\"ignored\nvalue\" other=ok\nnext\n");
+        parse_ok(b"n /-\n\"ignored\\nargument\" kept /-key=\"ignored\\nvalue\" other=ok\nnext\n");
     assert_eq!(doc.nodes.len(), 2);
     assert_eq!(first_arg_str(&doc), "kept");
     assert_eq!(
@@ -709,7 +727,7 @@ fn kdl2_257_nodes_with_one_argument_each() {
 }
 
 #[test]
-fn kdl2_accepts_exactly_256_props_and_counts_shorthand() {
+fn kdl2_accepts_exactly_256_props_and_rejects_257() {
     let props = (0..256).map(|i| format!(" k{i}=1")).collect::<String>();
     assert_eq!(
         parse_ok(format!("n{props}\n").as_bytes()).nodes[0]
@@ -718,7 +736,7 @@ fn kdl2_accepts_exactly_256_props_and_counts_shorthand() {
         256
     );
     assert_eq!(
-        parse_err(format!("n=1{props}\n").as_bytes()),
+        parse_err(format!("n{props} extra=1\n").as_bytes()),
         ErrorCode::TooManyProps
     );
 }
@@ -833,12 +851,127 @@ fn kdl2_keyword_values_round_trip() {
         let actual = reparsed.nodes[0].args().next().unwrap();
         assert_eq!(emit_value(actual), emit_value(value));
     }
-    assert_eq!(parse_err(b"n #truex\n"), ErrorCode::UnexpectedByte);
+    // Keyword prefixes must not be accepted as complete keywords.
+    assert_eq!(parse_err(b"n #truex\n"), ErrorCode::InvalidIdentifier);
 }
 
 #[test]
 fn kdl2_line_comment_preserves_node_terminator() {
-    let doc = parse_ok(b"first arg // comment\nsecond arg\n");
-    assert_eq!(doc.nodes.len(), 2);
-    assert!(doc.nodes.iter().all(|n| n.args().count() == 1));
+    for newline in [
+        "\n", "\r", "\r\n", "\u{b}", "\u{c}", "\u{85}", "\u{2028}", "\u{2029}",
+    ] {
+        let doc = parse_ok(format!("first arg // comment{newline}second arg{newline}").as_bytes());
+        assert_eq!(doc.nodes.len(), 2);
+        assert!(doc.nodes.iter().all(|n| n.args().count() == 1));
+    }
+}
+
+// ------------------------------------------------------------------------
+// KDL 2.0 keyword regression guards
+// ------------------------------------------------------------------------
+
+#[test]
+fn kdl2_rejects_bare_reserved_words() {
+    for word in ["true", "false", "null", "inf", "nan"] {
+        for input in [
+            format!("n {word}\n"),
+            format!("{word}\n"),
+            format!("n {word}=1\n"),
+        ] {
+            assert_eq!(parse_err(input.as_bytes()), ErrorCode::InvalidIdentifier);
+        }
+        assert_eq!(
+            first_arg_str(&parse_ok(format!("n \"{word}\"\n").as_bytes())),
+            word
+        );
+    }
+}
+
+#[test]
+fn kdl2_rejects_kdl1_prefixed_raw_strings() {
+    assert!(elang_kdl::parse(b"n r#\"hello\"#\n").is_err());
+}
+
+#[test]
+fn kdl2_keyword_prefix_is_not_a_keyword() {
+    // `nullable`, `trueish` are ordinary identifiers, not malformed keywords.
+    let doc = parse_ok(b"n nullable trueish falseness\n");
+    let values: Vec<_> = doc.nodes[0].args().map(emit_value).collect();
+    assert_eq!(values, vec!["\"nullable\"", "\"trueish\"", "\"falseness\""]);
+}
+
+#[test]
+fn kdl2_keywords_round_trip_through_canonical_emitter() {
+    // emit() must produce KDL 2.0 keywords that reparse identically.
+    for (input, expected) in [
+        (&b"n #true\n"[..], "#true"),
+        (&b"n #false\n"[..], "#false"),
+        (&b"n #null\n"[..], "#null"),
+    ] {
+        let doc = parse_ok(input);
+        let emitted = emit_value(doc.nodes[0].args().next().unwrap());
+        assert_eq!(emitted, expected);
+        let reparsed = parse_ok(format!("n {emitted}\n").as_bytes());
+        assert_eq!(
+            emit_value(reparsed.nodes[0].args().next().unwrap()),
+            emitted
+        );
+    }
+}
+
+#[test]
+fn kdl2_rejects_kdl1_json_style_solidus_escape() {
+    // `\/` is JSON, not KDL 2.0. Rejected as an unknown escape.
+    let mut b = BudgetTracker::new();
+    let Err(err) = elang_kdl::parse_with_budgets(b"n \"a\\/b\"\n", &mut b) else {
+        panic!("`\\/` must be rejected under KDL 2.0");
+    };
+    assert_eq!(err.code, ErrorCode::InvalidEscape);
+}
+
+#[test]
+fn kdl2_raw_fences_follow_published_grammar() {
+    for literal in [r##"#"hello"#"##, r###"##"hello"##"###] {
+        assert_eq!(
+            first_arg_str(&parse_ok(format!("node {literal}\n").as_bytes())),
+            "hello"
+        );
+    }
+    assert!(elang_kdl::parse(b"node r#\"hello\"#\n").is_err());
+}
+
+#[test]
+fn kdl2_positions_follow_every_newline_form() {
+    for newline in [
+        "\n", "\r", "\r\n", "\u{b}", "\u{c}", "\u{85}", "\u{2028}", "\u{2029}",
+    ] {
+        let input = format!("first{newline}  second{newline}  third");
+        let doc = parse_ok(input.as_bytes());
+        for (node, line) in doc.nodes.iter().zip(1..=3) {
+            assert_eq!(node.span.start.line, line, "{newline:?}");
+            assert_eq!(node.span.start.column, if line == 1 { 1 } else { 3 });
+            assert_eq!(
+                node.span.start,
+                elang_kdl::Position::from_byte(input.as_bytes(), node.span.start.byte)
+            );
+        }
+        let err = elang_kdl::parse(format!("first{newline}}}").as_bytes()).unwrap_err();
+        assert_eq!(err.span.start.line, 2, "{newline:?}");
+    }
+}
+
+#[test]
+fn kdl2_single_line_raw_strings_reject_literal_newlines() {
+    for newline in [
+        "\n", "\r", "\r\n", "\u{b}", "\u{c}", "\u{85}", "\u{2028}", "\u{2029}",
+    ] {
+        assert_eq!(
+            parse_err(format!("n #\"a{newline}b\"#").as_bytes()),
+            ErrorCode::UnterminatedRawString
+        );
+    }
+    assert_eq!(
+        parse_err(b"n #\"\"\"\ntext\n\"\"\"#"),
+        ErrorCode::UnexpectedByte
+    );
 }

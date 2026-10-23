@@ -16,6 +16,29 @@
 
 use core::fmt;
 
+/// Byte offsets immediately after each KDL newline, preceded by zero.
+/// CRLF is one newline; all other KDL newline scalars are recognized too.
+pub(crate) fn line_starts(input: &[u8]) -> impl Iterator<Item = usize> + '_ {
+    let mut pos = 0usize;
+    core::iter::once(0).chain(core::iter::from_fn(move || {
+        while let Some(rest) = input.get(pos..) {
+            let width = match rest {
+                [b'\r', b'\n', ..] => 2,
+                [b'\r' | b'\n' | 0x0b | 0x0c, ..] => 1,
+                [0xc2, 0x85, ..] => 2,
+                [0xe2, 0x80, 0xa8 | 0xa9, ..] => 3,
+                [] => return None,
+                _ => 0,
+            };
+            pos = pos.checked_add(width.max(1))?;
+            if width != 0 {
+                return Some(pos);
+            }
+        }
+        None
+    }))
+}
+
 /// A 1-based line number (`1..=u32::MAX`) and 1-based column number, where
 /// column counts UTF-8 bytes (not characters) to stay O(1) per byte.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -37,38 +60,26 @@ impl Position {
         column: 0,
     };
 
-    /// Construct a position from a raw byte offset, computing the line and
-    /// column by scanning the supplied input. Cost is O(line) — fine for
-    /// normal diagnostics, since callers always pass the start of a node or
-    /// entry, never the middle of a token.
+    /// Construct a position from a raw byte offset, scanning the supplied
+    /// input for KDL newlines. Cost is O(input length).
     ///
     /// Returns `Position::INVALID` if `byte` exceeds the input length.
     pub fn from_byte(input: &[u8], byte: u32) -> Position {
         let idx = byte as usize;
-        let up_to = match input.get(..idx) {
-            Some(s) => s,
-            None => return Position::INVALID,
-        };
-        // Count `\n` to get the 1-based line number; column is the number of
-        // bytes since the last newline + 1.
-        let mut line: u32 = 1;
-        let mut last_nl: Option<usize> = None;
-        for (i, &b) in up_to.iter().enumerate() {
-            if b == b'\n' {
-                line = line.saturating_add(1);
-                last_nl = Some(i);
-            }
+        if idx > input.len() {
+            return Position::INVALID;
         }
-        let column: u32 = match last_nl {
-            // `i` is the byte index of the most recent `\n`. Column is the
-            // 1-based count of bytes after it, so `byte - i`.
-            Some(i) => match u32::try_from(i) {
-                Ok(nl_pos) => byte.saturating_sub(nl_pos),
-                Err(_) => 0,
-            },
-            None => byte.saturating_add(1),
-        };
-        Position { byte, line, column }
+        let mut line = 0u32;
+        let mut line_start = 0u32;
+        for offset in line_starts(input).take_while(|offset| *offset <= idx) {
+            line = line.saturating_add(1);
+            line_start = u32::try_from(offset).unwrap_or(u32::MAX);
+        }
+        Position {
+            byte,
+            line,
+            column: byte.saturating_sub(line_start).saturating_add(1),
+        }
     }
 
     /// True if this is the sentinel `INVALID` position.

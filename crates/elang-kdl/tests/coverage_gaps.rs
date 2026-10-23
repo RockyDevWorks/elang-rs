@@ -15,7 +15,7 @@
 //!
 //! - type annotations `(u8)name` and `("u8")name` — KDL 2.0 allows an
 //!   identifier **or** a string inside the parens — plus rejection paths;
-//! - the `name=value` node-level shorthand that expands to a property;
+//! - rejection of `name=value` without a node name;
 //! - [`Token::kind`] / [`Token::span`] across token variants;
 //! - [`ErrorCode::as_str`] and [`ErrorCode::category`] mapping,
 //!   including the archive-wide codes;
@@ -75,7 +75,7 @@ fn annotation_string_form_parses() {
 #[test]
 fn annotation_raw_string_form_parses() {
     let mut b = budgets();
-    let doc = elang_kdl::parse_with_budgets(b"(r#\"a-b\"#)node 1\n", &mut b).unwrap();
+    let doc = elang_kdl::parse_with_budgets(b"(#\"a-b\"#)node 1\n", &mut b).unwrap();
     assert_eq!(doc.nodes()[0].ty(), Some("a-b"));
 }
 
@@ -109,28 +109,21 @@ fn annotation_inside_children_block_parses() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn shorthand_value_becomes_property() {
-    // KDL 2.0 `key=value` node-level shorthand: the right-hand side must
-    // be a value literal — a bare identifier is not a value, so the
-    // shorthand expects `"value"` or a number.
-    let mut b = budgets();
-    let doc = elang_kdl::parse_with_budgets(b"key=\"value\"\n", &mut b).unwrap();
-    let entries = doc.nodes()[0].entries();
-    assert_eq!(entries.len(), 1);
-    assert!(entries[0].is_prop());
-    match &entries[0] {
-        KdlEntry::Prop { key, value, .. } => {
-            assert_eq!(key.as_ref(), "key");
-            assert_eq!(value.as_str(), Some("value"));
-        }
-        KdlEntry::Arg(_) => panic!("expected a property entry"),
+fn rejects_node_level_assignment() {
+    for input in [
+        b"key=\"value\"\n".as_slice(),
+        b"port=8080\n",
+        b"parent { key=1 }\n",
+    ] {
+        let err = elang_kdl::parse(input).unwrap_err();
+        assert_eq!(err.code(), ErrorCode::UnexpectedByte);
     }
 }
 
 #[test]
-fn shorthand_value_binds_integer() {
+fn regular_property_binds_integer() {
     let mut b = budgets();
-    let doc = elang_kdl::parse_with_budgets(b"port=8080\n", &mut b).unwrap();
+    let doc = elang_kdl::parse_with_budgets(b"node port=8080\n", &mut b).unwrap();
     let e = &doc.nodes()[0].entries()[0];
     assert_eq!(entry_value(e).as_integer(), Some(8080));
 }
@@ -163,7 +156,7 @@ fn lex_all(input: &str) -> Vec<Token> {
 #[test]
 fn token_kind_covers_every_variant() {
     let kinds: Vec<&'static str> =
-        lex_all("id 1 1.5 \"s\" r#\"r\"# true false null\n= { } ( ) / /-\n")
+        lex_all("id 1 1.5 \"s\" #\"r\"# #true #false #null\n= { } ( ) / /-\n")
             .iter()
             .map(|t| t.kind())
             .collect();
@@ -190,7 +183,7 @@ fn token_kind_covers_every_variant() {
             "expected token kind {expected:?} in {kinds:?}"
         );
     }
-    // `true` and `false` are both boolean.
+    // `#true` and `#false` are both boolean.
     assert_eq!(kinds.iter().filter(|k| **k == "boolean").count(), 2);
 }
 
@@ -331,21 +324,19 @@ fn budget_zero_ceiling_rejects_every_add() {
 
 #[test]
 fn tracker_exposes_every_budget_accessor() {
+    // Per the doc/traceability note for REQ-LIMIT-001, nesting depth is
+    // checked directly against `MAX_KDL_NESTING_DEPTH` (not a budget).
+    // Per-node arg/prop counts are enforced inline at parse_entry.
+    // The tracker owns only the cumulative-resource and archive budgets.
     let mut t = budgets();
-    t.nesting_depth().try_add(1).unwrap();
     t.nodes_resource().try_add(1).unwrap();
     t.nodes_archive().try_add(1).unwrap();
-    t.args_per_node().try_add(1).unwrap();
-    t.props_per_node().try_add(1).unwrap();
     t.decoded_string_bytes_resource().try_add(1).unwrap();
     t.decoded_string_bytes_archive().try_add(1).unwrap();
     t.comment_bytes_resource().try_add(1).unwrap();
 
-    assert_eq!(t.nesting_depth().current(), 1);
     assert_eq!(t.nodes_resource().current(), 1);
     assert_eq!(t.nodes_archive().current(), 1);
-    assert_eq!(t.args_per_node().current(), 1);
-    assert_eq!(t.props_per_node().current(), 1);
     assert_eq!(t.decoded_string_bytes_resource().current(), 1);
     assert_eq!(t.decoded_string_bytes_archive().current(), 1);
     assert_eq!(t.comment_bytes_resource().current(), 1);
@@ -383,9 +374,12 @@ fn reset_all_clears_archive_too() {
 fn default_tracker_matches_new() {
     let mut a = BudgetTracker::new();
     let mut b = BudgetTracker::default();
-    assert_eq!(a.nesting_depth().ceiling(), b.nesting_depth().ceiling());
+    assert_eq!(a.nodes_resource().ceiling(), b.nodes_resource().ceiling());
     assert_eq!(a.nodes_archive().ceiling(), b.nodes_archive().ceiling());
-    assert_eq!(a.props_per_node().ceiling(), b.props_per_node().ceiling());
+    assert_eq!(
+        a.decoded_string_bytes_resource().ceiling(),
+        b.decoded_string_bytes_resource().ceiling()
+    );
 }
 
 #[test]
@@ -464,13 +458,16 @@ fn slashdash_comments_are_dropped_from_the_node_list() {
 #[test]
 fn emit_value_roundtrips_non_string_variants() {
     let mut b = budgets();
-    let doc = elang_kdl::parse_with_budgets(b"n 1 1.5 true false null \"s\"\n", &mut b).unwrap();
+    let doc = elang_kdl::parse_with_budgets(b"n 1 1.5 #true #false #null \"s\"\n", &mut b).unwrap();
     let emitted: Vec<String> = doc.nodes()[0]
         .entries()
         .iter()
         .map(|e| canon::emit_value(entry_value(e)))
         .collect();
-    assert_eq!(emitted, vec!["1", "1.5", "true", "false", "null", "\"s\""]);
+    assert_eq!(
+        emitted,
+        vec!["1", "1.5", "#true", "#false", "#null", "\"s\""]
+    );
 }
 
 #[test]
@@ -479,8 +476,8 @@ fn emit_is_an_alias_for_emit_value() {
         span: SourceSpan::INVALID,
         value: true,
     };
-    assert_eq!(canon::emit(&v), "true");
-    assert_eq!(canon::emit_value(&v), "true");
+    assert_eq!(canon::emit(&v), "#true");
+    assert_eq!(canon::emit_value(&v), "#true");
 }
 
 // ---------------------------------------------------------------------------
@@ -499,7 +496,9 @@ fn node_span_covers_full_node() {
     let node = &doc.nodes()[0];
     let s = node.span();
     assert_eq!(s.start.byte, 0);
-    assert_eq!(s.end.byte, src.len() as u32);
+    // End is exclusive and stops at the last byte of the node itself; the
+    // trailing newline is the node terminator, not part of the node.
+    assert_eq!(s.end.byte, 16);
     // The span is at least the union of all entry spans.
     for e in node.entries() {
         let e_span = e.span();
@@ -514,9 +513,10 @@ fn document_span_covers_all_nodes() {
     let doc = elang_kdl::parse_with_budgets(b"a\nbb\n", &mut b).unwrap();
     let s = doc.span();
     assert_eq!(s.start.byte, 0);
-    assert_eq!(s.end.byte, doc.nodes().last().unwrap().span().end.byte);
-    // `bb` ends at byte 4; trailing newline is part of the doc span.
-    assert!(s.end.byte >= 4);
+    // The document span covers the trailing newline, so it extends one byte
+    // past the last node's span end.
+    assert_eq!(s.end.byte, 5);
+    assert!(s.end.byte > doc.nodes().last().unwrap().span().end.byte);
 }
 
 #[test]
@@ -541,8 +541,8 @@ fn entry_span_of_arg_is_the_value_span() {
 fn value_span_is_preserved_for_every_variant() {
     // One value per input so the expected column is easy to state.
     let cases: &[(&[u8], &str, u32, u32)] = &[
-        (b"n null\n", "Null", 2, 6),
-        (b"n true\n", "Bool", 2, 6),
+        (b"n #null\n", "Null", 2, 7),
+        (b"n #true\n", "Bool", 2, 7),
         (b"n 1\n", "Integer", 2, 3),
         (b"n 1.5\n", "Float", 2, 5),
         (b"n \"s\"\n", "String", 2, 5),
@@ -718,8 +718,8 @@ fn lexer_input_and_pos_return_buffer_and_offset() {
 
 #[test]
 fn token_span_for_every_variant() {
-    let toks = lex_all("id 1 1.5 \"s\" r#\"r\"# true false null\n= { } ( ) / /-");
-    // 17 tokens: id, 1, 1.5, "s", r#"r"#, true, false, null, newline,
+    let toks = lex_all("id 1 1.5 \"s\" #\"r\"# #true #false #null\n= { } ( ) / /-");
+    // 17 tokens: id, 1, 1.5, "s", #"r"#, #true, #false, #null, newline,
     // `=`, `{`, `}`, `(`, `)`, `/`, `/-` — note: input ends with no
     // trailing newline before EOF; the lexer emits `Eof` after `/-`.
     assert!(toks.len() >= 16, "got {} tokens", toks.len());
@@ -791,19 +791,16 @@ fn lexer_position_and_input_accessors() {
 }
 
 #[test]
-fn lexer_skip_to_eol_consumes_to_newline() {
-    let buf: &[u8] = b"node /- comment\nrest\n";
+fn slashdash_line_comment_is_discarded_by_the_parser() {
+    // `Lexer::skip_to_eol` is no longer part of the public surface — the
+    // parser consumes a slashdash node itself (see `slashdash_target`).
+    // This asserts the resulting behaviour instead: the commented node
+    // never reaches the AST, and parsing resumes on the next line.
+    let buf: &[u8] = b"node /- dropped\nrest\n";
     let mut b = budgets();
-    let mut lx = Lexer::new(buf, &mut b);
-    // Consume `node`
-    let _ = lx.next_token().unwrap();
-    // Consume `/-`
-    let _ = lx.next_token().unwrap();
-    // Now skip the rest of the line.
-    lx.skip_to_eol();
-    // The next token must be `rest`.
-    let tok = lx.next_token().unwrap();
-    assert_eq!(tok.kind(), "identifier");
+    let doc = elang_kdl::parse_with_budgets(buf, &mut b).unwrap();
+    let names: Vec<&str> = doc.nodes().iter().map(|n| n.name()).collect();
+    assert_eq!(names, vec!["node", "rest"]);
 }
 
 #[test]
@@ -813,7 +810,8 @@ fn lexer_budget_accessor_returns_mutable_tracker() {
     // The lexer's budgets accessor hands back the underlying tracker so
     // callers can drain counters while parsing.
     let tracker = lx.budgets();
-    tracker.nesting_depth().try_add(1).unwrap();
+    tracker.nodes_resource().try_add(1).unwrap();
+    tracker.comment_bytes_resource().try_add(1).unwrap();
 }
 
 // ---------------------------------------------------------------------------

@@ -20,9 +20,10 @@
 //!
 //! ## Whitespace and comments (T0512)
 //!
-//! All KDL 2.0 whitespace forms are accepted and discarded: space, tab,
-//! CR, LF, U+000B (vertical tab), U+000C (form feed), and U+00A0 and
-//! other Unicode whitespace. An initial U+FEFF BOM is skipped. Comment forms:
+//! Horizontal Unicode whitespace is discarded. LF, CR, VT, FF, NEL, LS,
+//! and PS are emitted as newline tokens; CRLF is a single newline. These
+//! characters also terminate line comments. An initial U+FEFF BOM is skipped.
+//! Comment forms:
 //!
 //! - `// …` line comment
 //! - `/* … */` block comment
@@ -57,7 +58,7 @@ pub enum Token {
     Ident(SourceSpan, Box<str>),
     /// `#true` or `#false`.
     Bool(SourceSpan, bool),
-    /// `#null`.
+    /// The `#null` keyword.
     Null(SourceSpan),
     /// Integer literal; lexeme preserved verbatim.
     Integer(SourceSpan, Box<str>),
@@ -67,7 +68,7 @@ pub enum Token {
     Str(SourceSpan, Box<str>),
     /// Raw string `#"…"#`; value is the raw content (no escapes).
     RawStr(SourceSpan, Box<str>),
-    /// Line terminator: `\n`, `\r\n`, `\r`, U+000C, or `;`.
+    /// Line terminator: LF, CRLF, CR, VT, FF, NEL, LS, PS, or `;`.
     Newline(SourceSpan),
     /// `{` opening a children block.
     OpenBrace(SourceSpan),
@@ -152,14 +153,7 @@ impl<'a> Lexer<'a> {
             pos: 0,
             budgets,
             scratch: Vec::new(),
-            line_starts: core::iter::once(0)
-                .chain(
-                    input
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(i, b)| (*b == b'\n').then_some(i + 1)),
-                )
-                .collect(),
+            line_starts: crate::span::line_starts(input).collect(),
         }
     }
 
@@ -226,7 +220,14 @@ impl<'a> Lexer<'a> {
 
     /// Classify decoded Unicode scalar values, never individual UTF-8 bytes.
     fn is_ws(c: char) -> bool {
-        c.is_whitespace()
+        c.is_whitespace() && !Self::is_newline(c)
+    }
+
+    fn is_newline(c: char) -> bool {
+        matches!(
+            c,
+            '\n' | '\r' | '\u{b}' | '\u{c}' | '\u{85}' | '\u{2028}' | '\u{2029}'
+        )
     }
 
     /// KDL 2.0's disallowed literal code points (BOM is allowed only initially).
@@ -238,6 +239,7 @@ impl<'a> Lexer<'a> {
 
     fn is_ident_char(c: char) -> bool {
         !Self::is_ws(c)
+            && !Self::is_newline(c)
             && !Self::is_disallowed(c)
             && !matches!(
                 c,
@@ -253,7 +255,7 @@ impl<'a> Lexer<'a> {
             match self.byte() {
                 None => return Ok(()),
                 // Newlines are statement terminators, not trivia.
-                Some(b'\n') | Some(b'\r') | Some(0x0C) => return Ok(()),
+                Some(_) if self.char_at(self.pos).is_some_and(Self::is_newline) => return Ok(()),
                 Some(_) if self.pos == 0 && self.input.starts_with(b"\xef\xbb\xbf") => {
                     self.pos += 3;
                 }
@@ -265,11 +267,11 @@ impl<'a> Lexer<'a> {
                 Some(b'/') if self.peek(1) == Some(b'/') => {
                     let start = self.pos;
                     self.pos += 2;
-                    while let Some(c) = self.byte() {
-                        if c == b'\n' || c == b'\r' {
+                    while let Some(c) = self.char_at(self.pos) {
+                        if Self::is_newline(c) {
                             break;
                         }
-                        self.pos += 1;
+                        self.pos += c.len_utf8();
                         let len = self.pos - start;
                         if len > MAX_COMMENT_BYTES {
                             return Err(ParseError::at(
@@ -368,13 +370,29 @@ impl<'a> Lexer<'a> {
                 self.pos += 1;
                 Ok(Token::CloseParen(self.span(start)))
             }
-            b';' | b'\r' | b'\n' | 0x0C => {
+            b';' => {
                 self.pos += 1;
                 Ok(Token::Newline(self.span(start)))
             }
-            b'"' => self.lex_string(start),
-            b'#' if matches!(self.peek(1), Some(b'"') | Some(b'#')) => self.lex_raw_string(start),
+            _ if self.char_at(self.pos).is_some_and(Self::is_newline) => {
+                let c = self.char_at(self.pos).unwrap_or('\n');
+                self.pos += c.len_utf8();
+                if c == '\r' && self.byte() == Some(b'\n') {
+                    self.pos += 1;
+                }
+                Ok(Token::Newline(self.span(start)))
+            }
+            b'#' if matches!(self.peek(1), Some(b'#' | b'"')) => self.lex_raw_string(start),
             b'#' => self.lex_keyword(start),
+            b'"' => self.lex_string(start),
+            b'r' if self.peek(1) == Some(b'#') => {
+                self.pos += 2;
+                Err(ParseError::at(
+                    ErrorCode::InvalidIdentifier,
+                    self.span(start),
+                    "KDL 1.0 raw string prefix is not supported; use #\"...\"#",
+                ))
+            }
             b'/' if self.peek(1) == Some(b'-') => {
                 self.pos += 2;
                 Ok(Token::SlashDash(self.span(start)))
@@ -389,23 +407,24 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_keyword(&mut self, start: usize) -> Result<Token, ParseError> {
-        for word in [b"#true".as_slice(), b"#false", b"#null"] {
-            let end = start + word.len();
-            if self.input[start..].starts_with(word)
-                && self.char_at(end).is_none_or(|c| !Self::is_ident_char(c))
+        for keyword in ["#true", "#false", "#null", "#inf", "#-inf", "#nan"] {
+            let end = start + keyword.len();
+            if self.input[start..].starts_with(keyword.as_bytes())
+                && !self.char_at(end).is_some_and(Self::is_ident_char)
             {
                 self.pos = end;
                 let span = self.span(start);
-                return Ok(match word {
-                    b"#true" => Token::Bool(span, true),
-                    b"#false" => Token::Bool(span, false),
-                    _ => Token::Null(span),
+                return Ok(match keyword {
+                    "#true" => Token::Bool(span, true),
+                    "#false" => Token::Bool(span, false),
+                    "#null" => Token::Null(span),
+                    _ => Token::Float(span, keyword.into()),
                 });
             }
         }
         self.pos += 1;
         Err(ParseError::at(
-            ErrorCode::UnexpectedByte,
+            ErrorCode::InvalidIdentifier,
             self.span(start),
             "unknown KDL keyword",
         ))
@@ -449,6 +468,13 @@ impl<'a> Lexer<'a> {
                 "identifier is not valid UTF-8",
             )
         })?;
+        if matches!(s, "true" | "false" | "null" | "inf" | "nan") {
+            return Err(ParseError::at(
+                ErrorCode::InvalidIdentifier,
+                self.span(start),
+                "reserved word must be quoted or prefixed with `#`",
+            ));
+        }
         Ok(Token::Ident(self.span(start), s.into()))
     }
 
@@ -550,6 +576,14 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_string(&mut self, start: usize) -> Result<Token, ParseError> {
+        if self.input[start..].starts_with(b"\"\"\"") {
+            self.pos += 3;
+            return Err(ParseError::at(
+                ErrorCode::UnexpectedByte,
+                self.span(start),
+                "multiline strings are not supported",
+            ));
+        }
         self.pos += 1; // opening quote
         let content_start = self.pos;
         // Scan for the closing quote, tracking the maximum encoded length as
@@ -565,8 +599,29 @@ impl<'a> Lexer<'a> {
                     ))
                 }
                 Some(b'"') => break,
+                Some(_) if self.char_at(self.pos).is_some_and(Self::is_newline) => {
+                    return Err(ParseError::at(
+                        ErrorCode::UnterminatedString,
+                        self.span(start),
+                        "literal newline in single-line string",
+                    ));
+                }
                 Some(b'\\') => {
-                    self.pos += 2;
+                    self.pos += 1;
+                    if self.char_at(self.pos).is_some_and(char::is_whitespace) {
+                        while let Some(c) = self.char_at(self.pos).filter(|c| c.is_whitespace()) {
+                            self.pos += c.len_utf8();
+                            if self.pos - start > MAX_ENCODED_TOKEN_BYTES {
+                                return Err(ParseError::at(
+                                    ErrorCode::TokenTooLong,
+                                    self.span(start),
+                                    "string exceeds MAX_ENCODED_TOKEN_BYTES",
+                                ));
+                            }
+                        }
+                    } else if let Some(c) = self.char_at(self.pos) {
+                        self.pos += c.len_utf8();
+                    }
                     if self.pos - start > MAX_ENCODED_TOKEN_BYTES {
                         return Err(ParseError::at(
                             ErrorCode::TokenTooLong,
@@ -661,6 +716,14 @@ impl<'a> Lexer<'a> {
                 "expected quote after raw string hashes",
             ));
         }
+        if self.input[self.pos..].starts_with(b"\"\"\"") {
+            self.pos += 3;
+            return Err(ParseError::at(
+                ErrorCode::UnexpectedByte,
+                self.span(start),
+                "multiline raw strings are not supported",
+            ));
+        }
         self.pos += 1; // opening quote
 
         let content_start = self.pos;
@@ -680,6 +743,13 @@ impl<'a> Lexer<'a> {
                 }
                 Some(b'"') if self.input[self.pos..].starts_with(&fence) => {
                     break;
+                }
+                Some(_) if self.char_at(self.pos).is_some_and(Self::is_newline) => {
+                    return Err(ParseError::at(
+                        ErrorCode::UnterminatedRawString,
+                        self.span(start),
+                        "literal newline in single-line raw string",
+                    ));
                 }
                 Some(_) => {
                     self.pos += 1;
@@ -792,7 +862,12 @@ pub fn parse_integer(lex: &str) -> Option<i128> {
 /// Parse a float lexeme into an `f64`, stripping `_` separators.
 pub fn parse_float(lex: &str) -> Option<f64> {
     let cleaned: String = lex.chars().filter(|c| *c != '_').collect();
-    cleaned.parse::<f64>().ok()
+    match cleaned.as_str() {
+        "#inf" => Some(f64::INFINITY),
+        "#-inf" => Some(f64::NEG_INFINITY),
+        "#nan" => Some(f64::NAN),
+        _ => cleaned.parse::<f64>().ok(),
+    }
 }
 
 #[cfg(test)]
@@ -879,6 +954,16 @@ mod tests {
     }
 
     #[test]
+    fn lexes_multi_hash_raw_string() {
+        // Three fences each side: the content may contain `"#`.
+        let toks = lex_all(r####"###"a"#b"###"####).unwrap();
+        match &toks[0] {
+            Token::RawStr(_, v) => assert_eq!(v.as_ref(), r##"a"#b"##),
+            other => panic!("expected raw string, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn lexes_comments_and_skips_them() {
         let toks = lex_all("// hi\n/* block */ foo").unwrap();
         assert!(matches!(toks[0], Token::Newline(_)));
@@ -935,15 +1020,69 @@ mod tests {
 
     #[test]
     fn lexes_newline_forms() {
-        let toks = lex_all("a\nb\rc;d").unwrap();
-        // a, nl, b, nl, c, ;, d
-        assert!(matches!(toks[1], Token::Newline(_)));
-        assert!(matches!(toks[3], Token::Newline(_)));
-        assert!(matches!(toks[5], Token::Newline(_)));
+        for newline in [
+            "\n", "\r", "\r\n", "\u{b}", "\u{c}", "\u{85}", "\u{2028}", "\u{2029}", ";",
+        ] {
+            for separator in [newline.to_string(), format!("// comment{newline}")] {
+                // Semicolons are statement terminators, but do not end comments.
+                if separator.starts_with("//") && newline == ";" {
+                    continue;
+                }
+                let input = format!("first{separator}second");
+                let toks = lex_all(&input).unwrap();
+                assert_eq!(toks.len(), 4, "{input:?}: {toks:?}");
+                assert!(matches!(&toks[0], Token::Ident(_, s) if s.as_ref() == "first"));
+                assert!(matches!(toks[1], Token::Newline(_)));
+                assert!(matches!(&toks[2], Token::Ident(_, s) if s.as_ref() == "second"));
+            }
+        }
     }
+
+    #[test]
+    fn bare_keywords_are_rejected() {
+        for word in ["true", "false", "null", "inf", "nan"] {
+            assert_eq!(
+                lex_all(word).unwrap_err().code,
+                ErrorCode::InvalidIdentifier
+            );
+        }
+    }
+
+    #[test]
+    fn lexes_numeric_keywords() {
+        let tokens = lex_all("#inf #-inf #nan").unwrap();
+        for (token, expected) in tokens.iter().zip(["#inf", "#-inf", "#nan"]) {
+            assert!(matches!(token, Token::Float(_, lexeme) if lexeme.as_ref() == expected));
+        }
+        for keyword in ["#infinity", "#nanx", "#-infx", "#truex", "#bogus"] {
+            assert_eq!(
+                lex_all(keyword).unwrap_err().code,
+                ErrorCode::InvalidIdentifier
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_literal_newlines_in_quoted_strings() {
+        for newline in [
+            "\n", "\r", "\r\n", "\u{b}", "\u{c}", "\u{85}", "\u{2028}", "\u{2029}",
+        ] {
+            assert_eq!(
+                lex_all(&format!("\"a{newline}b\"")).unwrap_err().code,
+                ErrorCode::UnterminatedString
+            );
+            // Whitespace escapes may consume newlines and adjacent whitespace.
+            let tokens = lex_all(&format!("\"a\\ \t{newline} b\"")).unwrap();
+            assert!(matches!(&tokens[0], Token::Str(_, value) if value.as_ref() == "ab"));
+        }
+        for input in ["\"\"\"\"", "\"\"\"\ntext\n\"\"\""] {
+            assert_eq!(lex_all(input).unwrap_err().code, ErrorCode::UnexpectedByte);
+        }
+    }
+
     #[test]
     fn indexed_spans_match_byte_positions_across_multiline_tokens() {
-        let input = "  α \n/* two\nlines */ β \"three\nlines\" #\"raw\ntext\"#\nγ";
+        let input = "  α \n/* two\nlines */ β \"three\\nlines\" #\"raw\\ntext\"#\nγ";
         for token in lex_all(input).unwrap() {
             let span = token.span();
             assert_eq!(
@@ -954,8 +1093,9 @@ mod tests {
     }
 
     #[test]
-    fn bare_keywords_are_identifiers() {
-        let tokens = lex_all("true false null").unwrap();
+    fn keyword_prefix_does_not_collateral() {
+        // `nullable`, `trueish`, `falseness` are identifiers, not keywords.
+        let tokens = lex_all("nullable trueish falseness").unwrap();
         assert!(tokens[..3]
             .iter()
             .all(|token| matches!(token, Token::Ident(..))));
