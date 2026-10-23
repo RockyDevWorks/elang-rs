@@ -58,9 +58,14 @@ const MIN_CODE_LEN: usize = 8;
 ///   to widen its scope to register another phase's codes; each must be added
 ///   to the registry when its phase is finalised.
 const KNOWN_NON_CODES: &[&str] = &[
-    // Binary format magic (elang-conformance).
+    // Binary format magic (elang-conformance / elang-container). `ELENXXXX` is
+    // a deliberately corrupted footer magic used by the T0321 footer-variant
+    // test, not a diagnostic.
     "ELEND001",
     "ELIDX001",
+    "ELENXXXX",
+    // Deliberately corrupted footer magic used by the layout parse-error test.
+    "NOPENOPE",
     // Emitted by elang-core::model::eld (Phase 9 — registry entries pending).
     "ELD_GROUP_EMPTY",
     "ELD_MISSING_REQUIRED_GROUP",

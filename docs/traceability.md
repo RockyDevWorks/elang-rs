@@ -72,7 +72,12 @@ partial pending the Phase 11 canonical ELD golden vectors (ADR 0003 freeze gate)
 | REQ-ERR-001/002 | `elang-core::error` (`Category`, `Error`, `Diagnostic`, `KdlSpan`) | `error::tests::*` | Done |
 | REQ-LIMIT-009 | `elang-core::error::Diagnostics` (cap 100, no masking) | `diagnostics_cap_does_not_mask_failure` | Done |
 | REQ-LIMIT-001..008,010 | elang-kdl / elang-eld | T0503–T0515, T0510 | Planned (Phase 5/10) |
-| REQ-BIN-001..018 | elang-container | T0301–T0324 | Planned |
+| REQ-BIN-001..013 | `elang-container::header`, `::footer`, `::index` (decode/encode) | `header::tests::*` (16), `footer::tests::*` (19), `index::tests::*` (29) | Done |
+| REQ-BIN-014 | `elang-container::layout::validate_layout` | `layout::tests::{accepts_the_reference_contiguous_layout, rejects_a_gap_between_frames, rejects_overlapping_frames, rejects_unindexed_bytes_before_the_index, rejects_trailing_frame_bytes_past_the_index, rejects_a_zero_length_frame, rejects_a_frame_end_that_overflows_u64, a_wrapping_frame_end_cannot_satisfy_the_index_offset}` | Done |
+| REQ-BIN-015 | `elang-container::index::{Index::encode, Index::encode_and_hash}` | `index::tests::{encodes_back_to_the_golden_index_byte_for_byte, encoding_is_idempotent, decode_of_encode_round_trips_the_parsed_index, the_computed_hash_matches_the_golden_footer_digest}` | Done |
+| REQ-BIN-016 | `elang-container::footer::Footer::encode` | `footer::tests::{encode_produces_the_reference_bytes, encode_rejects_a_short_buffer_without_panicking}` | Done |
+| REQ-BIN-017 | `elang-container::layout::ArchiveListing::{parse, listing}` | `layout::tests::{lists_the_reference_archive_without_decompressing, every_byte_offset_in_the_listing_falls_inside_the_archive, a_single_resource_archive_round_trips_through_the_listing, an_empty_index_produces_an_empty_listing, parse_rejects_duplicate_paths, parse_enforces_bytewise_path_order, parse_enforces_the_per_resource_size_ceiling, parse_enforces_the_aggregate_size_ceiling}` | Done |
+| REQ-BIN-018 (Phase 3 scope) | `elang-container` parsers | `index::tests::{no_truncation_of_the_index_can_panic_or_succeed, every_single_byte_corruption_is_rejected_or_changes_the_result}` + `layout::tests::a_wrapping_frame_end_cannot_satisfy_the_index_offset` + 11 sabotage-verified layout/serializer checks | Done (Phase 3 slice; full T1501 conformance harness still Planned) |
 | REQ-FRAME-001..012 | elang-container | T0401–T0422 | Planned |
 | REQ-READER-001..006 | elang-container | T1201–T1208 | Planned |
 | REQ-PKG-001..005 | elang-container / elang-epf | T1204, T1205, T0411, T0121 | Planned |

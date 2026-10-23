@@ -25,3 +25,6 @@ ignore:
   # determinism tests; they are tooling, not shipped library surface.
   - "**/src/bin/**"
   - "crates/elang-conformance/src/binary_vectors.rs"
+  # Test-support module: fixtures are read from disk, never executed as logic
+  # beyond the four loader functions, all four of which are covered.
+  - "crates/elang-container/src/testdata.rs"
