@@ -133,10 +133,9 @@ mod tests {
     fn blanket_impl_for_reference_forwards_lookups() {
         let owned: Vec<String> = vec!["a/b.eld".into()];
         let slice_ref: &[String] = owned.as_slice();
-        // Coerce `&&[String]` to `&[String]` (or use UFCS) so the call
-        // resolves through the `IndexLookup for [String]` impl.
-        assert!(IndexLookup::contains(slice_ref, "a/b.eld"));
-        assert!(!IndexLookup::contains(slice_ref, "x/y.eld"));
+        // Select `Self = &[String]` to exercise the reference impl.
+        assert!(<&[String] as IndexLookup>::contains(&slice_ref, "a/b.eld"));
+        assert!(!<&[String] as IndexLookup>::contains(&slice_ref, "x/y.eld"));
     }
 
     /// The blanket `IndexLookup for [T]` impl iterates the slice.

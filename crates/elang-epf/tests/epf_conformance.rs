@@ -561,6 +561,7 @@ fn unicode_forbidden_category_is_rejected_with_stage_10() {
     let err = parse(src.as_bytes()).expect_err("forbidden category");
     assert_eq!(err.code(), "UNICODE_FORBIDDEN_CATEGORY");
     assert_eq!(err.diagnostic.stage, Some(10));
+    assert!(err.diagnostic.message.contains("U+0007"));
 }
 
 /// Manifest item at index 1 (a second child after `phonemes`) is rejected.
@@ -606,24 +607,6 @@ fn unicode_noncharacter_is_rejected_with_stage_10() {
     let err = parse(src.as_bytes()).expect_err("noncharacter");
     assert_eq!(err.code(), "UNICODE_NONCHARACTER");
     assert_eq!(err.diagnostic.stage, Some(10));
-}
-
-/// `unicode_diagnostics_attach_stage_10` covers `UNICODE_NOT_NFC`; this
-/// test covers the ForbiddenCategory branch.
-#[test]
-fn unicode_to_error_routes_through_stage_10() {
-    // The two prior tests already cover ForbiddenCategory and Noncharacter;
-    // this is a thin sanity test that the forbidden-category message
-    // includes the scalar.
-    use elang_unicode::UnicodeViolation;
-    let v = UnicodeViolation::ForbiddenCategory { scalar: '\u{0007}' };
-    let msg = match v {
-        UnicodeViolation::ForbiddenCategory { scalar } => {
-            format!("U+{:04X}", u32::from(scalar))
-        }
-        _ => String::new(),
-    };
-    assert_eq!(msg, "U+0007");
 }
 
 #[test]
