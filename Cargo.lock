@@ -86,6 +86,7 @@ dependencies = [
  "elang-eld",
  "elang-epf",
  "elang-integrity",
+ "elang-kdl",
  "elang-repertoire",
  "serde_json",
  "sha2",

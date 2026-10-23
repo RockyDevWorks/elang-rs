@@ -61,6 +61,12 @@
   (canonical ELD goldens — depends on Phase 11 canonical writer, T1121),
   OA-17 (freeze/tag — depends on OA-14 and on the second human review of
   OA-1/OA-4 diacritic/modifier inventories). These MUST NOT be fabricated.
+- **KDL parser (Phase 5, Issue #15) is an implementation of ratified
+  artifacts, not a new one.** [ADR 0010](decisions/0010-kdl-parser-hand-roll.md)
+  records the hand-roll-vs-`kdl-rs` decision. The parser implements the
+  OA-8 (EPF grammar), OA-9 (ELD grammar), and OA-16 (residual ELD
+  canonical edge cases) grammars plus the `KDL_*` error codes from OA-10.
+  No row above changes status as a result of Phase 5.
 - **OA-13 (Unicode data) is ratified:** `elang-unicode` provides Unicode 18.0.0
   General_Category + NFC from the pinned UCD, and NFC passes the official 18.0.0
   conformance suite (ADR 0007). `unicode_data_matches_pin()` is now `true`.

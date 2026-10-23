@@ -22,6 +22,25 @@ and this project uses independent version domains (see
   `docs/release-strategy.md`, fixture conventions.
 - `elang-core::version_domains` locked version constants with tests.
 - CI workflow (fmt, clippy, test, docs, audit, cross-platform build).
+- **Phase 5 (Issue #15): KDL 2.0 parser adapter and resource budgets**
+  ([ADR 0010](docs/decisions/0010-kdl-parser-hand-roll.md)). The
+  `elang-kdl` crate now provides a hand-rolled KDL **2.0** parser, the
+  KDL 2.0 source spans (`Position`, `SourceSpan`), the AST
+  (`KdlDocument`, `KdlNode`, `KdlEntry`, `KdlValue`, `KdlChildren`,
+  `KdlVersionPragma`), the 27-entry `ErrorCode` registry (all
+  registered in `specs/registry/error-codes.{md,json}` and
+  enforced by `elang-conformance::registry_completeness`), the
+  budget-enforcing `BudgetTracker` (per-resource **and**
+  archive-wide ceilings), the canonical double-quoted string emitter
+  (ADR 0009 E-3 escaping set, no leading zeros, idempotent), and the
+  entry points `parse` / `parse_with_budgets`. T0510 (semantic
+  references / traversal depth) and T0511 (schema-level validation:
+  duplicate singletons, extra args, unknown props/nodes) are explicitly
+  downstream concerns — the schema layers in `elang-epf`,
+  `elang-eld`, and `elang-integrity` consume the AST and enforce them
+  in Phases 6/7/9. Test counts: 64 unit tests + 53 KDL-2.0 spec-fixture
+  tests + 4 fuzz-harness tests + 6 consumer-wiring tests (under
+  `elang-conformance`).
 
 ### Notes
 
@@ -35,5 +54,11 @@ and this project uses independent version domains (see
   the IPA diacritic/modifier inventories per ADR 0008). No new normative
   contracts introduced; this update reconciles the documentation with the
   state of the repository.
+- Phase 5 (Issue #15) closes T0501–T0509, T0512–T0515. T0510 (semantic
+  references / traversal depth) and T0511 (schema validation) remain
+  Planned for downstream phases, as documented in
+  `docs/traceability.md` and the `open-artifacts.md` rules of engagement
+  (the KDL surface parser is the implementation of OA-8/OA-9/OA-16's
+  normative grammar, not a new normative artifact).
 
 [Unreleased]: https://github.com/elang-lang/elang-rs/compare/HEAD
