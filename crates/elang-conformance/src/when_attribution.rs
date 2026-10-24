@@ -465,11 +465,239 @@ fn is_diagnostic_code(s: &str) -> bool {
 }
 
 /// The diagnostic codes asserted in `body`.
+///
+/// Only codes appearing inside an assertion expression count. A code
+/// that merely appears as a *fixture* — a source string in a table of
+/// inputs, a constructed error value — is not evidence that the test
+/// asserts the diagnostic, so counting it would let a row claim a
+/// rejection the test never demonstrates.
 fn diagnostics_in(body: &str) -> BTreeSet<String> {
-    string_literals(body)
-        .into_iter()
-        .filter(|s| is_diagnostic_code(s))
-        .collect()
+    let mut out = BTreeSet::new();
+    for (start, end) in assertion_arg_spans(body) {
+        for literal in string_literals(&body[start..end]) {
+            if is_diagnostic_code(&literal) {
+                out.insert(literal);
+            }
+        }
+    }
+    out
+}
+
+/// Whether `b` can start a Rust identifier.
+fn is_ident_start(b: u8) -> bool {
+    b == b'_' || b.is_ascii_alphabetic()
+}
+
+/// The byte ranges of assertion macro argument lists in `text`.
+///
+/// An assertion is `assert!(…)`, `assert_eq!(…)`, `assert_ne!(…)` or
+/// `matches!(…)`. The returned ranges cover the parenthesised
+/// argument list only — the opening parenthesis is excluded, the
+/// matching closing parenthesis is excluded.
+fn assertion_arg_spans(text: &str) -> Vec<(usize, usize)> {
+    let bytes = text.as_bytes();
+    let mut spans = Vec::new();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        // Skip line comments.
+        if bytes[i..].starts_with(b"//") {
+            while i < bytes.len() && bytes[i] != b'\n' {
+                i += 1;
+            }
+            continue;
+        }
+        // Skip block comments (nesting allowed).
+        if bytes[i..].starts_with(b"/*") {
+            let mut depth = 1i32;
+            i += 2;
+            while i < bytes.len() && depth > 0 {
+                if bytes[i..].starts_with(b"/*") {
+                    depth += 1;
+                    i += 2;
+                } else if bytes[i..].starts_with(b"*/") {
+                    depth -= 1;
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            continue;
+        }
+        // Skip string literals (raw and ordinary).
+        if bytes[i] == b'r' {
+            let mut quote = i + 1;
+            while bytes.get(quote) == Some(&b'#') {
+                quote += 1;
+            }
+            if bytes.get(quote) == Some(&b'"') {
+                let hashes = quote - i - 1;
+                let terminator = format!("\"{}", "#".repeat(hashes));
+                if let Some(end) = text[quote + 1..].find(&terminator) {
+                    i = quote + 1 + end + terminator.len();
+                    continue;
+                }
+            }
+        }
+        if bytes[i] == b'"' {
+            i += 1;
+            while i < bytes.len() {
+                if bytes[i] == b'\\' {
+                    i += 2;
+                    continue;
+                }
+                if bytes[i] == b'"' {
+                    i += 1;
+                    break;
+                }
+                i += 1;
+            }
+            continue;
+        }
+        // Skip character literals so a quote inside cannot open a
+        // bogus string. A lifetime (`'a`) is not a char literal.
+        if bytes[i] == b'\'' {
+            let is_char = bytes.get(i + 1) == Some(&b'\\')
+                || bytes
+                    .get(i + 1)
+                    .is_some_and(|c| !crate::meta_tests::is_ident_byte(*c));
+            if is_char {
+                let mut j = i + 1;
+                while j < bytes.len() && bytes[j] != b'\'' {
+                    if bytes[j] == b'\\' {
+                        j += 1;
+                    }
+                    j += 1;
+                }
+                i = (j + 1).min(bytes.len());
+                continue;
+            }
+            i += 1;
+            continue;
+        }
+        // Identifiers.
+        if is_ident_start(bytes[i]) {
+            let start = i;
+            while i < bytes.len() && crate::meta_tests::is_ident_byte(bytes[i]) {
+                i += 1;
+            }
+            let ident = &text[start..i];
+            if matches!(ident, "assert" | "assert_eq" | "assert_ne" | "matches") {
+                let mut j = i;
+                while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+                    j += 1;
+                }
+                if bytes.get(j) == Some(&b'!') {
+                    j += 1;
+                    while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+                        j += 1;
+                    }
+                    if bytes.get(j) == Some(&b'(') {
+                        if let Some(end) = matching_paren(text, j) {
+                            spans.push((j + 1, end));
+                            i = end + 1;
+                            continue;
+                        }
+                    }
+                }
+            }
+            continue;
+        }
+        i += 1;
+    }
+    spans
+}
+
+/// The index of the parenthesis closing the one at `open`.
+///
+/// `open` must point at an opening parenthesis. Strings, character
+/// literals and comments are skipped so a parenthesis inside them
+/// does not affect the depth count.
+fn matching_paren(text: &str, open: usize) -> Option<usize> {
+    let bytes = text.as_bytes();
+    let mut depth = 0i32;
+    let mut i = open;
+    while i < bytes.len() {
+        if bytes[i..].starts_with(b"//") {
+            while i < bytes.len() && bytes[i] != b'\n' {
+                i += 1;
+            }
+            continue;
+        }
+        if bytes[i..].starts_with(b"/*") {
+            let mut comment_depth = 1i32;
+            i += 2;
+            while i < bytes.len() && comment_depth > 0 {
+                if bytes[i..].starts_with(b"/*") {
+                    comment_depth += 1;
+                    i += 2;
+                } else if bytes[i..].starts_with(b"*/") {
+                    comment_depth -= 1;
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            continue;
+        }
+        if bytes[i] == b'r' {
+            let mut quote = i + 1;
+            while bytes.get(quote) == Some(&b'#') {
+                quote += 1;
+            }
+            if bytes.get(quote) == Some(&b'"') {
+                let hashes = quote - i - 1;
+                let terminator = format!("\"{}", "#".repeat(hashes));
+                if let Some(end) = text[quote + 1..].find(&terminator) {
+                    i = quote + 1 + end + terminator.len();
+                    continue;
+                }
+            }
+        }
+        if bytes[i] == b'"' {
+            i += 1;
+            while i < bytes.len() {
+                if bytes[i] == b'\\' {
+                    i += 2;
+                    continue;
+                }
+                if bytes[i] == b'"' {
+                    i += 1;
+                    break;
+                }
+                i += 1;
+            }
+            continue;
+        }
+        if bytes[i] == b'\'' {
+            let is_char = bytes.get(i + 1) == Some(&b'\\')
+                || bytes
+                    .get(i + 1)
+                    .is_some_and(|c| !crate::meta_tests::is_ident_byte(*c));
+            if is_char {
+                let mut j = i + 1;
+                while j < bytes.len() && bytes[j] != b'\'' {
+                    if bytes[j] == b'\\' {
+                        j += 1;
+                    }
+                    j += 1;
+                }
+                i = (j + 1).min(bytes.len());
+                continue;
+            }
+            i += 1;
+            continue;
+        }
+        if bytes[i] == b'(' {
+            depth += 1;
+        } else if bytes[i] == b')' {
+            depth -= 1;
+            if depth == 0 {
+                return Some(i);
+            }
+        }
+        i += 1;
+    }
+    None
 }
 
 /// The `T10xx` task tags appearing in `body`.
@@ -877,20 +1105,71 @@ fn observable_words_respect_boundaries() {
 
 #[test]
 fn string_literal_extraction_ignores_comments_and_char_literals() {
-    // The diagnostic scan reads string literals. If it also picked up
-    // comments, a diagnostic merely *mentioned* in prose would count as
-    // asserted and the subset check would lose its teeth.
+    // The diagnostic scan reads string literals inside assertions. If
+    // it also picked up comments, a diagnostic merely *mentioned* in
+    // prose would count as asserted and the subset check would lose
+    // its teeth.
     let body = r#"
         // "WHEN_TOO_DEEP" is mentioned in a comment.
         /* "WHEN_GROUP_ARITY" in a block comment. */
         let c = '"';
-        let s = "WHEN_BAD_VALUE";
+        assert_eq!(e.code(), "WHEN_BAD_VALUE");
     "#;
     let found = diagnostics_in(body);
     assert_eq!(
         found.iter().cloned().collect::<Vec<_>>(),
         vec!["WHEN_BAD_VALUE".to_string()],
-        "only the real string literal may count as an asserted diagnostic"
+        "only the real asserted literal may count as an asserted diagnostic"
+    );
+}
+
+#[test]
+fn diagnostic_extraction_is_scoped_to_assertion_expressions() {
+    // A diagnostic code that appears only as a *fixture* — a source
+    // string in a table of inputs, a constructed error value — is not
+    // evidence that the test asserts the diagnostic. Counting it would
+    // let a Negative row claim a rejection the test never demonstrates,
+    // and would let a foreign code in a fixture trigger a false
+    // foreign-code failure.
+    let body = r#"
+        let cases: &[(&str, &str)] = &[
+            ("WHEN_BAD_VALUE", "phonemes { }"),
+            ("WHEN_TOO_DEEP", "phonemes { }"),
+        ];
+        let expected = "WHEN_BAD_VALUE";
+        for (code, src) in cases {
+            let e = parse_err(src);
+            assert!(e.code() == *code);
+        }
+    "#;
+    let found = diagnostics_in(body);
+    assert!(
+        found.is_empty(),
+        "a diagnostic that appears only as a fixture must not count as \
+         asserted; got {found:?}"
+    );
+
+    // A fixture-only foreign code must not trigger the foreign-code
+    // check either. The body asserts the requirement's allowed
+    // diagnostic (so check 3 passes), but the foreign code appears
+    // only as a fixture string outside any assertion.
+    let row = CoverageRow {
+        requirement: "REQ-WHEN-006",
+        crate_name: "synthetic",
+        test: "fixture_only_foreign_code",
+        kind: CoverageKind::Negative,
+    };
+    let body = r#"
+        let word_position = "first";
+        let fixture_foreign = "WHEN_TOO_DEEP";
+        let e = parse_err("word-position \"first\"");
+        assert_eq!(e.code(), "WHEN_BAD_VALUE");
+    "#;
+    let result = check_attribution(&row, Some(body));
+    assert!(
+        result.is_ok(),
+        "a fixture-only foreign code must not fail the foreign-code \
+         check; got {result:?}"
     );
 }
 
