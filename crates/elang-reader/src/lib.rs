@@ -34,9 +34,10 @@
 //!
 //! * **Thread-safety:** every result type (`Inspected`, `Verified`,
 //!   `Validated`) is `Send + Sync` because its fields are. The [`Package`]
-//!   type itself is `!Sync` (it owns the [`ArchiveListing`] which holds
-//!   references back into the archive bytes; cloning the listing and moving
-//!   ownership of the bytes is the recommended way to share).
+//!   type itself is `!Sync` (it owns the listing from
+//!   [`elang_container::ArchiveListing`] which holds references back into
+//!   the archive bytes; cloning the listing and moving ownership of the
+//!   bytes is the recommended way to share).
 //! * **Streaming:** only [`Package::open`] (stages 1–7) and the bootstrap
 //!   reads are partial-decode; stages 9–12 read entire resources into
 //!   memory. The largest resource allowed is

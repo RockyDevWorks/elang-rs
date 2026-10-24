@@ -3,16 +3,16 @@
 //! Each function runs one (or one cluster) of validation stages and returns
 //! the data the next stage needs. The functions are pure with respect to the
 //! [`crate::Package`] state — they take the archive bytes, the validated
-//! [`ArchiveView`](crate::archive::ArchiveView), and any required inputs as
+//! [`ArchiveView`], and any required inputs as
 //! arguments, and return the next stage's outputs. This keeps the per-stage
 //! work independently testable.
 //!
 //! | Function | Stages | Output |
 //! |---|---|---|
-//! | [`run_integrity_structure`] | 9 | parsed [`IntegrityManifest`] |
+//! | [`run_integrity_structure`] | 9 | parsed [`elang_integrity::IntegrityManifest`] |
 //! | [`run_epf`] | 10 | parsed [`EpfPackage`] |
 //! | [`run_resource_integrity`] | 11 | decoded resources + per-resource errors |
-//! | [`run_eld_semantics`] | 12 | validated [`PhonemeInventory`] |
+//! | [`run_eld_semantics`] | 12 | validated [`elang_core::model::eld::PhonemeInventory`] |
 //!
 //! Bootstrap (stage 8) lives in [`crate::bootstrap`] because its error model
 //! (CONTAINER category with stage 8 and a resource path) differs from the
@@ -52,7 +52,7 @@ pub const EPF_PATH: &str = "package.epf";
 /// * `INTEGRITY_STRUCTURE_INVALID` (or any stage-9 integrity code) when the
 ///   KDL document fails parsing.
 /// * `INTEGRITY_MISSING_ENTRY` / `INTEGRITY_EXTRA_ENTRY` via
-///   [`IntegrityManifest::verify_coverage`] when the manifest's entries
+///   [`elang_integrity::verify_coverage`] when the manifest's entries
 ///   disagree with the resource index (T1206).
 pub fn run_integrity_structure(
     view: &ArchiveView<'_>,
@@ -153,7 +153,7 @@ pub fn run_resource_integrity(
 ///
 /// Loads the pinned IPA repertoire, parses the declared phoneme `.eld`,
 /// parses every `when` block (Phase 10 reference resolution), and builds the
-/// validated [`PhonemeInventory`](elang_core::model::eld::PhonemeInventory).
+/// validated [`elang_core::model::eld::PhonemeInventory`].
 ///
 /// # Errors
 ///
@@ -237,7 +237,7 @@ fn missing_entry_err(path: &str) -> Error {
     }
 }
 
-/// Adapter: re-tag a [`IntegrityEntry::verify_coverage`] error with a
+/// Adapter: re-tag a [`elang_integrity::verify_coverage`] error with a
 /// stage-9 marker (the underlying code is already correct).
 fn integrity_coverage_err(e: Error) -> Error {
     Error {
@@ -300,6 +300,6 @@ fn enrich_with_resource_and_stage(e: Error, path: &str, stage: u8) -> Error {
     }
 }
 
-/// Re-export the [`IntegrityEntry`] type used by the verify-pipeline outputs.
+/// Re-export the [`elang_integrity::IntegrityEntry`] type used by the verify-pipeline outputs.
 #[allow(dead_code, reason = "API stability for downstream callers")]
 pub type IntegrityEntryRef = elang_integrity::IntegrityEntry;

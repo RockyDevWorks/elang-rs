@@ -5,7 +5,8 @@
 //! `Verified` ceiling, plus full ELD structural and semantic validation
 //! (allophones parsed, IPA identifiers resolved against the pinned
 //! repertoire, `when` conditions parsed and cross-referenced, romanization
-//! uniqueness enforced, and the validated [`PhonemeInventory`] built).
+//! uniqueness enforced, and the validated
+//! [`elang_core::model::eld::PhonemeInventory`] built).
 //!
 //! The [`Validated`] type deliberately owns the inventory it exposes — no
 //! reference back to the original archive bytes — so it can outlive the
@@ -14,13 +15,13 @@
 //! # Public SDK surface (T1209)
 //!
 //! [`Validated`] exposes:
-//! * [`Self::epf`] / [`Self::metadata`] — the parsed `package.epf` block.
-//! * [`Self::groups`] / [`Self::group_by_name`] / [`Self::root_count`] —
-//!   group-level enumeration.
-//! * [`Self::find_root`] / [`Self::roots`] — root-phoneme access by IPA.
-//! * [`Self::condition_for`] / [`Self::allophone_when`] — phonological
+//! * [`Validated::epf`] / [`Validated::metadata`] — the parsed `package.epf` block.
+//! * [`Validated::groups`] / [`Validated::group_by_name`] /
+//!   [`Validated::root_count`] — group-level enumeration.
+//! * [`Validated::find_root`] / [`Validated::roots`] — root-phoneme access by IPA.
+//! * [`Validated::condition_for`] / [`Validated::allophone_when`] — phonological
 //!   condition access (Phase 10).
-//! * [`Self::canonical_phoneme_bytes`] — Phase 11 canonical serialization
+//! * [`Validated::canonical_phoneme_bytes`] — Phase 11 canonical serialization
 //!   (T1210).
 
 use elang_container::ArchiveListing;
@@ -41,7 +42,8 @@ use crate::inspected::Inspected;
 /// `Verified` ceiling, plus full ELD structural and semantic validation
 /// (allophones parsed, IPA identifiers resolved against the pinned
 /// repertoire, `when` conditions parsed and cross-referenced, romanization
-/// uniqueness enforced, and the validated [`PhonemeInventory`] built).
+/// uniqueness enforced, and the validated
+/// [`elang_core::model::eld::PhonemeInventory`] built).
 ///
 /// The [`Validated`] type deliberately owns the inventory it exposes — no
 /// reference back to the original archive bytes — so it can outlive the
@@ -85,9 +87,10 @@ impl Validated {
     ///
     /// # Errors
     ///
-    /// Currently infallible; the `Result` return shape matches [`Verified`]
-    /// construction and reserves room for a future check that depends on the
-    /// archive bytes (e.g. re-verifying the manifest after downgrade).
+    /// Currently infallible; the `Result` return shape matches
+    /// [`crate::verified::Verified`] construction and reserves room for a
+    /// future check that depends on the archive bytes (e.g. re-verifying
+    /// the manifest after downgrade).
     pub fn as_verified(&self) -> Result<crate::verified::Verified, Error> {
         // `Validated` was built from a `Verified`, so the decoded resource
         // cache was discarded. Returning a `Verified` here would be dishonest;
@@ -169,7 +172,7 @@ impl Validated {
     ///
     /// Returns the root's `when` if the IPA is a root phoneme; otherwise
     /// `None`. Allophone-level `when` conditions are accessible via
-    /// [`Self::allophone_when`].
+    /// [`Validated::allophone_when`].
     #[must_use]
     pub fn condition_for(&self, ipa: &str) -> Option<&WhenCondition> {
         self.find_root(ipa).and_then(|r| r.when())

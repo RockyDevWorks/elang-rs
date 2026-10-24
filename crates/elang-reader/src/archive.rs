@@ -44,7 +44,7 @@ pub struct Span {
 /// Read-only, index-backed view over an opened archive's resources.
 ///
 /// Cheap to construct — it borrows the parsed [`Index`] from the container
-/// layer. No bytes are read until [`Span::read`] or
+/// layer. No bytes are read until `Span::read_span` or
 /// [`crate::Package::verify`] asks for them.
 #[derive(Debug, Clone)]
 pub struct ArchiveView<'a> {
@@ -62,7 +62,8 @@ pub struct ArchiveView<'a> {
 /// Paths are stored as `String` (not [`ResourcePath`]) because the container
 /// layer validates them with NFC checks already; converting back would
 /// re-run the same checks for no benefit and would lose the original byte
-/// view the EPF layer's [`IndexLookup::contains`] expects.
+/// view the EPF layer's
+/// [`elang_epf::manifest::IndexLookup::contains`] expects.
 #[derive(Debug, Clone)]
 struct ArcEntry {
     path: String,

@@ -8,7 +8,7 @@
 //! the reader refuses to advance past stage 8 with the matching diagnostic.
 //!
 //! These resources are small (≤ 64 bytes each, per
-//! [`MAX_BOOTSTRAP_RESOURCE_BYTES`](elang_core::limits::MAX_BOOTSTRAP_RESOURCE_BYTES)),
+//! [`MAX_BOOTSTRAP_RESOURCE_BYTES`]),
 //! so the stage uses a tight per-resource decode budget and a fresh
 //! [`DecodeBudget`] that does **not** share the aggregate counter with the
 //! later resource-integrity pass (stage 11 owns the aggregate).
