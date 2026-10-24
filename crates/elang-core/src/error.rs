@@ -237,8 +237,18 @@ mod tests {
     #[test]
     fn category_tokens_match_registry() {
         assert_eq!(Category::Container.as_str(), "CONTAINER");
+        assert_eq!(Category::Index.as_str(), "INDEX");
+        assert_eq!(Category::Frame.as_str(), "FRAME");
         assert_eq!(Category::ResourcePath.as_str(), "RESOURCE_PATH");
+        assert_eq!(Category::Integrity.as_str(), "INTEGRITY");
+        assert_eq!(Category::EpfSchema.as_str(), "EPF_SCHEMA");
         assert_eq!(Category::EldSchema.as_str(), "ELD_SCHEMA");
+        assert_eq!(Category::Unicode.as_str(), "UNICODE");
+        assert_eq!(Category::Ipa.as_str(), "IPA");
+        assert_eq!(Category::Roman.as_str(), "ROMAN");
+        assert_eq!(Category::When.as_str(), "WHEN");
+        assert_eq!(Category::Limit.as_str(), "LIMIT");
+        assert_eq!(Category::Canonical.as_str(), "CANONICAL");
     }
 
     #[test]

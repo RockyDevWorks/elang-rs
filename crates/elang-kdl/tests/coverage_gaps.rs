@@ -815,6 +815,53 @@ fn lexer_budget_accessor_returns_mutable_tracker() {
 }
 
 // ---------------------------------------------------------------------------
+// Parse error paths (uncovered branches in parse.rs)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn slash_not_followed_by_version_keyword_is_rejected() {
+    // `/5` — after `/` the next token is an Integer, not an Ident,
+    // so parse_version_pragma_rest returns UnexpectedByte.
+    let mut b = budgets();
+    let err = elang_kdl::parse_with_budgets(b"/5\n", &mut b).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::UnexpectedByte);
+}
+
+#[test]
+fn slashdash_requires_children_block() {
+    // `/-` at end of block without `{` is an error.
+    let mut b = budgets();
+    let err = elang_kdl::parse_with_budgets(b"/-\n", &mut b).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::UnexpectedByte);
+}
+
+#[test]
+fn missing_children_block_after_slashdash_within_block() {
+    // Within a children block, `/-` must be followed by a `{` block.
+    let mut b = budgets();
+    let err = elang_kdl::parse_with_budgets(b"p { /-\n }\n", &mut b).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::UnexpectedByte);
+}
+
+// ---------------------------------------------------------------------------
+// Escape decoder paths (escape.rs uncovered branches)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn encode_string_emits_shortest_hex_for_c1_controls() {
+    // C1 control character range 0x80..=0x9F uses `\u{xx}` form.
+    let encoded = elang_kdl::escape::encode_string("\u{80}");
+    assert_eq!(encoded, r#""\u{80}""#);
+}
+
+#[test]
+fn encode_string_emits_shortest_hex_for_del() {
+    // DEL (0x7F) uses `\u{7f}` form.
+    let encoded = elang_kdl::escape::encode_string("\u{7f}");
+    assert_eq!(encoded, r#""\u{7f}""#);
+}
+
+// ---------------------------------------------------------------------------
 // UTF-8 validation
 // ---------------------------------------------------------------------------
 

@@ -410,7 +410,12 @@ fn write_jcs_string(s: &str, out: &mut String) {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::indexing_slicing)]
+#[allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    clippy::panic
+)]
 mod tests {
     use super::*;
 
@@ -497,5 +502,374 @@ mod tests {
         // updated (steering §12 anti-drift).
         let actual = canonical_jcs_sha256(REPERTOIRE_JSON).expect("digest");
         assert_eq!(actual, PINNED_JCS_SHA256);
+    }
+
+    // -----------------------------------------------------------------------
+    // Uncovered-line regression tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn rejects_invalid_codepoint_format() {
+        // parse_codepoint returns None when the hex string is malformed
+        // (e.g. missing U+ prefix) → CodepointMismatch.
+        let src = r#"{
+            "repertoire_version": 1,
+            "unicode_version": "18.0.0",
+            "ipa_chart": "2026",
+            "base_symbols": [{
+                "symbol": "x",
+                "codepoints": ["bad"],
+                "name": ""
+            }],
+            "combining_diacritics": [],
+            "spacing_modifiers": []
+        }"#;
+        assert!(matches!(
+            load_from(src),
+            Err(RepertoireError::CodepointMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_codepoint_symbol_mismatch() {
+        // The declared codepoints do not spell the symbol.
+        let src = r#"{
+            "repertoire_version": 1,
+            "unicode_version": "18.0.0",
+            "ipa_chart": "2026",
+            "base_symbols": [{
+                "symbol": "p",
+                "codepoints": ["U+0062"],
+                "name": ""
+            }],
+            "combining_diacritics": [],
+            "spacing_modifiers": []
+        }"#;
+        assert!(matches!(
+            load_from(src),
+            Err(RepertoireError::CodepointMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_wrong_repertoire_version() {
+        let src = r#"{
+            "repertoire_version": 999,
+            "unicode_version": "18.0.0",
+            "ipa_chart": "2026",
+            "base_symbols": [],
+            "combining_diacritics": [],
+            "spacing_modifiers": []
+        }"#;
+        match load_from(src).unwrap_err() {
+            RepertoireError::Metadata(msg) => assert!(msg.contains("repertoire_version")),
+            other => panic!("expected Metadata, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rejects_wrong_unicode_version() {
+        let src = r#"{
+            "repertoire_version": 1,
+            "unicode_version": "99.99.99",
+            "ipa_chart": "2026",
+            "base_symbols": [],
+            "combining_diacritics": [],
+            "spacing_modifiers": []
+        }"#;
+        match load_from(src).unwrap_err() {
+            RepertoireError::Metadata(msg) => assert!(msg.contains("unicode_version")),
+            other => panic!("expected Metadata, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rejects_wrong_ipa_chart() {
+        let src = r#"{
+            "repertoire_version": 1,
+            "unicode_version": "18.0.0",
+            "ipa_chart": "bad",
+            "base_symbols": [],
+            "combining_diacritics": [],
+            "spacing_modifiers": []
+        }"#;
+        match load_from(src).unwrap_err() {
+            RepertoireError::Metadata(msg) => assert!(msg.contains("ipa_chart")),
+            other => panic!("expected Metadata, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rejects_unsorted_inventory() {
+        // Two entries out of raw-byte order.
+        let src = r#"{
+            "repertoire_version": 1,
+            "unicode_version": "18.0.0",
+            "ipa_chart": "2026",
+            "base_symbols": [
+                {"symbol": "b", "codepoints": ["U+0062"], "name": ""},
+                {"symbol": "a", "codepoints": ["U+0061"], "name": ""}
+            ],
+            "combining_diacritics": [],
+            "spacing_modifiers": []
+        }"#;
+        assert!(matches!(
+            load_from(src),
+            Err(RepertoireError::NotSorted {
+                inventory: "base_symbols"
+            })
+        ));
+    }
+
+    #[test]
+    fn rejects_duplicate_in_inventory() {
+        let src = r#"{
+            "repertoire_version": 1,
+            "unicode_version": "18.0.0",
+            "ipa_chart": "2026",
+            "base_symbols": [
+                {"symbol": "a", "codepoints": ["U+0061"], "name": ""},
+                {"symbol": "a", "codepoints": ["U+0061"], "name": ""}
+            ],
+            "combining_diacritics": [],
+            "spacing_modifiers": []
+        }"#;
+        assert!(matches!(
+            load_from(src),
+            Err(RepertoireError::Duplicate { ref symbol }) if symbol == "a"
+        ));
+    }
+
+    #[test]
+    fn rejects_duplicate_global() {
+        // Same symbol in base_symbols and combining_diacritics.
+        let src = r#"{
+            "repertoire_version": 1,
+            "unicode_version": "18.0.0",
+            "ipa_chart": "2026",
+            "base_symbols": [
+                {"symbol": "a", "codepoints": ["U+0061"], "name": ""}
+            ],
+            "combining_diacritics": [
+                {"symbol": "a", "codepoints": ["U+0061"], "name": ""}
+            ],
+            "spacing_modifiers": []
+        }"#;
+        assert!(matches!(
+            load_from(src),
+            Err(RepertoireError::Duplicate { ref symbol }) if symbol == "a"
+        ));
+    }
+
+    #[test]
+    fn is_sorted_unique_duplicate_returns_early() {
+        // Test the internal is_sorted_unique directly for both error modes.
+        let entries = vec![
+            Symbol {
+                symbol: "a".into(),
+                codepoints: vec!['a'],
+                name: "".into(),
+            },
+            Symbol {
+                symbol: "a".into(),
+                codepoints: vec!['a'],
+                name: "".into(),
+            },
+        ];
+        assert_eq!(is_sorted_unique(&entries), Err(false));
+
+        let entries = vec![
+            Symbol {
+                symbol: "b".into(),
+                codepoints: vec!['b'],
+                name: "".into(),
+            },
+            Symbol {
+                symbol: "a".into(),
+                codepoints: vec!['a'],
+                name: "".into(),
+            },
+        ];
+        assert_eq!(is_sorted_unique(&entries), Err(true));
+    }
+
+    #[test]
+    fn first_duplicate_returns_first_repeat() {
+        let entries = vec![
+            Symbol {
+                symbol: "a".into(),
+                codepoints: vec!['a'],
+                name: "".into(),
+            },
+            Symbol {
+                symbol: "b".into(),
+                codepoints: vec!['b'],
+                name: "".into(),
+            },
+            Symbol {
+                symbol: "b".into(),
+                codepoints: vec!['b'],
+                name: "".into(),
+            },
+            Symbol {
+                symbol: "c".into(),
+                codepoints: vec!['c'],
+                name: "".into(),
+            },
+        ];
+        assert_eq!(first_duplicate(&entries), "b");
+    }
+
+    #[test]
+    fn first_duplicate_returns_empty_when_no_duplicate() {
+        let entries = vec![
+            Symbol {
+                symbol: "a".into(),
+                codepoints: vec!['a'],
+                name: "".into(),
+            },
+            Symbol {
+                symbol: "b".into(),
+                codepoints: vec!['b'],
+                name: "".into(),
+            },
+        ];
+        assert_eq!(first_duplicate(&entries), "");
+    }
+
+    #[test]
+    fn rejects_noncharacter() {
+        // U+FFFF is a noncharacter.
+        let src = r#"{
+            "repertoire_version": 1,
+            "unicode_version": "18.0.0",
+            "ipa_chart": "2026",
+            "base_symbols": [{
+                "symbol": "\uFFFF",
+                "codepoints": ["U+FFFF"],
+                "name": ""
+            }],
+            "combining_diacritics": [],
+            "spacing_modifiers": []
+        }"#;
+        assert!(matches!(
+            load_from(src),
+            Err(RepertoireError::Unicode {
+                ref violation,
+                ..
+            }) if *violation == UnicodeViolation::Noncharacter { scalar: '\u{FFFF}' }
+        ));
+    }
+
+    #[test]
+    fn rejects_non_nfc() {
+        // 'e' + U+0301 (combining acute) is not NFC; NFC would be 'é'.
+        let src = r#"{
+            "repertoire_version": 1,
+            "unicode_version": "18.0.0",
+            "ipa_chart": "2026",
+            "base_symbols": [{
+                "symbol": "e\u0301",
+                "codepoints": ["U+0065", "U+0301"],
+                "name": ""
+            }],
+            "combining_diacritics": [],
+            "spacing_modifiers": []
+        }"#;
+        assert!(matches!(
+            load_from(src),
+            Err(RepertoireError::Unicode {
+                ref violation,
+                ..
+            }) if *violation == UnicodeViolation::NotNfc
+        ));
+    }
+
+    #[test]
+    fn jcs_writer_null_bool_number() {
+        let mut out = String::new();
+        write_jcs(&serde_json::Value::Null, &mut out);
+        assert_eq!(out, "null");
+
+        let mut out = String::new();
+        write_jcs(&serde_json::Value::Bool(true), &mut out);
+        assert_eq!(out, "true");
+
+        let mut out = String::new();
+        write_jcs(&serde_json::Value::Bool(false), &mut out);
+        assert_eq!(out, "false");
+    }
+
+    #[test]
+    fn jcs_string_escape_every_form() {
+        // Test each escape form explicitly.
+        let mut out = String::new();
+        write_jcs_string("\"", &mut out);
+        assert_eq!(out, r#""\"""#);
+        let mut out = String::new();
+        write_jcs_string("\\", &mut out);
+        assert_eq!(out, "\"\\\\\"");
+
+        let chars_and_expected: &[(char, &str)] = &[
+            ('\u{08}', "\"\\b\""),
+            ('\u{0C}', "\"\\f\""),
+            ('\n', "\"\\n\""),
+            ('\r', "\"\\r\""),
+            ('\t', "\"\\t\""),
+        ];
+        for (ch, expected) in chars_and_expected {
+            let mut out = String::new();
+            write_jcs_string(&ch.to_string(), &mut out);
+            assert_eq!(out, *expected, "escape for U+{:04X}", *ch as u32);
+        }
+    }
+
+    #[test]
+    fn jcs_writer_handles_object() {
+        let value = serde_json::json!({"b": 2, "a": 1});
+        let out = jcs_canonicalize(&value);
+        assert_eq!(out, r#"{"a":1,"b":2}"#);
+    }
+
+    #[test]
+    fn jcs_writer_handles_array() {
+        let value = serde_json::json!([1, "two", null]);
+        let out = jcs_canonicalize(&value);
+        assert_eq!(out, r#"[1,"two",null]"#);
+    }
+
+    #[test]
+    fn canonical_jcs_sha256_rejects_bad_json() {
+        let err = canonical_jcs_sha256("not json").unwrap_err();
+        assert!(matches!(err, RepertoireError::Json(_)));
+    }
+
+    #[test]
+    fn convert_symbol_empty_codepoints() {
+        // A symbol with empty codepoints array: raw.codepoints is empty,
+        // so the for-loop doesn't execute, rebuilt is "" → mismatch.
+        let raw = RawSymbol {
+            symbol: "a".into(),
+            codepoints: vec![],
+            name: "".into(),
+        };
+        assert!(matches!(
+            convert_symbol(raw),
+            Err(RepertoireError::CodepointMismatch { .. })
+        ));
+    }
+
+    #[test]
+    fn validate_symbol_noncharacter_via_public_api() {
+        let uni = UnicodeValidator::new();
+        let sym = Symbol {
+            symbol: "\u{FFFF}".into(),
+            codepoints: vec!['\u{FFFF}'],
+            name: "".into(),
+        };
+        assert_eq!(
+            validate_symbol(&uni, &sym),
+            Err(UnicodeViolation::Noncharacter { scalar: '\u{FFFF}' })
+        );
     }
 }
