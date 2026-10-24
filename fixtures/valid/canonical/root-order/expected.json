@@ -1,0 +1,11 @@
+{
+  "fixture": "valid/canonical/root-order",
+  "description": "Roots within a group are sorted by authored NFC IPA UTF-8 bytes (REQ-CANON-002).",
+  "requirements": ["REQ-CANON-002"],
+  "input": "input.eld",
+  "modes": ["inspect", "validate"],
+  "outcome": "pass",
+  "golden": [
+    { "path": "golden/canonical.eld", "sha256": "9d4e451eb58bab8dc0f6d465b7a4cf0388ee63c5dac7bb70ea36daff59b2995e" }
+  ]
+}

@@ -1,0 +1,12 @@
+phonemes {
+    consonants {
+        phoneme "t͜ʃ" {
+            roman "tsh"
+        }
+    }
+    vowels {
+        phoneme "a" {
+            roman "a"
+        }
+    }
+}

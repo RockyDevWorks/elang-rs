@@ -28,6 +28,7 @@ presented as ratified (steering §0.3; [ADR 0003](../docs/decisions/0003-open-no
 | [`registry/kdl-2.0-compatibility.md`](registry/kdl-2.0-compatibility.md) | T0120 | KDL 2.0 compatibility review | Review note |
 | [`registry/resource-policy-v0.1.0.md`](registry/resource-policy-v0.1.0.md) | T0121 | Extra-resource / manifest-coverage policy | Ratified by ADR 0006 |
 | [`registry/binary-reference-vectors.json`](registry/binary-reference-vectors.json) | T0118 | Binary header/index/footer reference vectors + offsets (OA-11) | Generated & verified — see below |
+| [`registry/eld-canonical-vectors.json`](registry/eld-canonical-vectors.json) | T1121 | Canonical ELD golden vectors + SHA-256 (OA-14) | Generated & verified — see below |
 
 ## Generated and validated (ADR 0008)
 
@@ -56,7 +57,10 @@ presented as ratified (steering §0.3; [ADR 0003](../docs/decisions/0003-open-no
   See `specs/sources/SOURCES.md` §7; OA-1/OA-4 Ratified.
 - **Golden byte vectors:** the binary header/index/footer vectors (T0118,
   OA-11) are **done** (see below); the canonical ELD goldens (OA-14) are
-  produced in Phase 11 — this is the **only** remaining release blocker.
+  **done** too (Phase 11 / issue #21, see below). The remaining release
+  blocker is the T0123 freeze declaration and the `v0.1.0` tag: the OA-14
+  artifacts must enter the normative manifest corpus and
+  `PINNED_SPEC_CHECKSUM` must be regenerated (ADR 0011 §6).
 
 ## Binary reference vectors (T0118, OA-11)
 
@@ -79,3 +83,29 @@ presented as ratified (steering §0.3; [ADR 0003](../docs/decisions/0003-open-no
   `a34879d8e4b45c2a9c9f35be47d9c7111340cbe0c535f7cc79d697c1777efa35`.
   Resource frame bodies are labelled placeholders standing in for the Phase 4
   Zstd frames; the header/index/footer framing is fully normative.
+
+## Canonical ELD golden vectors (T1121, OA-14)
+
+- **`registry/eld-canonical-vectors.json`** — the published canonical ELD
+  corpus: 13 vectors, each naming its fixture, its byte-exact golden and the
+  lowercase-hex SHA-256 of that golden.
+- **Fixtures** — `fixtures/valid/canonical/<case>/` holds the authored
+  `input.eld`, the byte-exact `golden/canonical.eld`, its `.sha256` sidecar
+  and an `expected.json` (conformance format). The authored sources are
+  deliberately written in **non-canonical** declaration order, so the goldens
+  demonstrate the ordering rules rather than echoing their input.
+- **Generator** — `crates/elang-conformance/src/canonical_goldens.rs` runs the
+  real pipeline (`elang_eld::parse` → `inventory::from_document` →
+  `canon::to_string`) and computes every digest from the real bytes;
+  `cargo run -p elang-conformance --bin gen_canonical_goldens` reproduces the
+  artifacts byte-for-byte. No digest is hand-written (steering §0.3;
+  ADR 0003).
+- **Profile** — the canonicalization rules these vectors lock are steering
+  §9/§9.1 and [ADR 0009](../../docs/decisions/0009-residual-eld-canonicalization-edge-cases.md);
+  the public description is in
+  [`docs/public/format/canonical.md`](../../docs/public/format/canonical.md).
+- **Cases** — minimal inventory; group order; root order; allophone order;
+  bare allophone; nested condition tree; duplicate/contradictory predicates;
+  authored tie-bar variant; romanization case; permitted Unicode preserved;
+  condition order; and two declaration-order variants that must canonicalize
+  to identical bytes.

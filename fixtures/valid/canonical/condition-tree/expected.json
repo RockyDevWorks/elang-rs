@@ -1,0 +1,11 @@
+{
+  "fixture": "valid/canonical/condition-tree",
+  "description": "Nested `group`/`or` trees keep their nesting and their condition children are sorted by the Canonical Condition Sorting Key v1 (REQ-CANON-005, REQ-CANON-006).",
+  "requirements": ["REQ-CANON-005", "REQ-CANON-006"],
+  "input": "input.eld",
+  "modes": ["inspect", "validate"],
+  "outcome": "pass",
+  "golden": [
+    { "path": "golden/canonical.eld", "sha256": "1c5713b468215ab1f8db65bf67c6170f3cf4c96e687f308a8ea2314fb1d39d02" }
+  ]
+}

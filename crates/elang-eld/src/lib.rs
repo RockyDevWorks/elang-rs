@@ -1,7 +1,7 @@
 //! # elang-eld
 //!
-//! ELD phoneme-inventory v0.1.0 Phase 9: structural schema (groups, roots,
-//! allophones, romanization) validation.
+//! ELD phoneme-inventory v0.1.0: structural schema (Phase 9), phonological
+//! condition language (Phase 10) and canonical serialization (Phase 11).
 //!
 //! This crate implements constraints **C-01..C-16** from
 //! `specs/grammar/eld-0.1.0.md`, covering:
@@ -13,16 +13,59 @@
 //! * Romanization inheritance (C-16),
 //! * Global IPA uniqueness including tie-bar aliases (C-09).
 //!
-//! ## What Phase 9 does NOT do
+//! It also implements the `when` condition language (C-20..C-27) and the
+//! canonical ELD serialization profile (steering §9 / §9.1).
 //!
-//! * The `when` condition language (C-20..C-27) — **Phase 10**.
-//! * Canonical serialization (steering §9) — **Phase 11**.
+//! ## Module map
 //!
-//! ## Phase 10 handoff
+//! | Module | Phase | Role |
+//! |---|---|---|
+//! | [`model`] | 9 | Structural model; `when` blocks carried verbatim |
+//! | [`mod@parse`] | 9 | Structural validation of a KDL document |
+//! | [`when`] | 10 | Condition parser, reference resolver, pure evaluator |
+//! | [`inventory`] | 11 | Builds the core validated [`PhonemeInventory`](elang_core::model::eld::PhonemeInventory) |
+//! | [`canon`] | 11 | Canonical ELD writer ([`canon::to_string`]) |
 //!
-//! Phase 9 carries `when` blocks **verbatim** in
-//! [`crate::model::WhenBlock`]. See that type's documentation for the
-//! handoff contract.
+//! ## Canonical serialization (Phase 11)
+//!
+//! [`canon::to_string`] turns a validated
+//! [`PhonemeInventory`](elang_core::model::eld::PhonemeInventory) into
+//! byte-deterministic canonical KDL 2.0. The profile is locked in steering
+//! §9/§9.1 and [ADR 0009]; the residual edge cases (authored-byte ordering,
+//! authored-byte condition keys, the `"`/`\` escape set, bare-vs-block
+//! emission and the layout invariants) are pinned by that ADR.
+//!
+//! Use [`inventory::from_document`] to turn a parsed document into the model
+//! the writer consumes:
+//!
+//! ```
+//! let rep = elang_repertoire::repertoire::load().expect("pinned repertoire loads");
+//! let source = concat!(
+//!     "phonemes {\n",
+//!     "  consonants {\n",
+//!     "    phoneme \"t\" {\n",
+//!     "      roman \"t\"\n",
+//!     "    }\n",
+//!     "  }\n",
+//!     "  vowels {\n",
+//!     "    phoneme \"a\" {\n",
+//!     "      roman \"a\"\n",
+//!     "    }\n",
+//!     "  }\n",
+//!     "}\n",
+//! );
+//! let doc = elang_eld::parse(source.as_bytes(), &rep).expect("valid ELD");
+//! let inventory = elang_eld::inventory::from_document(&doc, &rep).expect("model builds");
+//! let canonical = elang_eld::canon::to_string(&inventory);
+//! assert!(canonical.ends_with("}\n"));
+//! ```
+//!
+//! ## What this crate does NOT do
+//!
+//! * The IPA repertoire validation (Phase 8) — owned by `elang-repertoire`.
+//! * The KDL 2.0 parsing (Phase 5) — owned by `elang-kdl`.
+//! * The package reader / public SDK (Phase 12) and the package writer /
+//!   CLI (Phase 13).
 //!
 //! ## IPA validity
 //!
@@ -40,16 +83,20 @@
 //! validator rejects the resulting argument count with a shape-error
 //! diagnostic rather than identifying a misplaced sibling.
 //!
-//! Implemented in Phase 9 (Issue #19).
+//! Implemented in Phase 9 (Issue #19), Phase 10 (Issue #20) and Phase 11
+//! (Issue #21).
 
 #![deny(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod canon;
 pub mod error;
+pub mod inventory;
 pub mod model;
 pub mod parse;
 pub mod when;
 
+pub use crate::canon::{to_bytes as canonical_bytes, to_string as canonical_string};
 pub use crate::model::{
     EldAllophone, EldDocument, EldGroup, EldGroupKind, EldRootPhoneme, WhenBlock,
 };

@@ -1,0 +1,11 @@
+{
+  "fixture": "valid/canonical/tie-bar-variant",
+  "description": "The authored lower tie bar (U+035C) is preserved byte-for-byte; the tie-bar-folded comparison key is used for uniqueness only (REQ-CANON-006).",
+  "requirements": ["REQ-CANON-006"],
+  "input": "input.eld",
+  "modes": ["inspect", "validate"],
+  "outcome": "pass",
+  "golden": [
+    { "path": "golden/canonical.eld", "sha256": "ea3ed830928aa36e6dc825cc3d371caa95d1b1cc2203dd325c6ec9fd3886646d" }
+  ]
+}
