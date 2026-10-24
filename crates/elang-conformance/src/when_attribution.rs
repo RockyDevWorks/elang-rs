@@ -508,12 +508,18 @@ fn evidence_for(requirement: &str) -> Option<&'static RequirementEvidence> {
     WHEN_EVIDENCE.iter().find(|e| e.requirement == requirement)
 }
 
-/// Match a complete observable, treating underscores as word separators.
-fn contains_observable(haystack: &str, token: &str) -> bool {
-    haystack.match_indices(token).any(|(start, matched)| {
-        let before = haystack[..start].chars().next_back();
-        let after = haystack[start + matched.len()..].chars().next();
-        before.is_none_or(|c| !c.is_alphanumeric()) && after.is_none_or(|c| !c.is_alphanumeric())
+/// Whether `token` occurs as a whole word; underscores separate words.
+fn contains_word(text: &str, token: &str) -> bool {
+    text.match_indices(token).any(|(at, _)| {
+        let before_ok = text[..at]
+            .chars()
+            .next_back()
+            .is_none_or(|c| !c.is_alphanumeric());
+        let after_ok = text[at + token.len()..]
+            .chars()
+            .next()
+            .is_none_or(|c| !c.is_alphanumeric());
+        before_ok && after_ok
     })
 }
 
@@ -538,7 +544,7 @@ fn check_attribution(row: &CoverageRow, body: Option<&str>) -> Result<(), String
     if !evidence
         .observables
         .iter()
-        .any(|token| contains_observable(&haystack, token))
+        .any(|token| contains_word(&haystack, token))
     {
         return Err(format!(
             "{} :: {} — no vocabulary from the requirement appears in the \
@@ -764,6 +770,34 @@ fn the_attribution_guard_rejects_a_known_bad_attribution() {
             "{ let _ = WordPosition::Initial; }",
             None,
         ),
+        (
+            "REQ-WHEN-003",
+            "format_error",
+            CoverageKind::Positive,
+            "for item in items { record(item); }",
+            Some("no vocabulary"),
+        ),
+        (
+            "REQ-WHEN-006",
+            "word_position_rejects_bad_value_and_depth",
+            CoverageKind::Negative,
+            r#"assert_eq!(e.code(), "WHEN_BAD_VALUE"); assert_eq!(other.code(), "WHEN_TOO_DEEP");"#,
+            Some("asserts diagnostic(s)"),
+        ),
+        (
+            "REQ-WHEN-010",
+            "and_evaluates_siblings",
+            CoverageKind::Positive,
+            "assert!(result);",
+            None,
+        ),
+        (
+            "REQ-WHEN-014",
+            "missing_neighbour_is_false",
+            CoverageKind::Negative,
+            "assert!(!result);",
+            None,
+        ),
     ];
     for (requirement, test, kind, body, expected_error) in cases {
         let row = CoverageRow {
@@ -798,10 +832,7 @@ fn observables_match_whole_words_with_underscores_as_separators() {
         ("Eligibility::Empty", "Eligibility"),
         ("é_or_é", "or"),
     ] {
-        assert!(
-            contains_observable(haystack, token),
-            "{haystack:?}: {token}"
-        );
+        assert!(contains_word(haystack, token), "{haystack:?}: {token}");
     }
     for (haystack, token) in [
         ("", "or"),
@@ -816,10 +847,31 @@ fn observables_match_whole_words_with_underscores_as_separators() {
         ("ineligible", "eligible"),
         ("Eligibility", "eligibility"),
     ] {
-        assert!(
-            !contains_observable(haystack, token),
-            "{haystack:?}: {token}"
-        );
+        assert!(!contains_word(haystack, token), "{haystack:?}: {token}");
+    }
+}
+
+#[test]
+fn observable_words_respect_boundaries() {
+    for (text, token, expected) in [
+        ("or", "or", true),
+        ("or_with_cross_category_alternatives", "or", true),
+        ("nested_or", "or", true),
+        ("for error format", "or", false),
+        ("format then or", "or", true),
+        ("or2 2or", "or", false),
+        ("éor oré", "or", false),
+        ("whenever", "when", false),
+        ("parse_when_block", "when", true),
+        ("finally", "final", false),
+        ("initial_and_final", "final", true),
+        ("(Condition::Group)", "Condition::Group", true),
+        ("Condition::Groups", "Condition::Group", false),
+        (r#"word-position "initial""#, "word-position", true),
+        ("word_position_is_initial", "word_position", true),
+        ("Eligibility::Empty", "Eligibility", true),
+    ] {
+        assert_eq!(contains_word(text, token), expected, "{text:?}: {token:?}");
     }
 }
 
