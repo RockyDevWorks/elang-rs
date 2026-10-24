@@ -752,14 +752,16 @@ mod tests {
         }
 
         let err = super::verify(&test_root).expect_err("expected artifact digest mismatch");
-        match err {
-            ManifestError::DigestMismatch { path, .. } => {
-                assert!(super::ARTIFACTS
-                    .iter()
-                    .any(|a| path == test_root.join(a.path)));
-            }
-            other => panic!("expected artifact digest mismatch, got {other:?}"),
-        }
+        assert!(
+            matches!(
+                err,
+                ManifestError::DigestMismatch { path, .. }
+                    if super::ARTIFACTS
+                        .iter()
+                        .any(|a| path == test_root.join(a.path))
+            ),
+            "expected an artifact digest mismatch for a known artifact path"
+        );
         let _ = fs::remove_dir_all(&test_root);
     }
 

@@ -481,44 +481,36 @@ impl<'a> Lexer<'a> {
         let digits_start = self.pos;
 
         // Base prefixes: 0x / 0o / 0b
-        if self.byte() == Some(b'0') {
-            if let Some(p) = self.peek(1) {
-                let radix = match p {
-                    b'x' | b'X' => Some(16u32),
-                    b'o' | b'O' => Some(8u32),
-                    b'b' | b'B' => Some(2u32),
-                    _ => None,
-                };
-                if let Some(_radix) = radix {
-                    self.pos += 2;
-                    let prefix_digits_start = self.pos;
-                    while let Some(c) = self.byte() {
-                        if c.is_ascii_alphanumeric() || c == b'_' {
-                            self.pos += 1;
-                        } else {
-                            break;
-                        }
-                        if self.pos - start > MAX_ENCODED_TOKEN_BYTES {
-                            return Err(ParseError::at(
-                                ErrorCode::TokenTooLong,
-                                self.span(start),
-                                "number exceeds MAX_ENCODED_TOKEN_BYTES",
-                            ));
-                        }
-                    }
-                    if self.pos == prefix_digits_start {
-                        return Err(ParseError::at(
-                            ErrorCode::InvalidNumber,
-                            self.span(start),
-                            "number has no digits after base prefix",
-                        ));
-                    }
-                    let lexeme = core::str::from_utf8(&self.input[start..self.pos])
-                        .unwrap_or("")
-                        .to_string();
-                    return Ok(Token::Integer(self.span(start), lexeme.into_boxed_str()));
+        if self.byte() == Some(b'0')
+            && matches!(self.peek(1), Some(b'x' | b'X' | b'o' | b'O' | b'b' | b'B'))
+        {
+            self.pos += 2;
+            let prefix_digits_start = self.pos;
+            while let Some(c) = self.byte() {
+                if c.is_ascii_alphanumeric() || c == b'_' {
+                    self.pos += 1;
+                } else {
+                    break;
+                }
+                if self.pos - start > MAX_ENCODED_TOKEN_BYTES {
+                    return Err(ParseError::at(
+                        ErrorCode::TokenTooLong,
+                        self.span(start),
+                        "number exceeds MAX_ENCODED_TOKEN_BYTES",
+                    ));
                 }
             }
+            if self.pos == prefix_digits_start {
+                return Err(ParseError::at(
+                    ErrorCode::InvalidNumber,
+                    self.span(start),
+                    "number has no digits after base prefix",
+                ));
+            }
+            let lexeme = core::str::from_utf8(&self.input[start..self.pos])
+                .unwrap_or("")
+                .to_string();
+            return Ok(Token::Integer(self.span(start), lexeme.into_boxed_str()));
         }
 
         let mut is_float = false;
