@@ -29,11 +29,16 @@
 //! A test that only asserts "this input parses" proves nothing about
 //! *which* boundary it hit. The condition-nesting fixtures therefore
 //! assert the parsed AST's **actual maximum nesting depth** with
-//! [`elang_eld::max_nesting_depth`], and the over-budget fixture asserts
-//! the would-be tree's depth is exactly one past the limit. The
-//! `MAX_NESTING_DEPTH` constant itself is pinned by its own assertion so a
-//! silent budget change fails the suite before the boundary tests start
-//! coincidentally passing at the wrong depth.
+//! [`elang_eld::max_nesting_depth`] (which counts a `Condition::Group`
+//! or `Condition::Or` container as one level and a leaf predicate as
+//! zero). The over-budget fixture walks the raw KDL AST to recover the
+//! depth of the tree the parser *would* have built if the budget were
+//! not enforced — the parser itself rejects the input, so the only way
+//! to measure the would-be depth is a structural walk that does not
+//! honour the budget. The `MAX_NESTING_DEPTH` constant itself is pinned
+//! to its spec literal (and asserted equal to the implementation
+//! constant) so a silent budget change fails the suite before the
+//! boundary tests start coincidentally passing at the wrong depth.
 //!
 //! # The differential proof
 //!
@@ -59,22 +64,29 @@
 use crate::corpus::{DocumentExpectation, DocumentFixture, Expectation, Fixture, Level, Schema};
 use crate::negatives::{archive_with_custom_index, encode_index_entry, rebuild_with_resource};
 use elang_core::error::Category;
-use elang_eld::when::MAX_NESTING_DEPTH as ELD_MAX_NESTING_DEPTH;
+#[cfg(test)]
+use elang_kdl::ast::{KdlChildren, KdlNode};
 
-/// The `when`-condition nesting budget, as pinned by this corpus.
-pub const MAX_NESTING_DEPTH: usize = ELD_MAX_NESTING_DEPTH;
+/// The `when`-condition nesting budget, pinned to its **spec literal**.
+///
+/// Deliberately *not* an alias of `elang_eld::MAX_NESTING_DEPTH`: an
+/// alias would make the pin test compare the constant to itself and
+/// could never fail. The literal is the value the specification
+/// states; `pinned_budgets_match_implementation_constants` then
+/// proves the implementation still agrees with it.
+pub const MAX_NESTING_DEPTH: usize = 8;
 
-/// The predicates-per-`when`-block budget, as pinned by this corpus.
-pub const MAX_PREDICATES_PER_WHEN: usize = elang_eld::MAX_PREDICATES_PER_WHEN;
+/// The predicates-per-`when`-block budget, pinned to its spec literal.
+pub const MAX_PREDICATES_PER_WHEN: usize = 16;
 
-/// The EPF input-size ceiling, as pinned by this corpus.
-pub const MAX_EPF_BYTES: u64 = elang_core::limits::MAX_EPF_BYTES;
+/// The EPF input-size ceiling, pinned to its spec literal (1 MiB).
+pub const MAX_EPF_BYTES: u64 = 1024 * 1024;
 
-/// The bootstrap resource-size ceiling, as pinned by this corpus.
-pub const MAX_BOOTSTRAP_RESOURCE_BYTES: u64 = elang_core::limits::MAX_BOOTSTRAP_RESOURCE_BYTES;
+/// The bootstrap resource-size ceiling, pinned to its spec literal.
+pub const MAX_BOOTSTRAP_RESOURCE_BYTES: u64 = 64;
 
-/// The resource-path byte ceiling, as pinned by this corpus.
-pub const MAX_RESOURCE_PATH_BYTES: u64 = elang_core::limits::MAX_RESOURCE_PATH_BYTES as u64;
+/// The resource-path byte ceiling, pinned to its spec literal.
+pub const MAX_RESOURCE_PATH_BYTES: u64 = 1024;
 
 /// Build an ELD document whose `when` block nests `group` conditions
 /// `depth` levels deep.
@@ -137,17 +149,86 @@ fn eld_with_nested_when(depth: usize) -> Vec<u8> {
     src.into_bytes()
 }
 
-/// The maximum parser depth of the `when` block in the document built by
-/// [`eld_with_nested_when`].
+/// The maximum nesting depth of the `when` block in the document built
+/// by [`eld_with_nested_when`], **as measured by the production parser**.
 ///
-/// [`parse_block`] recurses into `when`'s children at parser depth 1; each
-/// nested `group` increments the depth; the predicate leaves are exempt
-/// from the depth check but still occupy a depth slot. So `N` nested
-/// groups place the deepest `group` at parser depth `N`, and the test
-/// below asserts the at-limit fixture sits exactly at the budget.
+/// Parses `source` with [`elang_eld::parse`], walks the document to the
+/// first root phoneme that carries a `when` block, calls
+/// [`elang_eld::parse_block`] to convert that block into a
+/// [`elang_core::model::when::WhenCondition`] AST, and returns the
+/// maximum [`elang_eld::max_nesting_depth`] across the block's top-level
+/// children. Returns `None` when the parser rejects the document (the
+/// over-budget case — the budget fires before we can recover the AST).
 #[cfg(test)]
-fn built_depth(depth: usize) -> usize {
-    depth
+fn parsed_when_depth(source: &[u8]) -> Option<usize> {
+    let rep = elang_repertoire::repertoire::load().expect("repertoire loads");
+    let doc = elang_eld::parse(source, &rep).ok()?;
+    let refs = elang_eld::InventoryRefs::from_document(&doc);
+    let root_with_when = doc
+        .groups()
+        .iter()
+        .flat_map(|g| g.roots())
+        .find(|r| r.when().is_some())?;
+    let block = root_with_when.when()?;
+    let cond = elang_eld::parse_block(block, &refs, &rep).ok()?;
+    Some(
+        cond.children()
+            .iter()
+            .map(elang_eld::max_nesting_depth)
+            .max()
+            .unwrap_or(0),
+    )
+}
+
+/// The maximum nesting depth of the would-be condition tree inside the
+/// `when` block of `source`, measured by walking the raw KDL AST.
+///
+/// Used to characterise the *rejected* fixture: the parser rejects the
+/// over-budget document, so the AST cannot be recovered through
+/// [`elang_eld::parse_block`]. We therefore parse the KDL structure
+/// with [`elang_kdl::parse`] (which never enforces the when budget)
+/// and walk down to the `when` node, then recursively count `group`
+/// and `or` containers the same way [`elang_eld::max_nesting_depth`]
+/// counts them on the `Condition` AST. With `N` nested groups in the
+/// fixture the walker returns exactly `N`.
+#[cfg(test)]
+fn would_be_when_depth(source: &[u8]) -> usize {
+    let kdl = elang_kdl::parse(source).expect("KDL parses for depth walk");
+    let when = find_named(kdl.nodes(), "when").expect("document carries a when block");
+    container_depth(
+        when.children()
+            .map_or(&[] as &[KdlNode], KdlChildren::as_slice),
+    )
+}
+
+#[cfg(test)]
+fn find_named<'a>(nodes: &'a [KdlNode], name: &str) -> Option<&'a KdlNode> {
+    for n in nodes {
+        if n.name() == name {
+            return Some(n);
+        }
+        if let Some(ch) = n.children() {
+            if let Some(found) = find_named(ch.as_slice(), name) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+fn container_depth(nodes: &[KdlNode]) -> usize {
+    nodes
+        .iter()
+        .map(|n| {
+            let child = n.children().map_or(0, |c| container_depth(c.as_slice()));
+            match n.name() {
+                "group" | "or" => child + 1,
+                _ => child,
+            }
+        })
+        .max()
+        .unwrap_or(0)
 }
 
 /// All T1415 *document* budget boundary fixtures.
@@ -305,30 +386,50 @@ pub fn fixtures() -> Vec<DocumentFixture> {
         });
     }
 
-    // -- Over-budget: an EPF document larger than MAX_EPF_BYTES -------
+    // -- Over-budget: an EPF document one byte past MAX_EPF_BYTES ------
+    // The boundary is exact: the over-budget fixture totals exactly
+    // `MAX_EPF_BYTES + 1` bytes. If the implementation ceiling were
+    // ever raised, this fixture would slip under the new limit and be
+    // accepted, failing the test loudly — proving the fixture probes
+    // the boundary rather than over-shooting it by a megabyte. The
+    // payload is `MINIMAL_EPF` plus a line comment; comments are
+    // stripped by the KDL lexer before schema validation, so the
+    // schema-level parse only sees the valid `MINIMAL_EPF`. The raw
+    // length check, however, fires first and trips `LIMIT_EPF_BYTES`.
     {
-        let mut src = String::new();
-        src.push_str("epf \"0.1.0\"\n");
-        src.push_str("eld \"0.1.0\"\n");
-        src.push_str("language-version \"1.0.0\"\n");
-        src.push_str("metadata {\n");
-        src.push_str("    identifier \"urn:elang:language:rocky:conformance:1.0.0\"\n");
-        src.push_str("    name \"Conformance Probe\"\n");
-        // A description field padded past the 1 MiB ceiling.
-        src.push_str("    description \"");
-        let padding = "x".repeat(MAX_EPF_BYTES as usize);
-        src.push_str(&padding);
-        src.push_str("\"\n");
-        src.push_str("}\n");
-        src.push_str("manifest {\n");
-        src.push_str("    phonemes \"Linguistics/phonemes.eld\"\n");
-        src.push_str("}\n");
+        let base = crate::golden_packages::MINIMAL_EPF;
+        const OVERHEAD: usize = 3; // `//` + `\n`
+        let pad = (MAX_EPF_BYTES as usize)
+            .checked_add(1)
+            .and_then(|v| v.checked_sub(base.len()))
+            .and_then(|v| v.checked_sub(OVERHEAD))
+            .unwrap_or_else(|| {
+                panic!(
+                    "MINIMAL_EPF ({} bytes) plus overhead ({OVERHEAD}) already covers                      MAX_EPF_BYTES + 1 ({MAX_EPF_BYTES}); an over-budget EPF fixture                      cannot be constructed",
+                    base.len()
+                )
+            });
+        let max_comment_bytes = elang_core::limits::MAX_COMMENT_BYTES as u64;
+        assert!(
+            2u64.saturating_add(pad as u64) <= max_comment_bytes,
+            "the over-budget padding would trip the per-comment ceiling: 2 + {pad} > {max_comment_bytes}"
+        );
+        let mut source = Vec::with_capacity(MAX_EPF_BYTES as usize + 1);
+        source.extend_from_slice(base);
+        source.extend_from_slice(b"//");
+        source.extend(std::iter::repeat_n(b'x', pad));
+        source.push(b'\n');
+        assert_eq!(
+            source.len() as u64,
+            MAX_EPF_BYTES + 1,
+            "over-budget EPF fixture must total exactly MAX_EPF_BYTES + 1 bytes"
+        );
         fixtures.push(DocumentFixture {
             id: "budget/epf-bytes-over-limit",
-            description: "An EPF document larger than MAX_EPF_BYTES is rejected",
+            description: "An EPF document one byte past MAX_EPF_BYTES is rejected",
             requirements: &["REQ-PKG-004"],
             schema: Schema::Epf,
-            source: src.into_bytes(),
+            source,
             expectation: DocumentExpectation::Reject {
                 code: "LIMIT_EPF_BYTES",
                 category: Category::Limit,
@@ -562,10 +663,15 @@ mod tests {
     use crate::corpus::run_document_fixture;
 
     /// Every budget pin matches its implementation constant. A silent
-    /// budget change elsewhere in the workspace must surface here.
+    /// budget change elsewhere in the workspace must surface here. The
+    /// pinned value is a **spec literal** (not an alias of the
+    /// implementation constant), so this assertion is non-vacuous:
+    /// raising the implementation limit without updating the pin makes
+    /// the test fail loudly.
     #[test]
     fn pinned_budgets_match_implementation_constants() {
-        assert_eq!(MAX_NESTING_DEPTH, ELD_MAX_NESTING_DEPTH);
+        assert_eq!(MAX_NESTING_DEPTH, elang_eld::when::MAX_NESTING_DEPTH);
+        assert_eq!(MAX_PREDICATES_PER_WHEN, elang_eld::MAX_PREDICATES_PER_WHEN);
         assert_eq!(MAX_EPF_BYTES, elang_core::limits::MAX_EPF_BYTES);
         assert_eq!(
             MAX_BOOTSTRAP_RESOURCE_BYTES,
@@ -578,20 +684,38 @@ mod tests {
     }
 
     /// The at-budget and over-budget nesting fixtures are built at the
-    /// depths they claim — the assertion is on the *built* depth, not
-    /// on a bare constant, so a builder regression is caught.
+    /// depths they *actually contain* — the assertion is on the parsed
+    /// AST (at-limit) and the raw KDL walk (over-limit), not on a bare
+    /// constant, so a builder regression that opens the wrong number of
+    /// `group` blocks is caught even when the parser still rejects the
+    /// over-limit fixture.
     #[test]
     fn nesting_fixtures_sit_on_both_sides_of_the_boundary() {
-        assert_eq!(built_depth(MAX_NESTING_DEPTH), MAX_NESTING_DEPTH);
-        assert_eq!(built_depth(MAX_NESTING_DEPTH + 1), MAX_NESTING_DEPTH + 1);
-    }
+        // At-budget: parse succeeds; the production parser reports the
+        // exact depth of the condition tree it accepted.
+        let at_limit = eld_with_nested_when(MAX_NESTING_DEPTH);
+        assert_eq!(
+            parsed_when_depth(&at_limit),
+            Some(MAX_NESTING_DEPTH),
+            "at-limit fixture's parsed AST must have max nesting depth == MAX_NESTING_DEPTH"
+        );
 
-    /// The nesting budget constant itself is pinned, so a silent change
-    /// fails the suite before the boundary fixtures start coincidentally
-    /// passing at the wrong depth.
-    #[test]
-    fn the_nesting_budget_is_eight() {
-        assert_eq!(MAX_NESTING_DEPTH, 8);
+        // Over-budget: parse fails with WHEN_TOO_DEEP (the budget
+        // fires); the KDL walker measures the would-be depth of the
+        // tree the parser refused to build. With MAX_NESTING_DEPTH + 1
+        // nested `group` blocks in the source, that depth is exactly
+        // MAX_NESTING_DEPTH + 1.
+        let over_limit = eld_with_nested_when(MAX_NESTING_DEPTH + 1);
+        assert_eq!(
+            parsed_when_depth(&over_limit),
+            None,
+            "over-limit fixture must be rejected by the parser"
+        );
+        assert_eq!(
+            would_be_when_depth(&over_limit),
+            MAX_NESTING_DEPTH + 1,
+            "over-limit fixture's would-be AST depth must be exactly one past the limit"
+        );
     }
 
     #[test]
