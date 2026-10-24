@@ -624,14 +624,19 @@ impl Drop for TempDir {
 
 #[allow(clippy::expect_used, reason = "test scaffolding")]
 fn tempdir() -> TempDir {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+
     let base = std::env::temp_dir();
     let unique = format!(
-        "elang-cli-scaffold-{}-{}",
+        "elang-cli-scaffold-{}-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
-            .unwrap_or(0)
+            .unwrap_or(0),
+        COUNTER.fetch_add(1, Ordering::Relaxed)
     );
     let path = base.join(unique);
     std::fs::create_dir_all(&path).expect("create tempdir");
