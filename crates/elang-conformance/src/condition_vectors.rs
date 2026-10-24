@@ -34,15 +34,15 @@ use crate::corpus::VectorFixture;
 use elang_core::ids::IpaIdentifierText;
 use elang_core::model::when::{Condition, Predicate, SyllablePosition, WordPosition};
 use elang_eld::canon::key::{
-    atomic_key, composite_key, RANK_GROUP, RANK_NEXT_PHONEME, RANK_OR, RANK_PREVIOUS_PHONEME,
-    RANK_SYLLABLE_POSITION, RANK_WORD_POSITION,
+    atomic_key, composite_key, condition_key, RANK_GROUP, RANK_NEXT_PHONEME, RANK_OR,
+    RANK_PREVIOUS_PHONEME, RANK_SYLLABLE_POSITION, RANK_WORD_POSITION,
 };
 use elang_eld::canon::key::{syllable_position_value, word_position_value};
 
 #[cfg(test)]
 use crate::corpus::run_vector_fixture;
 #[cfg(test)]
-use elang_eld::canon::key::{condition_key, sorted_children, sorted_operands};
+use elang_eld::canon::key::{sorted_children, sorted_operands};
 #[cfg(test)]
 use elang_eld::when::{evaluate, EvalContext, InventoryRefs};
 
@@ -125,11 +125,20 @@ pub fn sorting_key_fixtures() -> Vec<VectorFixture> {
         expected: composite_expected,
     });
 
-    // An `or` with two operands, also sorted.
-    let left = atomic_key(RANK_NEXT_PHONEME, "a");
-    let right = atomic_key(RANK_WORD_POSITION, "initial");
-    let or_actual = composite_key(RANK_OR, &[left.clone(), right.clone()]);
-    let or_expected = expected_composite(RANK_OR, &[left, right]);
+    // An `or` with two operands, also sorted. The operands are authored in
+    // the *wrong* order (rank 3 before rank 0) so that the vector pins the
+    // canonicalization itself: `condition_key` sorts the operands before it
+    // builds the parent's key, so the emitted bytes must be the left-sorted
+    // pair regardless of the authored order.
+    let or_condition = Condition::or(next("a"), wp(WordPosition::Initial));
+    let or_actual = condition_key(&or_condition);
+    let or_expected = expected_composite(
+        RANK_OR,
+        &[
+            atomic_key(RANK_WORD_POSITION, "initial"),
+            atomic_key(RANK_NEXT_PHONEME, "a"),
+        ],
+    );
     fixtures.push(VectorFixture {
         id: "condition/composite-key/or-of-two".to_string(),
         description: "pinned composite sorting key for an `or` of two operands",
@@ -263,7 +272,12 @@ fn run_truth_table(rows: &[TruthRow]) -> Vec<(&'static str, bool, bool, bool)> {
     let mut out = Vec::new();
     for row in rows {
         let ctx = make_ctx(&row.roots, row.index, row.syllable_role, &refs);
-        let observed = evaluate(&row.condition, &ctx).unwrap_or(false);
+        let observed = evaluate(&row.condition, &ctx).unwrap_or_else(|err| {
+            panic!(
+                "truth-table row `{}` must evaluate without error: {:?}",
+                row.id, err
+            )
+        });
         out.push((row.id, row.expected, observed, row.expected == observed));
     }
     out
@@ -496,7 +510,10 @@ mod tests {
             run_vector_fixture(&fixture).unwrap_or_else(|f| panic!("{f}"));
             checked += 1;
         }
-        assert!(checked >= 7);
+        assert_eq!(
+            checked, 7,
+            "every published sorting-key fixture must be pinned"
+        );
     }
 
     #[test]
@@ -510,7 +527,11 @@ mod tests {
             }
         }
         assert_eq!(failed, 0, "{failed} truth-table row(s) failed");
-        assert!(rows.len() >= 15);
+        assert_eq!(
+            rows.len(),
+            17,
+            "every published truth-table row must be present"
+        );
     }
 
     #[test]

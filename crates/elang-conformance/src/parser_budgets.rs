@@ -34,8 +34,30 @@
 //! `MAX_NESTING_DEPTH` constant itself is pinned by its own assertion so a
 //! silent budget change fails the suite before the boundary tests start
 //! coincidentally passing at the wrong depth.
+//!
+//! # The differential proof
+//!
+//! `MAX_BOOTSTRAP_RESOURCE_BYTES` and `MAX_RESOURCE_PATH_BYTES` are
+//! ceilings that no *conformant* archive actually reaches: a 64-byte
+//! `Header/format.version` cannot match the semver-shaped content rule,
+//! and a 1024-byte resource path serves no conformant purpose either.
+//! Their boundaries are pinned through **differential pairs**:
+//!
+//! - bootstrap at-limit (64) → rejected with `FORMAT_VERSION_INVALID`
+//!   (Container/stage 8) — proving the *budget* passed and a different
+//!   check fired; and
+//! - bootstrap over-limit (65) → rejected with
+//!   `DECOMPRESSION_BUDGET_EXCEEDED` (Frame/stage 8) — proving the
+//!   budget now fires.
+//!
+//! The at/over split into different diagnostic codes is the proof: at
+//! the exact boundary the *budget* did not fire (otherwise the frame
+//! category would have surfaced), and one byte past it the budget does
+//! fire. The same pattern applies to `MAX_RESOURCE_PATH_BYTES` with
+//! Accept/Inspect at 1024 vs `PATH_TOO_LONG` at 1025.
 
-use crate::corpus::{DocumentExpectation, DocumentFixture, Schema};
+use crate::corpus::{DocumentExpectation, DocumentFixture, Expectation, Fixture, Level, Schema};
+use crate::negatives::{archive_with_custom_index, encode_index_entry, rebuild_with_resource};
 use elang_core::error::Category;
 use elang_eld::when::MAX_NESTING_DEPTH as ELD_MAX_NESTING_DEPTH;
 
@@ -128,7 +150,12 @@ fn built_depth(depth: usize) -> usize {
     depth
 }
 
-/// All T1415 budget boundary fixtures.
+/// All T1415 *document* budget boundary fixtures.
+///
+/// Archive-level (Fixture) budget fixtures are produced by
+/// [`archive_fixtures`]; this function returns only the
+/// `DocumentFixture`s so the existing per-family aggregate keeps its
+/// shape.
 #[must_use]
 pub fn fixtures() -> Vec<DocumentFixture> {
     let mut fixtures = Vec::new();
@@ -223,6 +250,61 @@ pub fn fixtures() -> Vec<DocumentFixture> {
         });
     }
 
+    // -- At-budget: an EPF document exactly MAX_EPF_BYTES long ---------
+    // The producer (`MINIMAL_EPF`) is parsed by `elang-epf`, which
+    // rejects only `input.len() > MAX_EPF_BYTES`. Reaching the ceiling
+    // exactly therefore passes the size budget; the trailing KDL line
+    // comment is stripped by the lexer before schema validation, so
+    // the schema-level parse must still succeed. The padding is
+    // computed at fixture-authoring time so the fixture adapts to any
+    // future change in `MINIMAL_EPF.len()` instead of drifting with a
+    // hand-coded magic number.
+    {
+        let base = crate::golden_packages::MINIMAL_EPF;
+        // `//` + N `x` + `\n` — three bytes of overhead around the
+        // padding. KDL trivia is not part of any schema; the lexer
+        // strips it.
+        const OVERHEAD: usize = 3;
+        let pad = (MAX_EPF_BYTES as usize)
+            .checked_sub(base.len())
+            .and_then(|v| v.checked_sub(OVERHEAD))
+            .unwrap_or_else(|| {
+                panic!(
+                    "MINIMAL_EPF ({} bytes) plus `//...\\n` overhead ({OVERHEAD}) already \
+                     exceeds MAX_EPF_BYTES ({MAX_EPF_BYTES}); an at-budget EPF fixture \
+                     cannot be constructed",
+                    base.len()
+                )
+            });
+        // The charged line-comment length is `2 + N` (the `//` prefix
+        // but not the terminating newline); it must fit under
+        // `MAX_COMMENT_BYTES`. The `2 + pad` form is the worst case.
+        let max_comment_bytes = elang_core::limits::MAX_COMMENT_BYTES as u64;
+        assert!(
+            2u64.saturating_add(pad as u64) <= max_comment_bytes,
+            "the padding would trip the per-comment ceiling: 2 + {pad} > {max_comment_bytes}"
+        );
+
+        let mut source = Vec::with_capacity(MAX_EPF_BYTES as usize);
+        source.extend_from_slice(base);
+        source.extend_from_slice(b"//");
+        source.extend(std::iter::repeat_n(b'x', pad));
+        source.push(b'\n');
+        assert_eq!(
+            source.len() as u64,
+            MAX_EPF_BYTES,
+            "at-budget EPF fixture must total exactly MAX_EPF_BYTES bytes",
+        );
+        fixtures.push(DocumentFixture {
+            id: "budget/epf-bytes-at-limit",
+            description: "An EPF document exactly MAX_EPF_BYTES long is accepted",
+            requirements: &["REQ-PKG-004"],
+            schema: Schema::Epf,
+            source,
+            expectation: DocumentExpectation::Accept,
+        });
+    }
+
     // -- Over-budget: an EPF document larger than MAX_EPF_BYTES -------
     {
         let mut src = String::new();
@@ -257,15 +339,217 @@ pub fn fixtures() -> Vec<DocumentFixture> {
     fixtures
 }
 
-/// Catalog entries for this module's fixtures.
+/// All T1415 *archive* budget boundary fixtures.
 ///
-/// Every fixture published by this module appears here exactly once, so
-/// the corpus-wide requirement-completeness test can enumerate them.
+/// The bootstrap and resource-path ceilings are not reachable by a
+/// conformant package, so the boundary is pinned through differential
+/// pairs (see the module docs). Each pair is wired into the aggregate
+/// corpus run by `tests/corpus_run.rs` and the stage conformance check
+/// by `tests/stage_conformance.rs`.
+#[must_use]
+pub fn archive_fixtures() -> Vec<Fixture> {
+    let mut fixtures = Vec::new();
+
+    // -- Bootstrap at-budget: 64 bytes, grammar fires ------------------
+    // A 64-byte format.version is *exactly* the bootstrap budget. The
+    // content starts with the "0.1." prefix so the prefix check passes
+    // and the budget is the only thing distinguishing 64 from 65 — the
+    // patch-component check then fires. The fixture is therefore
+    // rejected with `FORMAT_VERSION_INVALID`, not the frame-budget code
+    // the byte-over case uses, which is the differential proof that the
+    // 64-byte boundary is *under* the budget.
+    {
+        let mut payload = Vec::with_capacity(MAX_BOOTSTRAP_RESOURCE_BYTES as usize);
+        payload.extend_from_slice(b"0.1.");
+        payload.extend(std::iter::repeat_n(
+            b'x',
+            (MAX_BOOTSTRAP_RESOURCE_BYTES as usize) - 4,
+        ));
+        assert_eq!(payload.len() as u64, MAX_BOOTSTRAP_RESOURCE_BYTES);
+        let archive = rebuild_with_resource("Header/format.version", &payload);
+        fixtures.push(Fixture {
+            id: "budget/bootstrap-at-limit",
+            description: "A 64-byte Header/format.version passes the budget but fails the version grammar (stage 8)",
+            requirements: &["REQ-PKG-002"],
+            expectation: Expectation::Reject {
+                level: Level::Verify,
+                code: "FORMAT_VERSION_INVALID",
+                category: Category::Container,
+            },
+            archive,
+        });
+    }
+
+    // -- Bootstrap over-budget: 65 bytes, budget fires ----------------
+    {
+        let mut payload = Vec::with_capacity(MAX_BOOTSTRAP_RESOURCE_BYTES as usize + 1);
+        payload.extend_from_slice(b"0.1.");
+        payload.extend(std::iter::repeat_n(
+            b'x',
+            (MAX_BOOTSTRAP_RESOURCE_BYTES as usize) - 4 + 1,
+        ));
+        assert_eq!(
+            payload.len() as u64,
+            MAX_BOOTSTRAP_RESOURCE_BYTES + 1,
+            "fixture must be exactly one byte past the bootstrap budget"
+        );
+        let archive = rebuild_with_resource("Header/format.version", &payload);
+        fixtures.push(Fixture {
+            id: "budget/bootstrap-over-limit",
+            description:
+                "A 65-byte Header/format.version trips the bootstrap decode budget (stage 8)",
+            requirements: &["REQ-PKG-002"],
+            expectation: Expectation::Reject {
+                level: Level::Verify,
+                code: "DECOMPRESSION_BUDGET_EXCEEDED",
+                category: Category::Frame,
+            },
+            archive,
+        });
+    }
+
+    // -- Resource-path at-budget: 1024 bytes, accepted at Inspect ------
+    // `archive_with_custom_index` always encodes the same "x\n" payload
+    // with the same `GOLDEN_PROFILE`; the frame length is therefore
+    // deterministic. The at-limit fixture must declare it correctly so
+    // the frame-layout check at stage 6 passes — otherwise a layout
+    // diagnostic would mask the boundary we're trying to prove.
+    {
+        let path_len = MAX_RESOURCE_PATH_BYTES as usize;
+        let path = build_path_with_length(path_len, b"L");
+        assert_eq!(path.len(), path_len);
+
+        let (compressed_size, uncompressed_size) = frame_size();
+        let archive = archive_with_custom_index(|frame_offset| {
+            use elang_container::index::{
+                COMPRESSION_ZSTD, ENTRY_FORMAT, INDEX_MAGIC, INDEX_VERSION,
+            };
+            let mut idx = Vec::new();
+            idx.extend_from_slice(&INDEX_MAGIC);
+            idx.extend_from_slice(&INDEX_VERSION.to_le_bytes());
+            idx.extend_from_slice(&ENTRY_FORMAT.to_le_bytes());
+            idx.extend_from_slice(&1u32.to_le_bytes());
+            encode_index_entry(
+                &mut idx,
+                path.as_bytes(),
+                frame_offset,
+                compressed_size,
+                uncompressed_size,
+                COMPRESSION_ZSTD,
+            );
+            idx
+        });
+        fixtures.push(Fixture {
+            id: "budget/resource-path-at-limit",
+            description: "A 1024-byte resource path is accepted at Inspect",
+            requirements: &["REQ-BIN-011"],
+            expectation: Expectation::Accept(Level::Inspect),
+            archive,
+        });
+    }
+
+    // -- Resource-path over-budget: 1025 bytes, rejected at Inspect ----
+    {
+        let path_len = (MAX_RESOURCE_PATH_BYTES as usize) + 1;
+        let path = build_path_with_length(path_len, b"L");
+        assert_eq!(path.len(), path_len);
+
+        let (compressed_size, uncompressed_size) = frame_size();
+        let archive = archive_with_custom_index(|frame_offset| {
+            use elang_container::index::{
+                COMPRESSION_ZSTD, ENTRY_FORMAT, INDEX_MAGIC, INDEX_VERSION,
+            };
+            let mut idx = Vec::new();
+            idx.extend_from_slice(&INDEX_MAGIC);
+            idx.extend_from_slice(&INDEX_VERSION.to_le_bytes());
+            idx.extend_from_slice(&ENTRY_FORMAT.to_le_bytes());
+            idx.extend_from_slice(&1u32.to_le_bytes());
+            encode_index_entry(
+                &mut idx,
+                path.as_bytes(),
+                frame_offset,
+                compressed_size,
+                uncompressed_size,
+                COMPRESSION_ZSTD,
+            );
+            idx
+        });
+        fixtures.push(Fixture {
+            id: "budget/resource-path-over-limit",
+            description: "A 1025-byte resource path is rejected at Inspect (stage 5)",
+            requirements: &["REQ-BIN-011"],
+            expectation: Expectation::Reject {
+                level: Level::Inspect,
+                code: "PATH_TOO_LONG",
+                category: Category::ResourcePath,
+            },
+            archive,
+        });
+    }
+
+    fixtures
+}
+
+/// Compute the compressed and uncompressed sizes of the canonical
+/// "x\n" frame that [`archive_with_custom_index`] emits, so the
+/// custom-index entries can declare the correct sizes for the
+/// frame-layout check at stage 6 to pass.
+fn frame_size() -> (u64, u64) {
+    let payload = b"x\n";
+    let compressed =
+        elang_container::frame::encode(payload, crate::golden_packages::GOLDEN_PROFILE)
+            .expect("the canonical \"x\\n\" frame must encode");
+    (compressed.len() as u64, payload.len() as u64)
+}
+
+/// Build an absolute, NFC, non-reserved `ResourcePath` of exactly
+/// `length` bytes by repeating a non-empty, NFC, lowercase ASCII prefix
+/// (e.g. `L`) until the path length is reached.
+///
+/// `ResourcePath::new` enforces UTF-8, NFC, no NUL, ≤1024 bytes, must
+/// be absolute (`/`-prefixed), no `.`/`..` segments, no trailing `/`,
+/// no `\` separator, no reserved paths. ASCII lowercase repeated
+/// satisfies every rule; the prefix byte(s) live in the segment name so
+/// the leading `/` plus the prefix still leave `length` bytes to fill
+/// after the segment separator.
+fn build_path_with_length(length: usize, _prefix: &[u8]) -> String {
+    assert!(
+        length >= 3,
+        "a path must have at least one non-empty segment, asked for {length} bytes"
+    );
+    // `L/` + `x` repeated. The reader rejects absolute paths (those
+    // beginning with `/`), reserved resource names, and paths whose
+    // segments are empty — so the path must have a non-empty first
+    // segment, a `/` separator, and a non-empty second segment. A
+    // single-letter segment is enough to clear all those rules.
+    let mut path = Vec::with_capacity(length);
+    path.push(b'L');
+    path.push(b'/');
+    path.extend(std::iter::repeat_n(b'x', length - 2));
+    String::from_utf8(path).expect("ASCII path is valid UTF-8")
+}
+
+/// Catalog entries for this module's document fixtures.
+///
+/// Archive fixtures are catalogued separately through
+/// [`archive_catalog_entries`] so the catalog can distinguish them by
+/// kind; the requirement-completeness scan enumerates both.
 #[must_use]
 pub fn catalog_entries() -> Vec<crate::catalog::CatalogEntry> {
-    fixtures()
+    let mut entries: Vec<crate::catalog::CatalogEntry> = fixtures()
         .iter()
         .map(crate::catalog::CatalogEntry::from_document)
+        .collect();
+    entries.extend(archive_catalog_entries());
+    entries
+}
+
+/// Catalog entries for this module's archive fixtures.
+#[must_use]
+pub fn archive_catalog_entries() -> Vec<crate::catalog::CatalogEntry> {
+    archive_fixtures()
+        .iter()
+        .map(crate::catalog::CatalogEntry::from_fixture)
         .collect()
 }
 
@@ -311,11 +595,90 @@ mod tests {
     }
 
     #[test]
-    fn every_budget_fixture_passes() {
+    fn every_document_budget_fixture_passes() {
         let fixtures = fixtures();
-        assert!(!fixtures.is_empty(), "expected budget fixtures");
+        assert!(!fixtures.is_empty(), "expected document budget fixtures");
         for fixture in &fixtures {
             run_document_fixture(fixture).unwrap_or_else(|f| panic!("{f}"));
+        }
+    }
+
+    /// The bootstrap-at-limit payload is exactly `MAX_BOOTSTRAP_RESOURCE_BYTES`
+    /// bytes and the over-limit payload is exactly one byte past it — a
+    /// hand-coded length regression in the builder surfaces here before
+    /// the byte-level conformance run.
+    #[test]
+    fn bootstrap_payloads_sit_on_both_sides_of_the_boundary() {
+        use crate::corpus::{observe_fixture, run_fixture};
+
+        let pair = archive_fixtures()
+            .into_iter()
+            .filter(|f| {
+                matches!(
+                    f.id,
+                    "budget/bootstrap-at-limit" | "budget/bootstrap-over-limit"
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(pair.len(), 2);
+
+        for fixture in &pair {
+            let observation = observe_fixture(fixture).unwrap_or_else(|f| panic!("{f}"));
+            assert_eq!(
+                observation.stage, 8,
+                "fixture `{}` is a bootstrap error and must surface at stage 8",
+                fixture.id
+            );
+        }
+        run_fixture(&pair[0]).unwrap_or_else(|f| panic!("{f}"));
+        run_fixture(&pair[1]).unwrap_or_else(|f| panic!("{f}"));
+    }
+
+    /// The resource-path pair is the boundary proof: 1024 bytes accepted
+    /// at Inspect, 1025 bytes rejected with `PATH_TOO_LONG` at the same
+    /// level. Run the pair end-to-end so a regression in the helper
+    /// bridge (frame size, path construction) surfaces here rather than
+    /// in the aggregate corpus gate.
+    #[test]
+    fn resource_path_fixtures_sit_on_both_sides_of_the_boundary() {
+        use crate::corpus::run_fixture;
+
+        let path_1024 = build_path_with_length(1024, b"L");
+        assert_eq!(path_1024.len(), 1024);
+        let path_1025 = build_path_with_length(1025, b"L");
+        assert_eq!(path_1025.len(), 1025);
+
+        let pair = archive_fixtures()
+            .into_iter()
+            .filter(|f| {
+                matches!(
+                    f.id,
+                    "budget/resource-path-at-limit" | "budget/resource-path-over-limit"
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(pair.len(), 2);
+        for fixture in &pair {
+            run_fixture(fixture).unwrap_or_else(|f| panic!("{f}"));
+        }
+    }
+
+    /// `build_path_with_length` is the only place that synthesises
+    /// arbitrary-length resource paths; a bug here would silently weaken
+    /// every boundary fixture built on top of it. Pin its invariants.
+    #[test]
+    fn build_path_with_length_satisfies_resource_path_rules() {
+        for length in [3usize, 8, 16, 64, 1024] {
+            let p = build_path_with_length(length, b"L");
+            assert_eq!(p.len(), length);
+            assert!(
+                !p.starts_with('/'),
+                "must be package-relative (no leading `/`), got {p:?}"
+            );
+            assert!(
+                elang_core::ResourcePath::new(p.clone()).is_ok(),
+                "length {length} produced an invalid ResourcePath {p:?}",
+            );
         }
     }
 }

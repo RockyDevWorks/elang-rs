@@ -28,7 +28,7 @@
 #![cfg(test)]
 #![allow(clippy::expect_used, reason = "tests are the spec")]
 
-use crate::requirement_coverage_data::{rows, CoverageKind};
+use crate::requirement_coverage_data::rows;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
@@ -306,9 +306,11 @@ fn every_named_test_in_the_coverage_table_exists() {
     let available = all_test_names();
     let mut missing: Vec<String> = Vec::new();
     for row in rows() {
-        if row.kind == CoverageKind::Meta || row.kind == CoverageKind::Doc {
-            continue;
-        }
+        // Every row — Positive, Negative, Meta, Doc alike — must point
+        // at a real `#[test]` in the crate it declares. A Meta row that
+        // names a prose string instead of a test would have slipped
+        // through under the old "skip Meta" carve-out, and a prose
+        // claim is exactly the failure mode a coverage table invites.
         let found = available
             .get(row.crate_name)
             .is_some_and(|names| names.contains(row.test));
@@ -553,4 +555,22 @@ fn release_strategy_doc_present() {
 #[test]
 fn open_artifacts_doc_present() {
     assert!(file_present("docs/open-artifacts.md"));
+}
+
+/// REQ-INTEGRITY-008 — the user-facing documentation must state that
+/// SHA-256 integrity is **not** a publisher signature.
+///
+/// A requirement that says "document X" can only be proved by an
+/// executable check on the document, not by a prose claim in a
+/// coverage table. This test reads the document and asserts the
+/// statement is actually there.
+#[test]
+fn docs_state_sha256_is_not_a_publisher_signature() {
+    let root = workspace_root().expect("workspace root");
+    let path = root.join("docs/public/format/integrity.md");
+    let body = std::fs::read_to_string(&path).expect("docs/public/format/integrity.md is UTF-8");
+    assert!(
+        body.contains("no publisher signatures"),
+        "REQ-INTEGRITY-008: docs/public/format/integrity.md must state that the format defines no publisher signatures"
+    );
 }

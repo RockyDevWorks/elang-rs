@@ -70,7 +70,7 @@ fn frame_with_oversized_window() -> Vec<u8> {
     // descriptor byte: FCS_Flag=3 (8 bytes), Single_Segment=0,
     // Content_Checksum_Flag=1.
     out.push(0b1100_0100);
-    // window descriptor: exponent=30 (windowLog=10+30=40), mantissa=0.
+    // window descriptor: exponent=31 (windowLog=10+31=41), mantissa=0.
     out.push(0b1111_1000);
     // dictionary ID: flag=0 means no field.
     // 8-byte Frame_Content_Size = 2 (the payload length).
@@ -152,6 +152,18 @@ fn encode_index_entry(
     clippy::expect_used,
     reason = "test helper assembles a hand-rolled archive with bounded arithmetic"
 )]
+/// One hand-built Zstd negative fixture.
+///
+/// `(id, description, frame, expected code, expected category, requirements)`.
+type ZstdNegativeCase = (
+    &'static str,
+    &'static str,
+    Vec<u8>,
+    &'static str,
+    Category,
+    &'static [&'static str],
+);
+
 fn archive_with_frame(frame: Vec<u8>) -> Vec<u8> {
     use elang_container::footer::Footer;
     use elang_container::header::{Header, HEADER_LEN};
@@ -169,7 +181,7 @@ fn archive_with_frame(frame: Vec<u8>) -> Vec<u8> {
         frame_offset,
         frame.len() as u64,
         2,
-        1,
+        elang_container::index::COMPRESSION_ZSTD,
     );
     let index_hash: [u8; 32] = sha2::Sha256::digest(&index_bytes).into();
     let footer = Footer::new(
@@ -199,13 +211,15 @@ fn archive_with_frame(frame: Vec<u8>) -> Vec<u8> {
 /// All T1411 Zstd frame negatives.
 #[must_use]
 pub fn fixtures() -> Vec<Fixture> {
-    let cases: &[(&'static str, &'static str, Vec<u8>, &'static str, Category)] = &[
+    let cases: &[ZstdNegativeCase] = &[
         (
             "zstd/missing-checksum",
             "A frame without a content checksum is rejected",
             frame_without_checksum(),
             "FRAME_MISSING_CHECKSUM",
             Category::Frame,
+            // REQ-FRAME-003 requires a frame checksum for every resource.
+            &["REQ-FRAME-003"],
         ),
         (
             "zstd/window-too-large",
@@ -213,6 +227,8 @@ pub fn fixtures() -> Vec<Fixture> {
             frame_with_oversized_window(),
             "FRAME_WINDOW_TOO_LARGE",
             Category::Frame,
+            // REQ-FRAME-004 forbids a window above the 128 MiB ceiling.
+            &["REQ-FRAME-004"],
         ),
         (
             "zstd/concatenated",
@@ -220,6 +236,9 @@ pub fn fixtures() -> Vec<Fixture> {
             concatenated_frames(),
             "FRAME_CONCATENATED",
             Category::Frame,
+            // REQ-FRAME-002 requires exactly one frame per resource, and
+            // REQ-FRAME-006 forbids concatenated frames.
+            &["REQ-FRAME-002", "REQ-FRAME-006"],
         ),
         (
             "zstd/skippable-frame",
@@ -227,6 +246,8 @@ pub fn fixtures() -> Vec<Fixture> {
             skippable_frame(),
             "FRAME_SKIPPABLE",
             Category::Frame,
+            // REQ-FRAME-006 forbids skippable frames.
+            &["REQ-FRAME-006"],
         ),
         (
             "zstd/bad-magic",
@@ -234,6 +255,9 @@ pub fn fixtures() -> Vec<Fixture> {
             frame_with_bad_magic(),
             "FRAME_BAD_MAGIC",
             Category::Frame,
+            // REQ-FRAME-002 requires exactly one standard Zstd frame per
+            // resource; a slot holding something else is not one.
+            &["REQ-FRAME-002"],
         ),
         (
             "zstd/truncated",
@@ -241,22 +265,28 @@ pub fn fixtures() -> Vec<Fixture> {
             truncated_frame(),
             "FRAME_TRUNCATED",
             Category::Frame,
+            // REQ-FRAME-006 forbids truncated frames, and REQ-FRAME-008
+            // requires the streaming decoder to verify the exact byte
+            // count against the declared content size.
+            &["REQ-FRAME-006", "REQ-FRAME-008"],
         ),
     ];
 
     cases
         .iter()
-        .map(|(id, description, frame, code, category)| Fixture {
-            id,
-            description,
-            requirements: &["REQ-FRAME-003", "REQ-FRAME-004", "REQ-FRAME-006"],
-            expectation: Expectation::Reject {
-                level: Level::Inspect,
-                code,
-                category: *category,
+        .map(
+            |(id, description, frame, code, category, requirements)| Fixture {
+                id,
+                description,
+                requirements,
+                expectation: Expectation::Reject {
+                    level: Level::Inspect,
+                    code,
+                    category: *category,
+                },
+                archive: archive_with_frame(frame.clone()),
             },
-            archive: archive_with_frame(frame.clone()),
-        })
+        )
         .collect()
 }
 

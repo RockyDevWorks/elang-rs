@@ -7,7 +7,9 @@
 //!
 //! 1. The mandatory groups `consonants` and `vowels` must both be present
 //!    (`ELD_GROUP_INVALID`).
-//! 2. A group name must not repeat (`ELD_GROUP_DUPLICATE`).
+//! 2. A group name must not repeat (`ELD_GROUP_DUPLICATE` for a custom
+//!    group; a repeated *mandatory* group is matched by the reserved-name
+//!    arm first and reported as `ELD_GROUP_INVALID`).
 //! 3. A romanisation must be unique across the whole document, compared
 //!    case-insensitively (`ROMAN_DUPLICATE`).
 //! 4. An allophone's IPA must not collide with another IPA in the same
@@ -20,9 +22,11 @@
 //!
 //! - `EPF_BAD_VERSION` — the `epf`/`eld` version strings are not the
 //!   supported `0.1.0`.
-//! - `EPF_IDENTIFIER_BAD_URN` — the metadata identifier is not a
-//!   well-formed `urn:elang:language:...` URN.
-//! - `EPF_BAD_METADATA_FIELD` — an unknown or malformed metadata field.
+//! - `EPF_BAD_URN` — the metadata identifier is not a well-formed
+//!   `urn:elang:language:...` URN.
+//! - `EPF_UNKNOWN_NODE` — an unknown metadata field.
+//! - `EPF_BAD_METADATA_FIELD` — a metadata field that is present but
+//!   malformed (for example an empty `name`).
 //! - `EPF_MANIFEST_PATH_NOT_INDEXED` — the manifest references a path
 //!   that the package's index does not contain.
 //!
@@ -33,7 +37,6 @@
 //! - `ELD_IPA_DUPLICATE` — the same IPA is declared twice.
 //! - `ELD_IPA_DUPLICATE` — an allophone reuses its root's IPA.
 //! - `ROMAN_DUPLICATE` — two phonemes share a romanisation.
-//! - `ELD_GROUP_EMPTY` — a declared group has no members.
 //!
 //! # Fixture construction rules
 //!
@@ -150,7 +153,7 @@ pub fn eld_structure_fixtures() -> Vec<DocumentFixture> {
         src.push_str("}\n");
         fixtures.push(DocumentFixture {
             id: "eld/reject-duplicate-group",
-            description: "A repeated group name is rejected as ELD_GROUP_DUPLICATE",
+            description: "A repeated group name is rejected as ELD_GROUP_INVALID",
             requirements: &["REQ-ELD-003", "REQ-ELD-005"],
             schema: Schema::Eld,
             source: src.into_bytes(),
@@ -339,7 +342,7 @@ pub fn epf_fixtures() -> Vec<DocumentFixture> {
         src.push_str("}\n");
         fixtures.push(DocumentFixture {
             id: "epf/reject-unknown-metadata-field",
-            description: "An unknown metadata field is rejected as EPF_BAD_METADATA_FIELD",
+            description: "An unknown metadata field is rejected as EPF_UNKNOWN_NODE",
             requirements: &["REQ-EPF-011"],
             schema: Schema::Epf,
             source: src.into_bytes(),

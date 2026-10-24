@@ -17,22 +17,27 @@
 //!   "id": "binary/header-bad-magic",
 //!   "kind": "negative",
 //!   "level": "Inspect",
+//!   "stage": 1,
 //!   "code": "HEADER_BAD_MAGIC",
 //!   "category": "Container",
 //!   "requirements": ["REQ-PKG-001"]
 //! }
 //! ```
 //!
-//! `level` and `code` are the **normative expectation** for a negative
-//! fixture: the reader must reject the archive at exactly that reader
-//! level with exactly that diagnostic code and category. The pipeline
-//! *stage* is not asserted separately — it is derived from the level's
-//! ceiling ([`Level::ceiling_stage`]), because the container layer
-//! (stages 1–7) emits its diagnostics without attaching a stage number,
-//! while the semantic layers (stages 8–12) do attach one. A conformance
-//! failure names the fixture id, the requirement it protects, and the
-//! observed-vs-expected divergence — that is what makes a failure
-//! actionable by an implementer who has never seen this repository.
+//! `level`, `code` and `category` are the **normative expectation** for a
+//! negative fixture: the reader must reject the archive at exactly that
+//! reader level with exactly that diagnostic code and category. The
+//! observed pipeline **stage** is asserted separately by the
+//! `stage_conformance` integration test against the published
+//! `specs/registry/error-codes.json` (each registered code carries the
+//! set of stages at which it may legitimately be raised). This matches
+//! REQ-CONF-003 literally — "expected stage + error code for each
+//! fixture under inspect/verify/validate" — without forcing every
+//! fixture to restate a stage literal that the registry already
+//! publishes once. A conformance failure names the fixture id, the
+//! requirement it protects, and the observed-vs-expected divergence —
+//! that is what makes a failure actionable by an implementer who has
+//! never seen this repository.
 //!
 //! # The three-level ladder
 //!
@@ -372,15 +377,37 @@ impl std::fmt::Display for Failure {
 
 impl std::error::Error for Failure {}
 
-/// Execute one fixture and return `Ok(())` when the observed outcome
-/// matches the expectation, or a [`Failure`] describing the divergence.
+/// What the reader reported for a negative fixture that was rejected at
+/// its declared level with the declared code and category.
 ///
-/// # Errors
+/// The stage is always populated: the reader attaches a concrete stage to
+/// every diagnostic it surfaces (container codes via
+/// `container_parse_err` in `elang-reader/src/package.rs`, semantic codes
+/// via the phase's `with_stage(N)` helper), so a missing stage here is a
+/// reader regression, not a corpus quirk.
+#[derive(Debug, Clone, Copy)]
+pub struct ObservedRejection {
+    /// The diagnostic code the reader emitted (equal to the fixture's
+    /// declared code on a successful observation).
+    pub code: &'static str,
+    /// The category the reader attached to the diagnostic.
+    pub category: Category,
+    /// The pipeline stage the reader attached to the diagnostic.
+    pub stage: u8,
+}
+
+/// Run a negative fixture through the full anti-laundering check and
+/// return what the reader actually reported on rejection.
 ///
-/// Returns a [`Failure`] when the observed outcome diverges from the
-/// fixture's expectation. The failure text names the fixture, the
-/// requirement, and the observed stage/code/level.
-pub fn run_fixture(fixture: &Fixture) -> Result<(), Failure> {
+/// Performs the same code/category/level assertions as
+/// [`run_fixture`] for a `Reject` expectation — this is the single
+/// implementation of the rejection-side validation. `run_fixture` is a
+/// thin wrapper that discards the [`ObservedRejection`]. The
+/// `stage_conformance` integration test uses the returned observation to
+/// assert that the observed stage is one of the stages the normative
+/// registry (`specs/registry/error-codes.json`) publishes for the code —
+/// REQ-CONF-003's "expected stage + error code".
+pub fn observe_fixture(fixture: &Fixture) -> Result<ObservedRejection, Failure> {
     let requirement = fixture
         .requirements
         .first()
@@ -394,18 +421,9 @@ pub fn run_fixture(fixture: &Fixture) -> Result<(), Failure> {
     };
 
     match fixture.expectation {
-        Expectation::Accept(level) => match level.run(&fixture.archive) {
-            Ok(()) => Ok(()),
-            Err(err) => Err(fail(format!(
-                "expected acceptance at level {:?} (ceiling stage {}), got rejection: code={} category={:?} stage={:?} message={}",
-                level,
-                level.ceiling_stage(),
-                err.diagnostic.code,
-                err.diagnostic.category,
-                err.diagnostic.stage,
-                err.diagnostic.message,
-            ))),
-        },
+        Expectation::Accept(level) => Err(fail(format!(
+            "observe_fixture called on an Accept fixture (level {level:?}); use run_fixture instead"
+        ))),
         Expectation::Reject {
             level,
             code,
@@ -449,10 +467,52 @@ pub fn run_fixture(fixture: &Fixture) -> Result<(), Failure> {
                             "expected category {category:?} for code {code}, got {observed_category:?}",
                         )));
                     }
-                    Ok(())
+                    let stage = err.diagnostic.stage.ok_or_else(|| {
+                        fail(format!(
+                            "diagnostic for code {code} carried no stage (level={level:?}); reader regression",
+                        ))
+                    })?;
+                    Ok(ObservedRejection {
+                        code: observed_code,
+                        category: observed_category,
+                        stage,
+                    })
                 }
             }
         }
+    }
+}
+
+/// Returns a [`Failure`] when the observed outcome diverges from the
+/// fixture's expectation. The failure text names the fixture, the
+/// requirement, and the observed stage/code/level.
+pub fn run_fixture(fixture: &Fixture) -> Result<(), Failure> {
+    let requirement = fixture
+        .requirements
+        .first()
+        .copied()
+        .unwrap_or("(unmapped requirement)");
+
+    let fail = |detail: String| Failure {
+        fixture: fixture.id.to_string(),
+        requirement: requirement.to_string(),
+        detail,
+    };
+
+    match fixture.expectation {
+        Expectation::Accept(level) => match level.run(&fixture.archive) {
+            Ok(()) => Ok(()),
+            Err(err) => Err(fail(format!(
+                "expected acceptance at level {:?} (ceiling stage {}), got rejection: code={} category={:?} stage={:?} message={}",
+                level,
+                level.ceiling_stage(),
+                err.diagnostic.code,
+                err.diagnostic.category,
+                err.diagnostic.stage,
+                err.diagnostic.message,
+            ))),
+        },
+        Expectation::Reject { .. } => observe_fixture(fixture).map(|_| ()),
     }
 }
 

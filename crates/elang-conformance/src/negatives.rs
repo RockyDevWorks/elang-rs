@@ -29,8 +29,9 @@
 //! names a stage the reader actually reports, not one the fixture author
 //! hoped for.
 
+use elang_container::footer::FOOTER_LEN;
 use elang_core::error::Category;
-use elang_writer::{write_archive, ExtraResource, PackageConfig, Profile};
+use elang_writer::{write_archive, ExtraResource, PackageConfig};
 
 use crate::corpus::{Expectation, Fixture, Level};
 use crate::golden_packages;
@@ -47,24 +48,37 @@ const FLAGS_OFFSET: usize = 12;
 /// The byte offset of the header's 16 reserved bytes.
 const RESERVED_OFFSET: usize = 16;
 
+/// The byte offset of the footer within an archive of `len` bytes.
+///
+/// The footer is the archive's last [`FOOTER_LEN`] bytes. The subtraction
+/// is checked: an archive shorter than one footer cannot exist, and an
+/// unchecked `len - FOOTER_LEN` would panic on an arithmetic underflow
+/// instead of reporting the authoring bug. Using the published constant
+/// rather than a literal `64` keeps the offsets correct if the footer
+/// layout ever changes.
+fn footer_offset(len: usize) -> usize {
+    len.checked_sub(FOOTER_LEN)
+        .expect("an archive is always at least one footer long")
+}
+
 /// The byte offset of the footer magic within the archive.
 fn footer_magic_offset(len: usize) -> usize {
-    len - 64
+    footer_offset(len)
 }
 
 /// The byte offset of the footer's `index_offset` field.
 fn footer_index_offset_offset(len: usize) -> usize {
-    len - 64 + 8
+    footer_offset(len) + 8
 }
 
 /// The byte offset of the footer's `index_size` field.
 fn footer_index_size_offset(len: usize) -> usize {
-    len - 64 + 16
+    footer_offset(len) + 16
 }
 
 /// The byte offset of the footer's 8 reserved bytes.
 fn footer_reserved_offset(len: usize) -> usize {
-    len - 64 + 56
+    footer_offset(len) + 56
 }
 
 /// Build the writer configuration for the minimal package, with optional
@@ -88,7 +102,7 @@ fn minimal_config_with_extras(
         epf,
         eld,
         extra_resources,
-        profile: Profile::Fast,
+        profile: crate::golden_packages::GOLDEN_PROFILE,
         format_version: golden_packages::FORMAT_VERSION.to_string(),
     })
 }
@@ -134,7 +148,7 @@ fn minimal_archive() -> Vec<u8> {
     clippy::expect_used,
     reason = "test helper assembles a hand-rolled archive with bounded arithmetic"
 )]
-fn archive_with_custom_index<F>(build_index: F) -> Vec<u8>
+pub(crate) fn archive_with_custom_index<F>(build_index: F) -> Vec<u8>
 where
     F: FnOnce(u64) -> Vec<u8>,
 {
@@ -143,8 +157,8 @@ where
     use sha2::Digest;
 
     let payload = b"x\n";
-    let frame =
-        elang_container::frame::encode(payload, Profile::Fast).expect("fixture frame encodes");
+    let frame = elang_container::frame::encode(payload, crate::golden_packages::GOLDEN_PROFILE)
+        .expect("fixture frame encodes");
     let frame_offset = HEADER_LEN as u64;
     let index_bytes = build_index(frame_offset);
     let index_hash: [u8; 32] = sha2::Sha256::digest(&index_bytes).into();
@@ -175,7 +189,7 @@ where
 
 /// Encode one index entry's bytes in the same wire format the container's
 /// `Index::encode` uses (T0310).
-fn encode_index_entry(
+pub(crate) fn encode_index_entry(
     out: &mut Vec<u8>,
     path: &[u8],
     frame_offset: u64,
@@ -206,6 +220,24 @@ fn poke(bytes: &mut [u8], offset: usize, value: u8) -> bool {
     }
 }
 
+/// Mutate one byte of an archive, failing loudly if the offset is out of
+/// range.
+///
+/// [`poke`] reports an out-of-range offset by returning `false` instead
+/// of panicking. A fixture that ignored that return value would leave
+/// the archive byte-valid: the mutation would silently not happen, and
+/// the fixture would either degenerate into an accept case or trip an
+/// earlier check — with no signal at the mutation site. Every fixture
+/// mutation goes through this wrapper, so a stale offset fails the
+/// build instead of quietly weakening the corpus.
+fn poke_at(bytes: &mut [u8], offset: usize, value: u8) {
+    assert!(
+        poke(bytes, offset, value),
+        "mutation offset {offset} is out of range for a {}-byte archive",
+        bytes.len()
+    );
+}
+
 // ---------------------------------------------------------------------------
 // T1410 — malformed binary container fixtures
 // ---------------------------------------------------------------------------
@@ -217,7 +249,7 @@ pub fn binary_fixtures() -> Vec<Fixture> {
 
     // --- header --------------------------------------------------------
     let mut bad_magic = minimal_archive();
-    poke(&mut bad_magic, MAGIC_OFFSET, 0x00);
+    poke_at(&mut bad_magic, MAGIC_OFFSET, 0x00);
     fixtures.push(Fixture {
         id: "binary/header-bad-magic",
         description: "The 8-byte header magic is corrupted (stage 1).",
@@ -231,7 +263,7 @@ pub fn binary_fixtures() -> Vec<Fixture> {
     });
 
     let mut bad_version = minimal_archive();
-    poke(&mut bad_version, MAJOR_OFFSET, 0xFF);
+    poke_at(&mut bad_version, MAJOR_OFFSET, 0xFF);
     fixtures.push(Fixture {
         id: "binary/header-bad-version",
         description: "The header's major version is unsupported (stage 2).",
@@ -245,7 +277,7 @@ pub fn binary_fixtures() -> Vec<Fixture> {
     });
 
     let mut nonzero_flags = minimal_archive();
-    poke(&mut nonzero_flags, FLAGS_OFFSET, 0x01);
+    poke_at(&mut nonzero_flags, FLAGS_OFFSET, 0x01);
     fixtures.push(Fixture {
         id: "binary/header-nonzero-flags",
         description: "The header's flags field must be zero in v0.1.0 (stage 2).",
@@ -259,7 +291,7 @@ pub fn binary_fixtures() -> Vec<Fixture> {
     });
 
     let mut nonzero_reserved = minimal_archive();
-    poke(&mut nonzero_reserved, RESERVED_OFFSET, 0x01);
+    poke_at(&mut nonzero_reserved, RESERVED_OFFSET, 0x01);
     fixtures.push(Fixture {
         id: "binary/header-reserved-nonzero",
         description: "The header's 16 reserved bytes must be zero (stage 2).",
@@ -275,7 +307,7 @@ pub fn binary_fixtures() -> Vec<Fixture> {
     // --- footer --------------------------------------------------------
     let mut bad_footer_magic = minimal_archive();
     let footer_at = footer_magic_offset(bad_footer_magic.len());
-    poke(&mut bad_footer_magic, footer_at, 0x00);
+    poke_at(&mut bad_footer_magic, footer_at, 0x00);
     fixtures.push(Fixture {
         id: "binary/footer-bad-magic",
         description: "The 8-byte footer magic is corrupted (stage 3).",
@@ -290,7 +322,7 @@ pub fn binary_fixtures() -> Vec<Fixture> {
 
     let mut bad_footer_reserved = minimal_archive();
     let reserved_at = footer_reserved_offset(bad_footer_reserved.len());
-    poke(&mut bad_footer_reserved, reserved_at, 0x01);
+    poke_at(&mut bad_footer_reserved, reserved_at, 0x01);
     fixtures.push(Fixture {
         id: "binary/footer-reserved-nonzero",
         description: "The footer's 8 reserved bytes must be zero (stage 3).",
@@ -305,7 +337,7 @@ pub fn binary_fixtures() -> Vec<Fixture> {
 
     let mut bad_footer_offset = minimal_archive();
     let offset_at = footer_index_offset_offset(bad_footer_offset.len());
-    poke(&mut bad_footer_offset, offset_at, 0xFF);
+    poke_at(&mut bad_footer_offset, offset_at, 0xFF);
     fixtures.push(Fixture {
         id: "binary/footer-offset-inconsistent",
         description: "The footer's index offset disagrees with the archive layout (stage 1).",
@@ -320,7 +352,7 @@ pub fn binary_fixtures() -> Vec<Fixture> {
 
     let mut bad_footer_size = minimal_archive();
     let size_at = footer_index_size_offset(bad_footer_size.len());
-    poke(&mut bad_footer_size, size_at, 0xFF);
+    poke_at(&mut bad_footer_size, size_at, 0xFF);
     fixtures.push(Fixture {
         id: "binary/footer-index-size-inconsistent",
         description: "The footer's index size disagrees with the archive layout (stage 1).",
@@ -678,7 +710,8 @@ pub fn rebuild_with_resource(path: &str, content: &[u8]) -> Vec<u8> {
     resources.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
     let mut frames: Vec<(String, Vec<u8>, u64)> = Vec::with_capacity(resources.len());
     for (p, bytes) in &resources {
-        let compressed = encode(bytes, Profile::Fast).expect("a resource must encode");
+        let compressed =
+            encode(bytes, crate::golden_packages::GOLDEN_PROFILE).expect("a resource must encode");
         frames.push((p.clone(), compressed, bytes.len() as u64));
     }
     let mut entries: Vec<IndexEntry> = Vec::with_capacity(frames.len());
@@ -746,5 +779,22 @@ mod tests {
         assert!(poke(&mut buf, 0, 0xFF));
         assert_eq!(buf[0], 0xFF);
         assert!(!poke(&mut buf, 99, 0xFF));
+    }
+
+    #[test]
+    fn poke_at_applies_an_in_range_mutation() {
+        let mut buf = [0u8; 4];
+        poke_at(&mut buf, 2, 0xFF);
+        assert_eq!(buf, [0, 0, 0xFF, 0]);
+    }
+
+    #[test]
+    #[should_panic(expected = "out of range")]
+    fn poke_at_fails_loudly_on_an_out_of_range_offset() {
+        // A stale offset must fail loudly. If it were ignored, the archive
+        // would stay byte-valid and the fixture would silently degenerate
+        // into an accept case (or trip an earlier check).
+        let mut buf = [0u8; 4];
+        poke_at(&mut buf, 99, 0xFF);
     }
 }

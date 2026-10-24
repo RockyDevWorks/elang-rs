@@ -65,15 +65,15 @@ pub const PINNED_MINIMAL_FRAME_SHA256: &[(&str, &str)] = &[
     ),
     (
         "Linguistics/phonemes.eld",
-        "56b49cdcf9d5fff2e119a19131459a5ee538dca1a462265adabaac5233b7b806",
+        "7114c381decab5ae52320eb57fa09c6ab7840373cbd752ee38fe05e16a4fa5f7",
     ),
     (
         "META-INF/integrity.kdl",
-        "42e7805ef8ce83051a0b3e92ccbe77a02ab38e47d7b7f0be255335c0d936ba60",
+        "957881bc4a91e00a90daadf882344d4e599f4c31da1de38dbd255ec01be5f9e0",
     ),
     (
         "package.epf",
-        "e7d5e841774e1ecf9e4987d9f2633de9ff60d7d26e154a6558a71630978ed9a8",
+        "1f98f707de9a0d5881c85f89c6903df223aa5addff77bdc5a4c6fb8411a97b68",
     ),
 ];
 
@@ -95,15 +95,15 @@ pub const PINNED_FULL_FRAME_SHA256: &[(&str, &str)] = &[
     ),
     (
         "Linguistics/phonemes.eld",
-        "34591931e426189b5c2dc435ef0306836184c00047c745f17d9773f9e7f0c1b1",
+        "1418c721b1a5d00451e6173190c9c5dcd30ed8aa35fff257c20e8ff3f83bfb23",
     ),
     (
         "META-INF/integrity.kdl",
-        "36ed2d22a55e203455d6dc71ba78c55a0e00f5ee35746d3739078fe9fde512a8",
+        "ac1f456bed1f87ef33baf4bb9ffcd874af408dad0a6eb6e14c08eb42a48869b1",
     ),
     (
         "package.epf",
-        "0a67af57f0ce17f54935413297625fc9dc52a58cc45f6375378aa2739fc91906",
+        "f54bdaac5747f0d58ef752aa7dc00f0c026bc92a631ab272e0946799d7003197",
     ),
 ];
 
@@ -120,36 +120,53 @@ fn pinned_version_bytes() -> Vec<u8> {
 /// `id_prefix` names the family; the fixture id appends the resource
 /// path, because a package carries several frames and the catalog
 /// requires every fixture id to be unique.
+///
+/// # Panics
+///
+/// Panics on any authoring inconsistency: an archive that does not parse,
+/// a pinned path that is absent from the index, an index entry with no
+/// pinned digest, or a frame range that lies outside the archive. A
+/// silently-dropped entry would publish a corpus that claims to pin
+/// every frame digest while pinning fewer of them.
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "fixture authoring failures must fail loudly, never silently skip a frame"
+)]
 fn frame_fixtures(
     package: &crate::golden_packages::GoldenPackage,
     pinned: &[(&str, &str)],
     id_prefix: &'static str,
 ) -> Vec<VectorFixture> {
-    let mut fixtures = Vec::new();
-    let Ok(listing) = ArchiveListing::parse(&package.archive) else {
-        return fixtures;
-    };
-    for entry in listing.index().entries() {
-        let path = entry.path().as_str().to_string();
-        let Some(expected) = pinned.iter().find(|(p, _)| *p == path) else {
-            continue;
-        };
+    let listing = ArchiveListing::parse(&package.archive)
+        .expect("golden package archive parses for its pinned frame digests");
+    let entries = listing.index().entries();
+
+    let mut fixtures = Vec::with_capacity(pinned.len());
+    for (path, expected_hex) in pinned {
+        let entry = entries
+            .iter()
+            .find(|e| e.path().as_str() == *path)
+            .unwrap_or_else(|| {
+                panic!(
+                    "pinned frame digest names `{path}`, which the package's index does not contain"
+                )
+            });
         let offset = entry.frame_offset() as usize;
         let size = entry.compressed_size() as usize;
-        let Some(frame) = package.archive.get(offset..offset + size) else {
-            continue;
-        };
-        let mut expected_bytes = Vec::with_capacity(32);
-        // Rebuild the expected bytes from the hex string: two hex digits
-        // per byte, high nibble first.
-        let hex_bytes = expected.1.as_bytes();
-        let mut index = 0;
-        while index + 1 < hex_bytes.len() {
-            let high = (hex_bytes[index] as char).to_digit(16).unwrap_or(0) as u8;
-            let low = (hex_bytes[index + 1] as char).to_digit(16).unwrap_or(0) as u8;
-            expected_bytes.push((high << 4) | low);
-            index += 2;
-        }
+        let frame = package
+            .archive
+            .get(offset..offset + size)
+            .unwrap_or_else(|| {
+                panic!(
+                    "pinned frame `{path}` claims bytes {offset}..{} which lie outside the {}-byte archive",
+                    offset + size,
+                    package.archive.len()
+                )
+            });
+        let expected_bytes = crate::epf_canonical_goldens::hex_decode(expected_hex)
+            .unwrap_or_else(|e| panic!("pinned digest for `{path}` is not valid hex: {e}"));
         fixtures.push(VectorFixture {
             id: format!("{id_prefix}/{path}"),
             description: "pinned",
@@ -158,6 +175,17 @@ fn frame_fixtures(
             expected: expected_bytes,
         });
     }
+
+    // Every indexed resource must have a pinned digest. A resource with
+    // no pinned entry would silently escape the corpus.
+    for entry in entries {
+        let path = entry.path().as_str();
+        assert!(
+            pinned.iter().any(|(p, _)| *p == path),
+            "indexed resource `{path}` has no pinned frame digest"
+        );
+    }
+
     fixtures
 }
 
@@ -279,8 +307,8 @@ mod tests {
             run_vector_fixture(&fixture).unwrap_or_else(|f| panic!("{f}"));
             checked += 1;
         }
-        assert!(
-            checked >= 12,
+        assert_eq!(
+            checked, 12,
             "expected the pinned version vector plus 11 frame digests, checked {checked}"
         );
     }

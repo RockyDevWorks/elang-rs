@@ -9,9 +9,14 @@
 //! implementations that agree on the canonical inputs agree on the
 //! whole archive, byte for byte.
 //!
-//! The fixture writes the minimal golden package once, then writes it
-//! again from the canonical sources re-parsed into the production typed
-//! models. The two archives must compare byte-for-byte.
+//! The fixture writes the minimal golden package once, reads it back
+//! with the production reader, recovers the canonical `package.epf` and
+//! `Linguistics/phonemes.eld` payloads from the decoded frames, and
+//! writes them again. The two archives must compare byte-for-byte. The
+//! rebuild deliberately uses the *recovered* bytes rather than the
+//! original source constants — otherwise the check would only prove
+//! that the writer is deterministic, and would pass even if the reader
+//! silently dropped or altered a resource.
 //!
 //! # T1418 — canonical order stability
 //!
@@ -154,7 +159,17 @@ fn build_archive(
 }
 
 /// The T1417 check: writing the same canonical inputs twice must be
-/// byte-identical.
+/// byte-identical **and** reading an archive back and writing it again
+/// must reproduce the original bytes.
+///
+/// The second half is the one that matters. The archive is opened with
+/// the production reader, verified, and the canonical `package.epf` and
+/// `Linguistics/phonemes.eld` payloads are recovered from the decoded
+/// frames. The rebuild uses **those recovered bytes**, not the original
+/// source constants — so a reader that dropped, reordered or altered a
+/// resource would change the rebuilt archive and fail here. A writer
+/// that was merely stable across runs, but not stable when its own
+/// output was read back, would also fail here.
 ///
 /// # Errors
 ///
@@ -165,12 +180,24 @@ pub fn roundtrip_is_byte_identical() -> Result<(), String> {
         crate::golden_packages::MINIMAL_ELD,
         Vec::new(),
     )?;
-    let archive_b = build_archive(
-        crate::golden_packages::MINIMAL_EPF,
-        crate::golden_packages::MINIMAL_ELD,
-        Vec::new(),
-    )?;
-    assert_identical(&archive_a, &archive_b, "write->write")
+
+    // Read the archive back with the production reader. `verify` runs
+    // stages 8–11 and decodes every indexed resource, so the payloads
+    // below come out of the frames rather than out of the writer's
+    // inputs.
+    let verified = elang_reader::Package::open(&archive_a)
+        .map_err(|e| format!("reader open: {e:?}"))?
+        .verify()
+        .map_err(|e| format!("reader verify: {e:?}"))?;
+    let epf_bytes = verified
+        .get_resource("package.epf")
+        .ok_or_else(|| "the archive does not carry `package.epf`".to_string())?;
+    let eld_bytes = verified
+        .get_resource("Linguistics/phonemes.eld")
+        .ok_or_else(|| "the archive does not carry `Linguistics/phonemes.eld`".to_string())?;
+
+    let archive_b = build_archive(epf_bytes, eld_bytes, Vec::new())?;
+    assert_identical(&archive_a, &archive_b, "write->read->write")
 }
 
 /// The T1418 check: the resource declaration order must not change the

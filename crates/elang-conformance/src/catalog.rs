@@ -32,6 +32,7 @@
 //! is caught the moment the catalog is built.
 
 use crate::corpus::{DocumentExpectation, Fixture};
+use crate::golden_packages;
 
 /// One entry in the conformance corpus catalog.
 #[derive(Debug, Clone)]
@@ -129,37 +130,24 @@ pub fn catalog() -> Vec<CatalogEntry> {
     let mut entries = Vec::new();
 
     // -- Golden packages ----------------------------------------------
-    // The two golden packages are the corpus's reference inputs. They
-    // exercise every positive requirement (REQ-PKG-001..004, REQ-READER-002,
-    // REQ-CONF-001).
-    entries.push(CatalogEntry {
-        id: "golden/minimal".to_string(),
-        description: "The minimal golden package is accepted at every reader level",
-        requirements: &[
-            "REQ-CONF-001",
-            "REQ-CONF-002",
-            "REQ-PKG-001",
-            "REQ-PKG-002",
-            "REQ-PKG-003",
-            "REQ-PKG-004",
-            "REQ-READER-002",
-        ],
-        expectation: FixtureExpectation::Accept,
-    });
-    entries.push(CatalogEntry {
-        id: "golden/full".to_string(),
-        description: "The full golden package is accepted at every reader level",
-        requirements: &[
-            "REQ-CONF-001",
-            "REQ-CONF-002",
-            "REQ-PKG-001",
-            "REQ-WRITER-001",
-            "REQ-WRITER-002",
-            "REQ-WRITER-005",
-            "REQ-READER-002",
-        ],
-        expectation: FixtureExpectation::Accept,
-    });
+    // Derive the catalog entries from the golden-packages module so the
+    // catalog cannot drift from each package's actual `id` and
+    // `requirements`. A hand-written copy of those fields is exactly the
+    // surface where the catalog most easily disagrees with the source of
+    // truth; pulling from `golden_packages::all()` collapses them to one.
+    //
+    // The catalog ids match the GoldenPackage ids (`valid/minimal` /
+    // `valid/full`) verbatim. A authoring failure on the canonical
+    // inputs panics here rather than publishing a corpus that silently
+    // omits its reference fixtures.
+    for pkg in golden_packages::all().expect("golden packages build") {
+        entries.push(CatalogEntry {
+            id: pkg.id.to_string(),
+            description: pkg.description,
+            requirements: pkg.requirements,
+            expectation: FixtureExpectation::Accept,
+        });
+    }
 
     // -- Negative fixtures: header / footer / index / path / integrity
     entries.extend(crate::negatives::catalog_entries());
@@ -222,11 +210,15 @@ pub fn catalog() -> Vec<CatalogEntry> {
 
     // -- Reader stage + code reporting (REQ-READER-005) — meta-fixture
     // asserting the corpus's runner emits the expected code + stage for
-    // every negative fixture. The runner unit test in `corpus.rs`
-    // enforces this; the catalog entry names the requirement.
+    // every negative fixture. The integration test
+    // `tests/stage_conformance.rs` reads the registry-driven stage set
+    // for each code and asserts every negative archive fixture is
+    // rejected at a stage the registry publishes for that code and no
+    // higher than the declared level's ceiling; the catalog entry names
+    // the requirement so the completeness scan sees it.
     entries.push(CatalogEntry {
         id: "reader/expected-stage-and-code".to_string(),
-        description: "Every negative fixture reports its declared stage and diagnostic code",
+        description: "Every negative archive fixture is rejected at a stage the registry publishes for that code and no higher than the declared level's ceiling",
         requirements: &["REQ-CONF-003", "REQ-READER-005", "REQ-READER-001"],
         expectation: FixtureExpectation::Accept,
     });
@@ -264,15 +256,6 @@ pub fn catalog() -> Vec<CatalogEntry> {
         id: "workspace/builds-on-all-targets".to_string(),
         description: "The workspace builds and tests pass on Linux, Windows, and macOS",
         requirements: &["REQ-GOV-WORKSPACE-001"],
-        expectation: FixtureExpectation::Accept,
-    });
-
-    // -- Security/fuzz/property (REQ-SEC-001) — Phase 15 work, but the
-    // requirement is tracked here so the completeness scan sees it.
-    entries.push(CatalogEntry {
-        id: "security/fuzz-and-property-coverage".to_string(),
-        description: "Phase 15 covers fuzz and property-based testing across every parser/decoder",
-        requirements: &["REQ-SEC-001"],
         expectation: FixtureExpectation::Accept,
     });
 

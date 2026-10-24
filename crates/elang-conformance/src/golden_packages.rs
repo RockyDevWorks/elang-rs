@@ -191,7 +191,7 @@ fn minimal_config() -> Result<PackageConfig, String> {
         epf,
         eld,
         extra_resources: Vec::new(),
-        profile: Profile::Fast,
+        profile: GOLDEN_PROFILE,
         format_version: FORMAT_VERSION.to_string(),
     })
 }
@@ -215,7 +215,7 @@ fn full_config() -> Result<PackageConfig, String> {
             path: FULL_EXTRA_PATH.to_string(),
             canonical_bytes: FULL_EXTRA_BYTES.to_vec(),
         }],
-        profile: Profile::Fast,
+        profile: GOLDEN_PROFILE,
         format_version: FORMAT_VERSION.to_string(),
     })
 }
@@ -233,8 +233,15 @@ pub fn minimal() -> Result<GoldenPackage, String> {
         "valid/minimal",
         "Smallest semantically complete .elang package (T1402).",
         &[
+            // The five mandatory resources and their content contracts.
             "REQ-PKG-001",
+            "REQ-PKG-002",
+            "REQ-PKG-003",
+            // Pin exact bytes and digests for the reference archive.
+            "REQ-CONF-002",
+            // Open / verify / validate against the 12-stage ladder.
             "REQ-READER-002",
+            // The minimal EPF / ELD shape.
             "REQ-EPF-001",
             "REQ-ELD-001",
         ],
@@ -255,12 +262,21 @@ pub fn full() -> Result<GoldenPackage, String> {
         "valid/full",
         "Full-featured .elang package: multiple groups, allophones, conditions, extra resource (T1402).",
         &[
+            // The minimal-package requirements all still hold.
             "REQ-PKG-001",
+            "REQ-PKG-002",
+            "REQ-PKG-003",
+            "REQ-CONF-002",
             "REQ-READER-002",
             "REQ-EPF-001",
             "REQ-ELD-001",
+            // Multiple groups in canonical order (consonants, vowels, custom).
             "REQ-CANON-001",
-            "REQ-WRITER-005",
+            // The writer built this from a validated EPF + ELD + a
+            // permitted extra resource, then integrity-hashed the exact
+            // final bytes.
+            "REQ-WRITER-001",
+            "REQ-WRITER-002",
         ],
         archive,
     ))
@@ -276,7 +292,15 @@ pub fn all() -> Result<Vec<GoldenPackage>, String> {
 }
 
 /// The Zstandard compression profile every golden package is built with.
-pub const GOLDEN_PROFILE: Profile = Profile::Fast;
+/// The Zstandard profile the golden packages are built with.
+///
+/// This MUST be the canonical profile (`elang-canonical-zstd-v1`).
+/// `Profile::Fast` is level 3 and explicitly *not* canonical: pinning
+/// its bytes would publish a corpus that no conforming implementation
+/// could reproduce, because a conforming implementation compresses
+/// with the locked canonical parameters (REQ-FRAME-010/011,
+/// REQ-CONF-001).
+pub const GOLDEN_PROFILE: Profile = Profile::Canonical;
 
 /// The reader's bootstrap decode budget for `Header/format.version`.
 ///
@@ -303,29 +327,29 @@ pub const GOLDEN_INDEX_HEADER_LEN: usize = INDEX_HEADER_LEN;
 
 /// SHA-256 (hex) of the minimal package's archive bytes.
 pub const MINIMAL_ARCHIVE_SHA256: &str =
-    "ac1345d046c552c4c5973d62b7febe95671bd54f1a6ecdcfae4ac461e25a7737";
+    "fa28ce47b5d9cf81d13fde0d716e84c8444c6167350e2d1f6c4bf78031151cf7";
 /// SHA-256 (hex) of the minimal package's 32-byte binary header.
 pub const MINIMAL_HEADER_SHA256: &str =
     "ee15caa934ffa9220a103c5b83276df6c4e13120d2caa51089febb0c55900bdf";
 /// SHA-256 (hex) of the minimal package's index segment.
 pub const MINIMAL_INDEX_SHA256: &str =
-    "430eaad76ac15c881fd41c08b4029eb5009e2fe262fb703a1062533b96e55d6e";
+    "862c450e6177de0f8ef9e88246823e05329c21d6d160f694516a8b66995fd57a";
 /// SHA-256 (hex) of the minimal package's 32-byte footer.
 pub const MINIMAL_FOOTER_SHA256: &str =
-    "51b3315147c6a626e479de6a0d244d5abb534b4b88a3efb172facb3a13645419";
+    "42708594e10e1c3f48670a1954586fcca97d3167c0ef62f83e66cd86a4e49efa";
 
 /// SHA-256 (hex) of the full package's archive bytes.
 pub const FULL_ARCHIVE_SHA256: &str =
-    "c18f2f81543d17d4be2774ea342e6d22a9710b718600e8c9a06c1afc9df40a61";
+    "c81016352a7924924c7bfbcbb0e296fe9c638a756998d71c4bccd4a015897788";
 /// SHA-256 (hex) of the full package's 32-byte binary header.
 pub const FULL_HEADER_SHA256: &str =
     "ee15caa934ffa9220a103c5b83276df6c4e13120d2caa51089febb0c55900bdf";
 /// SHA-256 (hex) of the full package's index segment.
 pub const FULL_INDEX_SHA256: &str =
-    "34d945557a6a6c694435b321833544cc0579d8cda34e4acc99e425de81919f85";
+    "141fa2690c5966ab6e77b9061fc27c89d837adb5af8ea59da03c280f9f1514f0";
 /// SHA-256 (hex) of the full package's 32-byte footer.
 pub const FULL_FOOTER_SHA256: &str =
-    "8cdd81bc21ce1cc1e45e9e9a8a8b7de311fc3a0785ff89250bdf3fbe6d9a99e6";
+    "596aa0a7df2924260d464fd30b2e2ae1007e76fd436d53da9c97151b73f3b709";
 
 /// Assert that a golden package opens, verifies and validates.
 ///

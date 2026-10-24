@@ -171,7 +171,7 @@ pub fn golden_fixtures() -> Vec<VectorFixture> {
             description: "The SHA-256 of the canonical bytes matches the pinned digest",
             requirements: case.requirements,
             actual: sha256(case.canonical.as_bytes()).to_vec(),
-            expected: hex_decode(case.sha256_hex),
+            expected: hex_decode(case.sha256_hex).expect("pinned digest is valid hex"),
         });
     }
     fixtures
@@ -189,27 +189,33 @@ pub fn catalog_entries() -> Vec<crate::catalog::CatalogEntry> {
         .collect()
 }
 
-/// Decode a hex string into bytes. Panics on odd length or non-hex
-/// characters — these are authoring bugs in the pinned constants.
-fn hex_decode(value: &str) -> Vec<u8> {
+/// Decode a hex string into bytes.
+///
+/// Returns `Err` on an odd-length string or a non-hex character rather
+/// than silently truncating or substituting a digit. Every caller in the
+/// corpus treats that as an authoring bug in a pinned constant and fails
+/// loudly — a silently-mangled digest would let a pinned value drift away
+/// from the bytes it describes without any test noticing.
+pub(crate) fn hex_decode(value: &str) -> Result<Vec<u8>, String> {
     let bytes = value.as_bytes();
-    assert!(
-        bytes.len().is_multiple_of(2),
-        "pinned hex string has odd length: {value:?}"
-    );
+    if !bytes.len().is_multiple_of(2) {
+        return Err(format!("pinned hex string has odd length: {value:?}"));
+    }
     let mut out = Vec::with_capacity(bytes.len() / 2);
     let mut index = 0;
     while index < bytes.len() {
-        let high = (bytes[index] as char).to_digit(16).unwrap_or_else(|| {
-            panic!("non-hex character in pinned digest {value:?}");
-        }) as u8;
-        let low = (bytes[index + 1] as char).to_digit(16).unwrap_or_else(|| {
-            panic!("non-hex character in pinned digest {value:?}");
-        }) as u8;
+        let high = (bytes[index] as char)
+            .to_digit(16)
+            .ok_or_else(|| format!("non-hex character in pinned digest {value:?}"))?
+            as u8;
+        let low = (bytes[index + 1] as char)
+            .to_digit(16)
+            .ok_or_else(|| format!("non-hex character in pinned digest {value:?}"))?
+            as u8;
         out.push((high << 4) | low);
         index += 2;
     }
-    out
+    Ok(out)
 }
 
 /// Run every T1405 vector fixture against the production canonicaliser.
@@ -229,7 +235,7 @@ mod tests {
     #[test]
     fn pinned_digest_strings_are_well_formed() {
         for case in CASES {
-            let bytes = hex_decode(case.sha256_hex);
+            let bytes = hex_decode(case.sha256_hex).expect("pinned digest is valid hex");
             assert_eq!(bytes.len(), 32, "{}: not a SHA-256", case.id);
             assert_eq!(hex(&bytes), case.sha256_hex);
         }

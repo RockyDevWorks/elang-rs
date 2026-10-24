@@ -80,7 +80,9 @@ pub fn vector_fixtures() -> Vec<VectorFixture> {
 
     // -- Forbidden-category vectors -------------------------------------
     // FORMAT characters (Cf) are forbidden. The corpus pins this for an
-    // explicit ZWJ (U+200D), BOM (U+FEFF), and the bidi-format controls.
+    // explicit ZWJ (U+200D), ZWNJ (U+200C), and BOM (U+FEFF). The
+    // U+200C/U+200D pairs cover both the joiner and the joiner-direction
+    // bidi controls; the BOM anchors the byte-order-mark check.
     let forbidden: &[(&str, char)] = &[
         ("zwj", '\u{200D}'),
         ("zwnj", '\u{200C}'),
@@ -111,6 +113,20 @@ pub fn vector_fixtures() -> Vec<VectorFixture> {
         description: "U+FDD0 is a Unicode noncharacter",
         requirements: &["REQ-UNICODE-003"],
         actual: vec![u8::from(is_nc)],
+        expected: vec![1u8],
+    });
+
+    // Mirror the detection check against the higher-level
+    // `validate_str`, so a regression that drops the noncharacter check
+    // out of the validation path is caught by the corpus rather than
+    // relying on `is_noncharacter` alone.
+    let validated = validate_str(&nonchar.to_string());
+    let observed = matches!(validated, Err(UnicodeViolation::Noncharacter { .. }));
+    fixtures.push(VectorFixture {
+        id: "unicode/noncharacter-validation".to_string(),
+        description: "validate_str rejects a Unicode noncharacter as Noncharacter",
+        requirements: &["REQ-UNICODE-003"],
+        actual: vec![u8::from(observed)],
         expected: vec![1u8],
     });
 

@@ -106,6 +106,17 @@ compression parameters change, those digests stop matching and the
 corpus fails loudly. That is the intended behaviour — both are
 normative changes that require a superseding ADR.
 
+The golden packages are built with `Profile::Canonical`
+(`elang-container`'s level-9 encoder with the locked window-log and
+long-distance-matching parameters), **not** `Profile::Fast`. `Fast` is
+level 3 and is explicitly documented as *not* canonical; pinning its
+bytes would publish a corpus that no conforming implementation could
+reproduce, because a conforming implementation compresses with the
+locked canonical parameters. `golden_packages::GOLDEN_PROFILE` is the
+single source of truth for the profile, and every fixture derived from
+the golden packages — the negative fixtures' base archive, the
+write→read→write round-trip — uses it too.
+
 ### 2.2 The pinned Unicode data tables
 
 The Unicode data tables are pinned to version 18.0.0. A change to the
@@ -155,6 +166,29 @@ For every `Fixture`:
      lower level cannot masquerade as the declared level.
    - Run the reader at level `L` and assert it fails with the pinned
      code and category.
+4. Assert the **stage** the reader reported is one of the stages the
+   error-code registry publishes for that code, and no higher than
+   `L.ceiling_stage()`.
+
+Step 4 is REQ-CONF-003's "expected stage" half. The expected stage is
+not restated per fixture: `specs/registry/error-codes.json` publishes,
+for every registered code, the set of stages at which that code may
+legitimately be raised (for example `HEADER_BAD_MAGIC` → stages
+`[1, 2]`, `INTEGRITY_HASH_MISMATCH` → stage `[11]`). The
+`stage_conformance` integration test reads that registry at test time
+and checks every negative archive fixture against it, so the corpus
+cannot drift from the normative source.
+
+The second half of step 4 is what gives the first half meaning: a
+fixture that declares `Verify` must not surface a stage-12 diagnostic,
+because stage 12 is only reached by `Validate`.
+
+The per-family tests drive the runner one fixture at a time. On top of
+them, `crates/elang-conformance/tests/corpus_run.rs` drives the
+aggregate `run_corpus` entry point over **every** archive fixture and
+asserts the run produces zero failures, with a pinned minimum fixture
+count so the aggregate gate cannot pass vacuously on an empty
+enumeration.
 
 ### 3.4 Source of truth
 
@@ -252,7 +286,7 @@ behaviour — a container test for `REQ-BIN-013`, a KDL test for
 it. The corpus therefore keeps a second, explicit table:
 
 `crates/elang-conformance/src/requirement_coverage_data.rs` — one row per
-`(requirement, crate, test_name, kind)`. It currently holds **374 rows
+`(requirement, crate, test_name, kind)`. It currently holds **387 rows
 covering all 169** normative `MUST` / `MUST NOT` requirements in
 `.kiro/specs/elang-v0.1.0/requirements.md`.
 
