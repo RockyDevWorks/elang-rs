@@ -323,65 +323,63 @@ fn sixteen_atomic_predicates_is_accepted() {
 
 #[test]
 fn nine_nested_levels_is_rejected() {
-    let mut body = String::from(
-        "phonemes {\n  consonants { phoneme \"p\" {\n    roman \"p\"\n    when {\n      word-position \"initial\"\n      group {\n",
-    );
-    // 6 more nested `group` levels → outer + 6 = 7 groups + `or` at
-    // depth 9; the word-position children of `or` reach depth 9 and
-    // exceed the budget of 8.
-    for _ in 0..6 {
-        body.push_str("      word-position \"initial\"\n      group {\n");
+    for name in ["group", "or", "and", "not", "unknown", "when"] {
+        let mut body = String::from(
+            "phonemes {\n  consonants { phoneme \"p\" {\n    roman \"p\"\n    when {\n",
+        );
+        // Eight groups put the next node at container depth nine.
+        for _ in 0..8 {
+            body.push_str("group {\nword-position \"initial\"\n");
+        }
+        body.push_str(&format!(
+            "{name} {{\nword-position \"initial\"\nword-position \"final\"\n}}\n"
+        ));
+        for _ in 0..8 {
+            body.push_str("}\n");
+        }
+        body.push_str("    } } }\n  vowels { phoneme \"a\" { roman \"a\" } }\n}\n");
+        let e = parse_err(&body);
+        assert_eq!(e.code(), "WHEN_TOO_DEEP", "depth nine: {name}");
     }
-    // Innermost (level 9) gets two siblings so it passes arity; the
-    // depth budget fires before any evaluator decision is made.
-    body.push_str("      word-position \"initial\"\n      or {\n        word-position \"initial\"\n        word-position \"final\"\n      }\n");
-    for _ in 0..7 {
-        body.push_str("      }\n");
-    }
-    body.push_str("    } } }\n  vowels { phoneme \"a\" { roman \"a\" } }\n}\n");
-    let e = parse_err(&body);
-    assert_eq!(e.code(), "WHEN_TOO_DEEP", "depth 9 must trip the budget");
 }
 
 #[test]
 fn eight_nested_levels_is_accepted() {
-    let mut body = String::from(
-        "phonemes {\n  consonants { phoneme \"p\" {\n    roman \"p\"\n    when {\n      word-position \"initial\"\n      group {\n",
-    );
-    // 5 more nested `group` levels. Outer `group` + 5 loop iterations = 6
-    // groups; combined with the innermost `or`, the deepest leaf (a
-    // word-position inside `or`) sits at depth 8, exactly meeting the
-    // budget without exceeding it.
-    for _ in 0..5 {
-        body.push_str("      word-position \"initial\"\n      group {\n");
+    for predicate in [
+        "word-position \"initial\"",
+        "syllable-position \"onset\"",
+        "previous-phoneme \"p\"",
+        "next-phoneme \"a\"",
+    ] {
+        let mut body = String::from(
+            "phonemes {\n  consonants { phoneme \"p\" {\n    roman \"p\"\n    when {\n      word-position \"initial\"\n",
+        );
+        // Seven groups plus the innermost `or` use all eight levels.
+        // Both atomic children of `or` are excluded from the depth count.
+        for _ in 0..7 {
+            body.push_str("group {\nword-position \"initial\"\n");
+        }
+        body.push_str(&format!(
+            "or {{\n{predicate}\nword-position \"final\"\n}}\n"
+        ));
+        for _ in 0..7 {
+            body.push_str("}\n");
+        }
+        body.push_str("    } } }\n  vowels { phoneme \"a\" { roman \"a\" } }\n}\n");
+        let doc = parse_ok(&body);
+        let ast = parse_block(
+            when_of_root(&doc),
+            &InventoryRefs::from_document(&doc),
+            &rep(),
+        )
+        .expect("block parses");
+        assert_eq!(max_nesting_depth(&ast.children()[0]), 0);
+        assert_eq!(
+            max_nesting_depth(&ast.children()[1]),
+            MAX_NESTING_DEPTH,
+            "deepest path has exactly eight containers: {predicate}"
+        );
     }
-    // Innermost group gets two siblings so it passes arity.
-    body.push_str("      word-position \"initial\"\n      or {\n        word-position \"initial\"\n        word-position \"final\"\n      }\n");
-    for _ in 0..6 {
-        body.push_str("      }\n");
-    }
-    body.push_str("    } } }\n  vowels { phoneme \"a\" { roman \"a\" } }\n}\n");
-    let doc = parse_ok(&body);
-    // Introspect the parsed AST to confirm the deepest path really is 8,
-    // not coincidentally less (which would mean the test exercises the
-    // budget at the wrong point). Phase 10 validates but does not store
-    // the AST, so we call `parse_block` ourselves on the same block.
-    let block = when_of_root(&doc);
-    let ast =
-        parse_block(block, &InventoryRefs::from_document(&doc), &rep()).expect("block parses");
-    // Top-level child of `when` is the leading word-position predicate;
-    // the deeply-nested `group`/`or` chain is the second child.
-    let cond = ast
-        .children()
-        .get(1)
-        .expect("when has the deeply-nested group as its second child");
-    let depth = max_nesting_depth(cond);
-    assert_eq!(depth, 8, "deepest path should be exactly 8 levels deep");
-    assert_eq!(
-        elang_eld::MAX_NESTING_DEPTH,
-        8,
-        "budget constant must be 8 for this assertion to be meaningful"
-    );
 }
 
 #[test]
@@ -533,39 +531,57 @@ fn truth_table_single_phoneme_is_both_initial_and_final() {
 
 #[test]
 fn truth_table_syllable_position() {
-    // Phase 8 owns the rejection and we never reach Phase 10's reference
-    // resolver.
-    let src = "phonemes {\n\
-        consonants { phoneme \"p\" { roman \"p\"\n\
-            when { syllable-position \"onset\" } } }\n\
-        vowels { phoneme \"a\" { roman \"a\" } }\n\
-    }";
-    let doc = parse_ok(src);
-    let refs = with_keys(&[("p", "cp")]);
-    let when = parse_block(when_of_root(&doc), &refs, &rep()).expect("parses");
-    let roots = vec!["p".to_string()];
-
-    let ctx_onset = EvalContext {
-        roots: &roots,
-        index: 0,
-        syllable_role: Some(SyllablePosition::Onset),
-        refs: &refs,
-    };
-    let ctx_nucleus = EvalContext {
-        syllable_role: Some(SyllablePosition::Nucleus),
-        roots: &roots,
-        index: 0,
-        refs: &refs,
-    };
-    let ctx_none = EvalContext {
-        roots: &roots,
-        index: 0,
-        syllable_role: None,
-        refs: &refs,
-    };
-    assert!(evaluate(&when, &ctx_onset).unwrap(), "onset matches");
-    assert!(!evaluate(&when, &ctx_nucleus).unwrap(), "nucleus doesn't");
-    assert!(!evaluate(&when, &ctx_none).unwrap(), "no role doesn't");
+    // T1023: every phoneme in a component shares its generator-assigned role.
+    let roots: Vec<String> = ["p", "t", "a", "i", "s", "k"]
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    let roles = [
+        SyllablePosition::Onset,
+        SyllablePosition::Onset,
+        SyllablePosition::Nucleus,
+        SyllablePosition::Nucleus,
+        SyllablePosition::Coda,
+        SyllablePosition::Coda,
+    ];
+    let refs = with_keys(&[
+        ("p", "p"),
+        ("t", "t"),
+        ("a", "a"),
+        ("i", "i"),
+        ("s", "s"),
+        ("k", "k"),
+    ]);
+    for (value, expected_role) in [
+        ("onset", SyllablePosition::Onset),
+        ("nucleus", SyllablePosition::Nucleus),
+        ("coda", SyllablePosition::Coda),
+    ] {
+        let src = format!(
+            "phonemes {{\n\
+                consonants {{ phoneme \"p\" {{ roman \"p\"\n\
+                    when {{ syllable-position \"{value}\" }} }} }}\n\
+                vowels {{ phoneme \"a\" {{ roman \"a\" }} }}\n\
+            }}"
+        );
+        let doc = parse_ok(&src);
+        let when = parse_block(when_of_root(&doc), &refs, &rep()).expect("parses");
+        for (index, role) in roles.into_iter().enumerate() {
+            for assigned in [Some(role), None] {
+                let ctx = EvalContext {
+                    roots: &roots,
+                    index,
+                    syllable_role: assigned,
+                    refs: &refs,
+                };
+                assert_eq!(
+                    evaluate(&when, &ctx).unwrap(),
+                    assigned == Some(expected_role),
+                    "{value} at index {index} with role {assigned:?}"
+                );
+            }
+        }
+    }
 }
 
 #[test]

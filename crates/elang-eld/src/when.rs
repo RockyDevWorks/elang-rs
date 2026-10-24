@@ -48,12 +48,9 @@ pub const MAX_PREDICATES_PER_WHEN: usize = 16;
 /// Maximum nested `group`/`or` levels along any single path
 /// (REQ-WHEN-008, C-27).
 ///
-/// The depth counter starts at 1 for the root `when`'s direct children
-/// (the top-level expressions sit at depth 1) and increments on each
-/// descent into a `group` or `or`. Atomic predicates do not consume
-/// depth, matching the spec's "root `when` and leaf atomics excluded"
-// phrasing: a flat `when { word-position "x" previous-phoneme "a" }` is
-/// depth 1 and never exceeds the limit regardless of predicate count.
+/// Only `group` and `or` containers consume depth; the root `when` and
+/// atomic predicates are excluded (C-27). A flat block has depth 0,
+/// and eight nested containers with atomic children meet the limit.
 pub const MAX_NESTING_DEPTH: usize = 8;
 
 // ---------------------------------------------------------------------------
@@ -237,36 +234,25 @@ pub fn parse_all(doc: &EldDocument, rep: &Repertoire) -> Result<(), Error> {
 }
 
 /// Compute the maximum nesting depth of any path through a `when`
-/// condition. A leaf predicate has depth 1; each `group` or `or` adds 1.
+/// condition. A leaf predicate has depth 0; each `group` or `or` adds 1.
 ///
 /// This is the introspection used by conformance tests to confirm the
 /// `MAX_NESTING_DEPTH` budget is enforced precisely at the boundary,
 /// not coincidentally via some unrelated path.
 #[must_use]
 pub fn max_nesting_depth(cond: &Condition) -> usize {
-    fn walk(c: &Condition, depth: usize, best: &mut usize) {
-        if depth > *best {
-            *best = depth;
-        }
-        // Saturating add: usize::MAX saturates and walk returns
-        // (no further recursion), so the overflow path is safe.
-        let next = depth.saturating_add(1);
-        match c {
-            Condition::Predicate(_) => {}
-            Condition::Group(children) => {
-                for child in children {
-                    walk(child, next, best);
-                }
-            }
-            Condition::Or(left, right) => {
-                walk(left, next, best);
-                walk(right, next, best);
-            }
-        }
+    match cond {
+        Condition::Predicate(_) => 0,
+        Condition::Group(children) => children
+            .iter()
+            .map(max_nesting_depth)
+            .max()
+            .unwrap_or(0)
+            .saturating_add(1),
+        Condition::Or(left, right) => max_nesting_depth(left)
+            .max(max_nesting_depth(right))
+            .saturating_add(1),
     }
-    let mut best = 0usize;
-    walk(cond, 1, &mut best);
-    best
 }
 
 fn parse_root(root: &EldRootPhoneme, refs: &InventoryRefs, rep: &Repertoire) -> Result<(), Error> {
@@ -420,9 +406,9 @@ pub fn eligibility_for_root(
 ///
 /// `pred_count` is mutated to count every atomic predicate seen along
 /// this branch (and is summed across `or` branches). `depth` is the
-/// nesting depth at the entry of this call (1 for direct children of
+/// container depth at the entry of this call (1 for direct children of
 /// the top-level `when`, increasing on each descent into `group` or
-/// `or`).
+/// `or`). Atomic predicates are exempt from the depth check.
 #[allow(clippy::too_many_arguments)]
 fn parse_expr(
     node: &KdlNode,
@@ -437,8 +423,13 @@ fn parse_expr(
     // 1. Depth budget — checked first so a deeply nested `and` or
     //    unknown name still surfaces as `WHEN_TOO_DEEP` and not as
     //    a spurious `WHEN_BAD_ARITY` (the depth gate is a budget,
-    //    not an arity error).
-    if depth > MAX_NESTING_DEPTH {
+    //    not an arity error). Atomic predicates do not consume depth.
+    if depth > MAX_NESTING_DEPTH
+        && !matches!(
+            name,
+            "word-position" | "syllable-position" | "previous-phoneme" | "next-phoneme"
+        )
+    {
         return Err(when_err_at(
             node.span(),
             "WHEN_TOO_DEEP",
@@ -461,8 +452,8 @@ fn parse_expr(
             ));
         }
         other => match other {
-            "when" | "group" | "or" | "word-position" | "syllable-position"
-            | "previous-phoneme" | "next-phoneme" => {}
+            "group" | "or" | "word-position" | "syllable-position" | "previous-phoneme"
+            | "next-phoneme" => {}
             unknown => {
                 return Err(when_err_at(
                     node.span(),
@@ -476,7 +467,7 @@ fn parse_expr(
     // 3. Per-kind arity checks now that we know the name is valid.
     match name {
         // Structural nodes: zero args, zero properties, mandatory block.
-        "when" | "group" | "or" => {
+        "group" | "or" => {
             reject_args_props(node, node.span(), &format!("`{name}`"))?;
             if node.children().is_none() {
                 return Err(when_err_at(
@@ -516,7 +507,7 @@ fn parse_expr(
     // have no block by design. We need a `&[KdlNode]` for the structural
     // match arms below, so re-borrow once here. Use `first()` for
     // safety — the inner check above guarantees `is_some()`.
-    let children_slice: &[KdlNode] = if matches!(name, "when" | "group" | "or") {
+    let children_slice: &[KdlNode] = if matches!(name, "group" | "or") {
         node.children().map(KdlChildren::as_slice).unwrap_or(&[])
     } else {
         &[]
@@ -955,7 +946,7 @@ mod tests {
 
     #[test]
     fn parse_when_with_args_is_rejected() {
-        let node = when_node(&wrap("when \"x\" {\nword-position \"initial\"\n}"));
+        let node = when_node("when \"x\" {\nword-position \"initial\"\n}\n");
         let block = WhenBlock::new(node);
         let err = parse_block(&block, &InventoryRefs::default(), &rep()).unwrap_err();
         assert_eq!(err.code(), "WHEN_BAD_ARITY");
@@ -963,7 +954,7 @@ mod tests {
 
     #[test]
     fn parse_when_with_property_is_rejected() {
-        let node = when_node(&wrap("when x=\"y\" {\nword-position \"initial\"\n}"));
+        let node = when_node("when x=\"y\" {\nword-position \"initial\"\n}\n");
         let block = WhenBlock::new(node);
         let err = parse_block(&block, &InventoryRefs::default(), &rep()).unwrap_err();
         assert_eq!(err.code(), "WHEN_BAD_ARITY");
@@ -1021,6 +1012,24 @@ mod tests {
         let block = WhenBlock::new(node);
         let err = parse_block(&block, &InventoryRefs::default(), &rep()).unwrap_err();
         assert_eq!(err.code(), "WHEN_UNKNOWN_NODE");
+    }
+
+    #[test]
+    fn parse_nested_when_is_rejected() {
+        for nested in [
+            "when { word-position \"initial\" }",
+            "when",
+            "when {}",
+            "when \"argument\" { word-position \"initial\" }",
+            "when flag=\"value\" { word-position \"initial\" }",
+        ] {
+            let node = when_node(&wrap(nested));
+            let err =
+                parse_block(&WhenBlock::new(node), &InventoryRefs::default(), &rep()).unwrap_err();
+            assert_eq!(err.code(), "WHEN_UNKNOWN_NODE", "{nested}");
+            assert_eq!(err.category(), Category::When);
+            assert_eq!(err.diagnostic.stage, Some(12));
+        }
     }
 
     // ---- parser: predicate arity -------------------------------------
@@ -1106,16 +1115,12 @@ mod tests {
 
     #[test]
     fn parse_9_nested_levels_is_rejected() {
-        // 9 levels of nesting. Each level wraps the next with a
-        // single-child group, and the outermost group has a sibling
-        // atomic predicate to satisfy the ≥2-child arity rule.
-        // Walking down the spine: the path through the inner `group`
-        // reaches depth 9, where the budget fires.
-        let mut body = String::from("word-position \"initial\"\ngroup {\n");
-        for _ in 0..8 {
-            body.push_str("word-position \"initial\"\ngroup {\n");
+        // Nine groups, each with two children, exceed the container budget.
+        let mut body = String::new();
+        for _ in 0..9 {
+            body.push_str("group {\nword-position \"initial\"\n");
         }
-        body.push_str("word-position \"initial\"\n");
+        body.push_str("word-position \"final\"\n");
         for _ in 0..9 {
             body.push_str("}\n");
         }
@@ -1123,6 +1128,16 @@ mod tests {
         let block = WhenBlock::new(node);
         let err = parse_block(&block, &InventoryRefs::default(), &rep()).unwrap_err();
         assert_eq!(err.code(), "WHEN_TOO_DEEP");
+    }
+
+    #[test]
+    fn max_nesting_depth_counts_only_containers() {
+        let atom = Condition::predicate(Predicate::WordPosition(WordPosition::Initial));
+        assert_eq!(max_nesting_depth(&atom), 0);
+        let or = Condition::or(atom.clone(), atom.clone());
+        assert_eq!(max_nesting_depth(&or), 1);
+        let group = Condition::group(vec![atom, or]).unwrap();
+        assert_eq!(max_nesting_depth(&group), 2);
     }
 
     // ---- parser: IPA reference resolution ----------------------------
