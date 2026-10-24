@@ -1,0 +1,144 @@
+{
+  "metadata": {
+    "vector_set": "eld-canonical-vectors",
+    "vector_set_version": 1,
+    "eld_version": "0.1.0",
+    "generator": "cargo run -p elang-conformance --bin gen_canonical_goldens",
+    "fixture_root": "fixtures/valid/canonical",
+    "steering_reference": "\u00a79 and \u00a79.1 (canonical ELD serialization)",
+    "requirements": ["REQ-CANON-001", "REQ-CANON-002", "REQ-CANON-003", "REQ-CANON-004", "REQ-CANON-005", "REQ-CANON-006", "REQ-CANON-007", "REQ-CANON-008", "REQ-CANON-009"],
+    "provenance": "Byte-exact, independently reproducible canonical ELD goldens. Every golden file and every SHA-256 is computed by the real pipeline (elang_eld::parse -> inventory::from_document -> canon::to_string); no digest is hand-written. The authored input.eld sources are deliberately non-canonical so the goldens exercise the ordering rules rather than merely echoing the input (steering \u00a70.3; ADR 0003)."
+  },
+  "vectors": [
+    {
+      "name": "minimal-inventory",
+      "description": "Smallest valid inventory: one `phonemes` root, one consonants group, one vowels group, one root each (REQ-CANON-001, REQ-CANON-002).",
+      "fixture": "valid/canonical/minimal-inventory",
+      "input": "input.eld",
+      "golden": "golden/canonical.eld",
+      "sha256": "5294e63fcdbaa6a8c2ba329584ad66961beb3b0d2fa9b668a7e7e2027971e220",
+      "canonical_size": 163,
+      "requirements": ["REQ-CANON-001", "REQ-CANON-002"]
+    },
+    {
+      "name": "group-order",
+      "description": "Groups are emitted `consonants`, `vowels`, then custom groups in ASCII bytewise name order regardless of declaration order (REQ-CANON-001).",
+      "fixture": "valid/canonical/group-order",
+      "input": "input.eld",
+      "golden": "golden/canonical.eld",
+      "sha256": "4d45a2d248d8073bc990f339c3b6f490feea2f3d6be360bbfc1782b79d30a11b",
+      "canonical_size": 318,
+      "requirements": ["REQ-CANON-001"]
+    },
+    {
+      "name": "root-order",
+      "description": "Roots within a group are sorted by authored NFC IPA UTF-8 bytes (REQ-CANON-002).",
+      "fixture": "valid/canonical/root-order",
+      "input": "input.eld",
+      "golden": "golden/canonical.eld",
+      "sha256": "9d4e451eb58bab8dc0f6d465b7a4cf0388ee63c5dac7bb70ea36daff59b2995e",
+      "canonical_size": 325,
+      "requirements": ["REQ-CANON-002"]
+    },
+    {
+      "name": "allophone-order",
+      "description": "Allophones within a root are sorted by authored NFC IPA UTF-8 bytes, bare and fielded forms alike (REQ-CANON-002).",
+      "fixture": "valid/canonical/allophone-order",
+      "input": "input.eld",
+      "golden": "golden/canonical.eld",
+      "sha256": "12d6b50a8d894d01b2dac2a1154766f4c3510f2f2d987cc19071de96e50173fd",
+      "canonical_size": 287,
+      "requirements": ["REQ-CANON-002"]
+    },
+    {
+      "name": "bare-allophone",
+      "description": "A fieldless allophone is emitted as a bare leaf node, never with an empty block (REQ-CANON-004).",
+      "fixture": "valid/canonical/bare-allophone",
+      "input": "input.eld",
+      "golden": "golden/canonical.eld",
+      "sha256": "d210e651ff80b1f528da153d3bc336da928d60a59f69eddc79873e1eb656f511",
+      "canonical_size": 190,
+      "requirements": ["REQ-CANON-004"]
+    },
+    {
+      "name": "condition-tree",
+      "description": "Nested `group`/`or` trees keep their nesting and their condition children are sorted by the Canonical Condition Sorting Key v1 (REQ-CANON-005, REQ-CANON-006).",
+      "fixture": "valid/canonical/condition-tree",
+      "input": "input.eld",
+      "golden": "golden/canonical.eld",
+      "sha256": "1c5713b468215ab1f8db65bf67c6170f3cf4c96e687f308a8ea2314fb1d39d02",
+      "canonical_size": 676,
+      "requirements": ["REQ-CANON-005", "REQ-CANON-006"]
+    },
+    {
+      "name": "duplicate-predicates",
+      "description": "Duplicate predicates and contradictory conditions are preserved verbatim — no Boolean simplification (REQ-CANON-006).",
+      "fixture": "valid/canonical/duplicate-predicates",
+      "input": "input.eld",
+      "golden": "golden/canonical.eld",
+      "sha256": "10c24b4e9518b3feda3924e6e296708740cefc973a42d6c8ce64aa11bd0518f8",
+      "canonical_size": 458,
+      "requirements": ["REQ-CANON-006"]
+    },
+    {
+      "name": "tie-bar-variant",
+      "description": "The authored lower tie bar (U+035C) is preserved byte-for-byte; the tie-bar-folded comparison key is used for uniqueness only (REQ-CANON-006).",
+      "fixture": "valid/canonical/tie-bar-variant",
+      "input": "input.eld",
+      "golden": "golden/canonical.eld",
+      "sha256": "ea3ed830928aa36e6dc825cc3d371caa95d1b1cc2203dd325c6ec9fd3886646d",
+      "canonical_size": 169,
+      "requirements": ["REQ-CANON-006"]
+    },
+    {
+      "name": "roman-case",
+      "description": "Romanization case is preserved exactly as authored (REQ-CANON-006).",
+      "fixture": "valid/canonical/roman-case",
+      "input": "input.eld",
+      "golden": "golden/canonical.eld",
+      "sha256": "91723d3c12cb754a3978d587a72b10b233462fadcbe4ce2ede26e60d3f0d56d9",
+      "canonical_size": 221,
+      "requirements": ["REQ-CANON-006"]
+    },
+    {
+      "name": "unicode-preserved",
+      "description": "Permitted Unicode (combining diacritic, spacing modifier) is emitted directly as UTF-8 and never silently normalized (REQ-CANON-008).",
+      "fixture": "valid/canonical/unicode-preserved",
+      "input": "input.eld",
+      "golden": "golden/canonical.eld",
+      "sha256": "5c94411fd7ed3b308d71ab1b634bc740087dccb058a0f248da709fe0bdb1a6d9",
+      "canonical_size": 168,
+      "requirements": ["REQ-CANON-008"]
+    },
+    {
+      "name": "condition-order",
+      "description": "Condition children are emitted in canonical key order, not declaration order (REQ-CANON-005).",
+      "fixture": "valid/canonical/condition-order",
+      "input": "input.eld",
+      "golden": "golden/canonical.eld",
+      "sha256": "e4caaf362ad2e3f339537224e3d2c597c53152049baf37b89a1121fdf9889214",
+      "canonical_size": 401,
+      "requirements": ["REQ-CANON-005"]
+    },
+    {
+      "name": "order-variant-a",
+      "description": "Declaration-order variant A — identical canonical bytes to `order-variant-b` (REQ-CANON-009).",
+      "fixture": "valid/canonical/order-variant-a",
+      "input": "input.eld",
+      "golden": "golden/canonical.eld",
+      "sha256": "babc374f6ab7d2a6b570ffcc9a65e27ead1c3ff8f4acf527337136fdef575cc3",
+      "canonical_size": 271,
+      "requirements": ["REQ-CANON-009"]
+    },
+    {
+      "name": "order-variant-b",
+      "description": "Declaration-order variant B — identical canonical bytes to `order-variant-a` (REQ-CANON-009).",
+      "fixture": "valid/canonical/order-variant-b",
+      "input": "input.eld",
+      "golden": "golden/canonical.eld",
+      "sha256": "babc374f6ab7d2a6b570ffcc9a65e27ead1c3ff8f4acf527337136fdef575cc3",
+      "canonical_size": 271,
+      "requirements": ["REQ-CANON-009"]
+    }
+  ]
+}

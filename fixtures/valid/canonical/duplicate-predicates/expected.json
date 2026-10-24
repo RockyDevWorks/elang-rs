@@ -1,0 +1,11 @@
+{
+  "fixture": "valid/canonical/duplicate-predicates",
+  "description": "Duplicate predicates and contradictory conditions are preserved verbatim — no Boolean simplification (REQ-CANON-006).",
+  "requirements": ["REQ-CANON-006"],
+  "input": "input.eld",
+  "modes": ["inspect", "validate"],
+  "outcome": "pass",
+  "golden": [
+    { "path": "golden/canonical.eld", "sha256": "10c24b4e9518b3feda3924e6e296708740cefc973a42d6c8ce64aa11bd0518f8" }
+  ]
+}

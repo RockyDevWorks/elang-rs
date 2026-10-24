@@ -24,4 +24,5 @@
 )]
 
 pub mod binary_vectors;
+pub mod canonical_goldens;
 pub mod normative_manifest;

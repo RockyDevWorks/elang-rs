@@ -1,0 +1,11 @@
+{
+  "fixture": "valid/canonical/group-order",
+  "description": "Groups are emitted `consonants`, `vowels`, then custom groups in ASCII bytewise name order regardless of declaration order (REQ-CANON-001).",
+  "requirements": ["REQ-CANON-001"],
+  "input": "input.eld",
+  "modes": ["inspect", "validate"],
+  "outcome": "pass",
+  "golden": [
+    { "path": "golden/canonical.eld", "sha256": "4d45a2d248d8073bc990f339c3b6f490feea2f3d6be360bbfc1782b79d30a11b" }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "fixture": "valid/canonical/condition-order",
+  "description": "Condition children are emitted in canonical key order, not declaration order (REQ-CANON-005).",
+  "requirements": ["REQ-CANON-005"],
+  "input": "input.eld",
+  "modes": ["inspect", "validate"],
+  "outcome": "pass",
+  "golden": [
+    { "path": "golden/canonical.eld", "sha256": "e4caaf362ad2e3f339537224e3d2c597c53152049baf37b89a1121fdf9889214" }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "fixture": "valid/canonical/bare-allophone",
+  "description": "A fieldless allophone is emitted as a bare leaf node, never with an empty block (REQ-CANON-004).",
+  "requirements": ["REQ-CANON-004"],
+  "input": "input.eld",
+  "modes": ["inspect", "validate"],
+  "outcome": "pass",
+  "golden": [
+    { "path": "golden/canonical.eld", "sha256": "d210e651ff80b1f528da153d3bc336da928d60a59f69eddc79873e1eb656f511" }
+  ]
+}

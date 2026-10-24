@@ -1,0 +1,11 @@
+{
+  "fixture": "valid/canonical/order-variant-b",
+  "description": "Declaration-order variant B — identical canonical bytes to `order-variant-a` (REQ-CANON-009).",
+  "requirements": ["REQ-CANON-009"],
+  "input": "input.eld",
+  "modes": ["inspect", "validate"],
+  "outcome": "pass",
+  "golden": [
+    { "path": "golden/canonical.eld", "sha256": "babc374f6ab7d2a6b570ffcc9a65e27ead1c3ff8f4acf527337136fdef575cc3" }
+  ]
+}

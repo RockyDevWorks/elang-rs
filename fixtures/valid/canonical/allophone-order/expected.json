@@ -1,0 +1,11 @@
+{
+  "fixture": "valid/canonical/allophone-order",
+  "description": "Allophones within a root are sorted by authored NFC IPA UTF-8 bytes, bare and fielded forms alike (REQ-CANON-002).",
+  "requirements": ["REQ-CANON-002"],
+  "input": "input.eld",
+  "modes": ["inspect", "validate"],
+  "outcome": "pass",
+  "golden": [
+    { "path": "golden/canonical.eld", "sha256": "12d6b50a8d894d01b2dac2a1154766f4c3510f2f2d987cc19071de96e50173fd" }
+  ]
+}

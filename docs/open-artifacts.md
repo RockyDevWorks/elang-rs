@@ -23,10 +23,10 @@
 | OA-11 | Binary header/index/footer reference vectors and offsets | §3 | container golden fixtures | T0118 | **Ratified** — [`specs/registry/binary-reference-vectors.json`](../specs/registry/binary-reference-vectors.json) + byte-exact fixtures `fixtures/valid/container/minimal-archive/`; all offsets/sizes/digests computed (real index SHA-256 `a34879d8…fa35`) by the `elang-conformance::binary_vectors` builder and asserted by tests. |
 | OA-12 | Tie-bar equivalence and IPA comparison-key test vectors | §7 | IPA uniqueness tests | T0117 | **Ratified** — [`specs/registry/ipa-tie-bar-vectors.json`](../specs/registry/ipa-tie-bar-vectors.json) (12 vectors: 6 positive, 2 equivalence, 4 negative, every row of steering §7.1); driver [`elang-repertoire` integration test `tie_bar_vectors.rs`](../crates/elang-repertoire/tests/tie_bar_vectors.rs) (5 passing tests) loads the JSON and asserts the published expectations against the pinned repertoire. |
 | OA-13 | Unicode 18.0 NFC + General Category reference test data | §7 | Unicode validation tests | T0116 | **Ratified** — `elang-unicode` generated from pinned UCD 18.0.0; NFC passes official `NormalizationTest.txt` (20,171 rows); ADR 0007. |
-| OA-14 | Canonical ELD golden files + SHA-256 | §9 | canonical writer conformance | T1121 | Open |
+| OA-14 | Canonical ELD golden files + SHA-256 | §9 | canonical writer conformance | T1121 | **Ratified** — [`specs/registry/eld-canonical-vectors.json`](../specs/registry/eld-canonical-vectors.json) publishes 13 canonical ELD goldens with their SHA-256; the byte-exact golden files, `.sha256` sidecars and conformance `expected.json` records live under [`fixtures/valid/canonical/`](../fixtures/valid/canonical/). Every byte and digest is produced by the real pipeline (`elang_eld::parse` → `inventory::from_document` → `canon::to_string`) via `cargo run -p elang-conformance --bin gen_canonical_goldens` — nothing is hand-written. Asserted by `elang-conformance::canonical_goldens` and `elang-conformance/tests/canonical_goldens.rs`. |
 | OA-15 | Policy for extra indexed resources / manifest coverage in v0.1.0 (no invented modules) | §2 | REQ-PKG-005 | T0121 | **Ratified** — ADR 0006, [`specs/registry/resource-policy-v0.1.0.md`](../specs/registry/resource-policy-v0.1.0.md) |
 | OA-16 | Residual KDL canonicalization edge cases ratified as ADRs | §12.4 | canonical serialization freeze | T0122 | **Ratified** — EPF/integrity profiles via ADR 0004/0005; residual ELD canonical edge cases (ordering byte-view, condition-key byte-view, escaping set, bare/block emission, layout) via [ADR 0009](decisions/0009-residual-eld-canonicalization-edge-cases.md) |
-| OA-17 | Frozen reviewed schema/repertoire versions + spec checksum/release tag | §12 | conformance freeze / v0.1.0 | T0123 | **Mechanism landed; freeze/tag blocked** — the freeze *mechanism* (generated normative manifest + RFC 8785 JCS spec checksum + verification test) shipped with ADR 0011 and `specs/registry/normative-manifest.json`; the pinned `PINNED_SPEC_CHECKSUM` covers the currently ratified OA-1…OA-16 corpus (excluding OA-14). The **freeze itself and the v0.1.0 release tag remain blocked on OA-14** (T1121, Issue #21) and must not be declared here. ADR 0011 requires the manifest and checksum to be regenerated during final T0123 after OA-14 lands. |
+| OA-17 | Frozen reviewed schema/repertoire versions + spec checksum/release tag | §12 | conformance freeze / v0.1.0 | T0123 | **Mechanism landed; freeze/tag still open** — the freeze *mechanism* (generated normative manifest + RFC 8785 JCS spec checksum + verification test) shipped with ADR 0011 and `specs/registry/normative-manifest.json`. OA-14 (canonical ELD goldens) landed with Phase 11 / issue #21, so the **only** remaining step is the T0123 regeneration: add the OA-14 artifacts to `ARTIFACTS`, re-run `gen_normative_manifest`, replace `PINNED_SPEC_CHECKSUM`, declare the freeze and create the `v0.1.0` tag. The freeze and the tag are **not** declared here (ADR 0011 §6). |
 
 ## Rules of engagement
 
@@ -40,7 +40,8 @@
   `ipa-v1.json`), OA-5 (JCS digest), OA-6 (integrity grammar, ADR 0004), OA-7
   (canonical EPF, ADR 0005), OA-8 (EPF grammar), OA-9 (ELD grammar), OA-10
   (error registry), OA-11 (binary vectors, byte-exact), OA-12 (tie-bar vectors,
-  12 published cases), OA-13 (Unicode 18.0 data), OA-15 (resource policy,
+  12 published cases), OA-13 (Unicode 18.0 data), OA-14 (canonical ELD
+  goldens, 13 published cases), OA-15 (resource policy,
   ADR 0006), OA-16 (residual ELD canonical edge cases, ADR 0009).
   **The IPA/Unicode side of the repertoire is fully ratified.**
 - **IPA inventory (OA-1/OA-2/OA-4/OA-5) is ratified and pinned** (ADR 0008):
@@ -50,7 +51,8 @@
   spacing-modifier inventories completed their second human review on
   2026-10-23 (`SOURCES.md` §7). Unicode 18.0 data is ratified (OA-13). The IPA
   side of the repertoire is now **fully ratified**; the release freeze itself
-  (T0123 / OA-17) remains blocked only by OA-14.
+  (T0123 / OA-17) remains the only open item, and its sole remaining step is
+  the ADR 0011 §6 regeneration once OA-14 is in the manifest corpus.
 - **OA-11 (binary vectors) is ratified:** `specs/registry/binary-reference-vectors.json`
   and `fixtures/valid/container/minimal-archive/` publish the byte-exact
   header/index/footer layout and offsets. Every offset, size and SHA-256 is
@@ -62,11 +64,20 @@
   condition sort key (E-2), the exact `"`/`\` escaping set (E-3), bare-vs-block
   allophone emission (E-4/E-5) and layout invariants (E-6); EPF/integrity
   profiles were already locked by ADR 0004/0005.
-- **Still open — blocked on later phases:** OA-14 (canonical ELD goldens —
-  depends on Phase 11 canonical writer, T1121), OA-17 (freeze/tag — the
-  freeze *mechanism* shipped in ADR 0011, but the freeze declaration and the
-  v0.1.0 release tag depend on OA-14 only, since the OA-1/OA-4 second human
-  review closed 2026-10-23). These MUST NOT be fabricated.
+- **OA-14 (canonical ELD goldens) is ratified:** [`specs/registry/eld-canonical-vectors.json`](../specs/registry/eld-canonical-vectors.json)
+  publishes 13 canonical ELD goldens with their SHA-256, and
+  `fixtures/valid/canonical/` holds the byte-exact golden files, their
+  `.sha256` sidecars and the conformance `expected.json` records. Every byte
+  and digest comes from the real canonical writer
+  (`elang_eld::canon::to_string` over the validated inventory), and the
+  generator (`cargo run -p elang-conformance --bin gen_canonical_goldens`) is
+  byte-reproducible — no digest is hand-written. The authored `input.eld`
+  sources are deliberately non-canonical, so the goldens exercise the ordering
+  rules rather than echo their input.
+- **Still open — blocked on a later phase:** OA-17 (freeze/tag — the freeze
+  *mechanism* shipped in ADR 0011, and the OA-1/OA-4 second human review
+  closed 2026-10-23, so the freeze declaration and the v0.1.0 release tag now
+  depend on the T0123 regeneration alone). These MUST NOT be fabricated.
 - **KDL parser (Phase 5, Issue #15) is an implementation of ratified
   artifacts, not a new one.** [ADR 0010](decisions/0010-kdl-parser-hand-roll.md)
   records the hand-roll-vs-`kdl-rs` decision. The parser implements the
