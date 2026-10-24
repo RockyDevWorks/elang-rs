@@ -31,3 +31,7 @@ clippy_*.log
 # Zensical documentation site output (built in CI by docs.yml and published to
 # GitHub Pages; the generated artifact is not committed).
 /site
+
+# Local scratch directories (Hermes/agent session caches, scratch lcov files,
+# debug dumps). Never part of the build artifact and never committed.
+/cache
