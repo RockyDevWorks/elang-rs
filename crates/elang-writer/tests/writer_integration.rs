@@ -229,16 +229,44 @@ fn empty_format_version_rejected() {
 // drops one of the rejection paths fails the matching test by name.
 // ---------------------------------------------------------------------------
 
-/// `format_version` longer than `MAX_RESOURCE_PATH_BYTES` bytes is rejected
-/// (the `format_version.len() > MAX_RESOURCE_PATH_BYTES` branch).
+/// `format_version` longer than `MAX_BOOTSTRAP_RESOURCE_BYTES` bytes is
+/// rejected at the writer, not at the reader's bootstrap decode budget
+/// (`Header/format.version` is read with a 64-byte ceiling in
+/// `elang-reader/src/bootstrap.rs`; rejecting oversized versions here
+/// avoids producing archives the reader would refuse at stage 8).
 #[test]
-fn format_version_over_path_length_ceiling_rejected() {
-    use elang_core::limits::MAX_RESOURCE_PATH_BYTES;
+fn format_version_over_bootstrap_ceiling_rejected() {
+    use elang_core::limits::MAX_BOOTSTRAP_RESOURCE_BYTES;
+    #[allow(clippy::cast_possible_truncation)]
+    let ceiling = MAX_BOOTSTRAP_RESOURCE_BYTES as usize;
     let mut config = build_minimal_config();
-    // 1024-byte ceiling + 1 = 1025 ASCII digits, still well-formed semver.
-    config.format_version = "1".repeat(MAX_RESOURCE_PATH_BYTES + 1);
-    let err = write_archive(&config).expect_err("over-long format_version must fail");
+    // 64-byte ceiling + 1 = 65 ASCII digits. Boundary case: one byte
+    // past the bootstrap decode budget the reader enforces.
+    config.format_version = "1".repeat(ceiling + 1);
+    let err = write_archive(&config).expect_err("over-ceiling format_version must fail");
     assert_eq!(err.code(), "WRITER_INVALID_FORMAT_VERSION");
+    let msg = format!("{err}");
+    assert!(
+        msg.contains(&format!("ceiling {MAX_BOOTSTRAP_RESOURCE_BYTES}")),
+        "error must report the bootstrap ceiling, got: {msg}"
+    );
+}
+
+/// A `format_version` of exactly `MAX_BOOTSTRAP_RESOURCE_BYTES` bytes is
+/// still accepted (the ceiling is inclusive). Pins the boundary so a
+/// future `>=` instead of `>` would fail this test by name.
+#[test]
+fn format_version_at_bootstrap_ceiling_accepted() {
+    use elang_core::limits::MAX_BOOTSTRAP_RESOURCE_BYTES;
+    #[allow(clippy::cast_possible_truncation)]
+    let ceiling = MAX_BOOTSTRAP_RESOURCE_BYTES as usize;
+    let mut config = build_minimal_config();
+    // "0.1." is 4 bytes; pad the patch with ASCII digits to land exactly
+    // on the ceiling. major/minor still match the binary header.
+    let pad = ceiling - "0.1.".len();
+    config.format_version = format!("0.1.{}", "0".repeat(pad));
+    assert_eq!(config.format_version.len(), ceiling);
+    write_archive(&config).expect("format_version exactly at the ceiling must be accepted");
 }
 
 /// `format_version` that is not in Unicode NFC is rejected (the

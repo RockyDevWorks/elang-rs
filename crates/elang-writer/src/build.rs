@@ -16,8 +16,9 @@ use elang_container::header::HEADER_LEN;
 use elang_container::index::{Index, IndexEntry, COMPRESSION_ZSTD};
 use elang_container::{Footer, Header};
 use elang_core::limits::{
-    MAX_COMPRESSED_ARCHIVE_BYTES, MAX_ELD_BYTES, MAX_EPF_BYTES, MAX_GENERIC_RESOURCE_BYTES,
-    MAX_INTEGRITY_BYTES, MAX_RESOURCES, MAX_RESOURCE_PATH_BYTES, MAX_UNCOMPRESSED_AGGREGATE_BYTES,
+    MAX_BOOTSTRAP_RESOURCE_BYTES, MAX_COMPRESSED_ARCHIVE_BYTES, MAX_ELD_BYTES, MAX_EPF_BYTES,
+    MAX_GENERIC_RESOURCE_BYTES, MAX_INTEGRITY_BYTES, MAX_RESOURCES,
+    MAX_UNCOMPRESSED_AGGREGATE_BYTES,
 };
 use elang_integrity::manifest::{Algorithm, IntegrityEntry, IntegrityManifest};
 use sha2::{Digest, Sha256};
@@ -179,8 +180,10 @@ pub(crate) fn write_archive(config: &PackageConfig) -> Result<Vec<u8>, BuildErro
 }
 
 /// Validate the pinned format-version string. Must be NFC, must encode
-/// `{major.minor}.{patch}` with ASCII digits and non-empty components, and
-/// major/minor must textually match the current container header.
+/// `{major.minor}.{patch}` with ASCII digits and non-empty components, must
+/// fit in the reader's [`MAX_BOOTSTRAP_RESOURCE_BYTES`] decode budget for
+/// `Header/format.version`, and major/minor must textually match the
+/// current container header.
 fn validate_format_version(version: &str) -> Result<(), BuildError> {
     if version.is_empty() {
         return Err(BuildError::InvalidConfig {
@@ -188,13 +191,16 @@ fn validate_format_version(version: &str) -> Result<(), BuildError> {
             message: "format_version must not be empty".to_string(),
         });
     }
-    if version.len() > MAX_RESOURCE_PATH_BYTES {
+    // The 64-byte ceiling is well within usize on every supported target;
+    // the cast is for matching against `version.len()` which is `usize`.
+    #[allow(clippy::cast_possible_truncation)]
+    if version.len() > MAX_BOOTSTRAP_RESOURCE_BYTES as usize {
         return Err(BuildError::InvalidConfig {
             code: "WRITER_INVALID_FORMAT_VERSION",
             message: format!(
                 "format_version is {} bytes, ceiling {}",
                 version.len(),
-                MAX_RESOURCE_PATH_BYTES
+                MAX_BOOTSTRAP_RESOURCE_BYTES
             ),
         });
     }
