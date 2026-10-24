@@ -308,38 +308,40 @@ _(`allophone_empty_block`, `phoneme_empty_block`, `phonemes_empty_block`, `empty
 
 ## Phase 10 — Condition parser, reference resolver and evaluator
 
-- [ ] **T1001** Define `when` AST for atomic predicates, AND container (`when`/`group`) and binary OR.
-- [ ] **T1002** Require <=1 `when` per root/allophone; explicit nonempty block.
-- [ ] **T1003** Enforce `when`, `group`, `or` zero args/properties and required blocks.
-- [ ] **T1004** Enforce `group` >=2 direct child expressions.
-- [ ] **T1005** Enforce `or` exactly 2 direct child expressions.
-- [ ] **T1006** Reject explicit `and` and `not` nodes and unknown predicates.
-- [ ] **T1007** Require atomic predicates exactly one string arg and no child block/properties.
-- [ ] **T1008** Validate `word-position` values initial/medial/final.
-- [ ] **T1009** Validate `syllable-position` values onset/nucleus/coda.
-- [ ] **T1010** Parse previous/next IPA references with same IPA identifier rules.
-- [ ] **T1011** Count <=16 atomic predicates per `when` across all nested branches.
-- [ ] **T1012** Enforce <=8 nested `group`/`or` levels per expression path.
-- [ ] **T1013** Collect all root/allophone identities before resolving references.
-- [ ] **T1014** Resolve forward references and self references.
-- [ ] **T1015** Resolve allophone IPA references to owning underlying root identity.
-- [ ] **T1016** Reject missing references; do not reject valid cross-group references.
-- [ ] **T1017** Evaluate direct siblings in `when`/`group` with AND semantics.
-- [ ] **T1018** Evaluate `or` with OR semantics including nested and cross-category alternatives.
-- [ ] **T1019** Permit repeated and contradictory atomic predicates (no simplification).
-- [ ] **T1020** Define word-initial/medial/final over underlying root sequence.
-- [ ] **T1021** Test one-phoneme word is both initial and final, not medial.
-- [ ] **T1022** Evaluate syllable position using generator-provided onset/nucleus/coda assignment.
-- [ ] **T1023** Test multi-phoneme onset/nucleus/coda membership.
-- [ ] **T1024** Match immediate previous/next underlying root, including across syllable boundary.
-- [ ] **T1025** Forbid neighbor matching across word boundary; missing neighbor => false.
-- [ ] **T1026** Keep root and allophone conditions independent, no circular surface-based matching.
-- [ ] **T1027** Return eligibility set, not probability/weight/priority.
-- [ ] **T1028** Test no-eligible realization returns explicit empty set, not fallback.
-- [ ] **T1029** Add truth-table fixtures for all atomic and nested composite conditions.
-- [ ] **T1030** Add depth/count edge cases, forward/self/allophone alias reference tests.
+- [x] **T1001** Define `when` AST for atomic predicates, AND container (`when`/`group`) and binary OR.
+- [x] **T1002** Require <=1 `when` per root/allophone; explicit nonempty block.
+- [x] **T1003** Enforce `when`, `group`, `or` zero args/properties and required blocks.
+- [x] **T1004** Enforce `group` >=2 direct child expressions.
+- [x] **T1005** Enforce `or` exactly 2 direct child expressions.
+- [x] **T1006** Reject explicit `and` and `not` nodes and unknown predicates.
+- [x] **T1007** Require atomic predicates exactly one string arg and no child block/properties.
+- [x] **T1008** Validate `word-position` values initial/medial/final.
+- [x] **T1009** Validate `syllable-position` values onset/nucleus/coda.
+- [x] **T1010** Parse previous/next IPA references with same IPA identifier rules.
+- [x] **T1011** Count <=16 atomic predicates per `when` across all nested branches.
+- [x] **T1012** Enforce <=8 nested `group`/`or` levels per expression path.
+- [x] **T1013** Collect all root/allophone identities before resolving references.
+- [x] **T1014** Resolve forward references and self references.
+- [x] **T1015** Resolve allophone IPA references to owning underlying root identity.
+- [x] **T1016** Reject missing references; do not reject valid cross-group references.
+- [x] **T1017** Evaluate direct siblings in `when`/`group` with AND semantics.
+- [x] **T1018** Evaluate `or` with OR semantics including nested and cross-category alternatives.
+- [x] **T1019** Permit repeated and contradictory atomic predicates (no simplification).
+- [x] **T1020** Define word-initial/medial/final over underlying root sequence.
+- [x] **T1021** Test one-phoneme word is both initial and final, not medial.
+- [x] **T1022** Evaluate syllable position using generator-provided onset/nucleus/coda assignment.
+- [x] **T1023** Test multi-phoneme onset/nucleus/coda membership.
+- [x] **T1024** Match immediate previous/next underlying root, including across syllable boundary.
+- [x] **T1025** Forbid neighbor matching across word boundary; missing neighbor => false.
+- [x] **T1026** Keep root and allophone conditions independent, no circular surface-based matching.
+- [x] **T1027** Return eligibility set, not probability/weight/priority.
+- [x] **T1028** Test no-eligible realization returns explicit empty set, not fallback.
+- [x] **T1029** Add truth-table fixtures for all atomic and nested composite conditions.
+- [x] **T1030** Add depth/count edge cases, forward/self/allophone alias reference tests.
 
 **Acceptance:** evaluator is pure, deterministic for supplied context and agrees with truth-table vectors.
+
+**Status:** ✅ **Complete (Issue #20).** All 30 tasks implemented and closed. `crates/elang-eld/src/when.rs` adds a two-pass walker that consumes the `WhenBlock`s Phase 9 carries verbatim and produces validated `WhenCondition` ASTs (`Condition::Predicate | Group | Or`). The walker enforces every C-20..C-27 / REQ-WHEN-001..015 constraint (C-20 arity-0 + mandatory block, C-21 atomic predicates with exactly one string arg, C-22 word-/syllable-position domains, C-23 neighbour-IPA routed through `ipa::validate`, C-24 group ≥2 children, C-25 `or` exactly 2 children, C-26 no `and`/`not`/unknown nodes → `WHEN_UNKNOWN_NODE`, C-27 ≤16 atomic predicates and ≤8 nested levels per path). Reference resolution builds an `InventoryRefs` of all root + allophone comparison keys (NFC + tie-normalized per C-09) before evaluating any block, so forward and self references and allophone-to-root alias references resolve; missing references yield `WHEN_REFERENCE_UNRESOLVED`. Authored IPA is preserved verbatim on the AST (REQ-CANON-006 wins over normalization). The evaluator is pure over `EvalContext { roots, index, syllable_role, refs }` and exposes `eligibility_for_root` returning either `Eligibility::Realizations(Vec<Realization>)` (where `Realization { ipa, roman }` decouples the evaluator from `EldDocument`) or `Eligibility::Empty` (T1028 — no fallback). 45 unit tests in `when.rs` + 37 integration tests in `tests/condition_conformance.rs` cover parsing, budgets, value domains, reference resolution, truth-table vectors, evaluator semantics (AND/OR, neighbour-across-syllable, missing-neighbour→false, root/allophone independence — no circular surface matching), and explicit depth-budget introspection (`max_nesting_depth` helper that walks the AST). All five local gates green: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --workspace` (1044 pass), `RUSTDOCFLAGS=-D warnings cargo doc --workspace --no-deps`, `cargo +1.90.0 build --workspace`. Downstream: Phase 11 (T1101+) is unblocked.
 
 ## Phase 11 — Canonical ELD writer
 

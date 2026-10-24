@@ -48,9 +48,15 @@
 pub mod error;
 pub mod model;
 pub mod parse;
+pub mod when;
 
 pub use crate::model::{
     EldAllophone, EldDocument, EldGroup, EldGroupKind, EldRootPhoneme, WhenBlock,
 };
 pub use crate::parse::{parse, parse_document};
+pub use crate::when::{
+    eligibility_for_root, evaluate, max_nesting_depth, parse_all, parse_block, Eligibility,
+    EvalContext, InventoryRefs, Realization, MAX_NESTING_DEPTH, MAX_PREDICATES_PER_WHEN,
+};
 pub use elang_core::error::{Category, Error};
+pub use elang_core::model::when::{Condition, Predicate, WhenCondition};

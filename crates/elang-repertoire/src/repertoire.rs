@@ -160,13 +160,14 @@ fn convert_symbol(raw: RawSymbol) -> Result<Symbol, RepertoireError> {
 
 fn is_sorted_unique(entries: &[Symbol]) -> Result<(), bool> {
     // Err(true) => not sorted; Err(false) => duplicate.
-    for w in entries.windows(2) {
-        if let [a, b] = w {
-            match a.symbol.as_bytes().cmp(b.symbol.as_bytes()) {
-                std::cmp::Ordering::Less => {}
-                std::cmp::Ordering::Equal => return Err(false),
-                std::cmp::Ordering::Greater => return Err(true),
-            }
+    // `zip` with `skip(1)` is irrefutable: every adjacent pair is destructured
+    // unconditionally (windows(2) `if let` would hide a never-taken else edge
+    // from the coverage tooling).
+    for (a, b) in entries.iter().zip(entries.iter().skip(1)) {
+        match a.symbol.as_bytes().cmp(b.symbol.as_bytes()) {
+            std::cmp::Ordering::Less => {}
+            std::cmp::Ordering::Equal => return Err(false),
+            std::cmp::Ordering::Greater => return Err(true),
         }
     }
     Ok(())
@@ -285,11 +286,9 @@ fn validate_symbol(uni: &UnicodeValidator, sym: &Symbol) -> Result<(), UnicodeVi
 }
 
 fn first_duplicate(entries: &[Symbol]) -> String {
-    for w in entries.windows(2) {
-        if let [a, b] = w {
-            if a.symbol == b.symbol {
-                return a.symbol.clone();
-            }
+    for (a, b) in entries.iter().zip(entries.iter().skip(1)) {
+        if a.symbol == b.symbol {
+            return a.symbol.clone();
         }
     }
     String::new()

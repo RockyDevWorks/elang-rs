@@ -244,4 +244,12 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn ccc_lookup_hit_and_miss() {
+        // U+0301 COMBINING ACUTE ACCENT has CCC 230; plain 'a' is not in the
+        // table and gets CCC 0.
+        assert_eq!(super::ccc('\u{0301}'), 230);
+        assert_eq!(super::ccc('a'), 0);
+    }
 }

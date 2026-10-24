@@ -104,7 +104,7 @@ fn check_input_size(input: &[u8]) -> Result<(), Error> {
 /// validators.
 pub fn parse_document(doc: &KdlDocument) -> Result<model::EpfPackage, Error> {
     let (epf_v, eld_v, language_v, metadata, manifest_path) = validate_top_level(doc)?;
-    let manifest = build_manifest(&manifest_path)?;
+    let manifest = model::Manifest::new(manifest_path);
     model::EpfPackage::new(epf_v, eld_v, language_v, metadata, manifest).map_err(from_core)
 }
 
@@ -124,7 +124,7 @@ pub fn parse_error(err: ParseError) -> Error {
 /// this validator accepts any source order.
 fn validate_top_level(
     doc: &KdlDocument,
-) -> Result<(SemVer, SemVer, SemVer, model::Metadata, String), Error> {
+) -> Result<(SemVer, SemVer, SemVer, model::Metadata, ResourcePath), Error> {
     let mut epf_node: Option<&KdlNode> = None;
     let mut eld_node: Option<&KdlNode> = None;
     let mut lang_node: Option<&KdlNode> = None;
@@ -250,18 +250,15 @@ fn validate_version_node(node: &KdlNode, must_be_locked: bool) -> Result<SemVer,
         ));
     }
 
-    SemVer::parse(lexeme).map_err(|e| {
-        // `SemVer::parse` reports its failures under `EPF_BAD_VERSION`; for
-        // `language-version` re-route through `LANG_BAD_VERSION` (C-05) so
-        // the diagnostic is unambiguous about which version node failed.
-        if must_be_locked {
-            from_core(e)
-        } else {
-            epf_err(
-                "LANG_BAD_VERSION",
-                format!("language-version `{lexeme}` is not strict MAJOR.MINOR.PATCH"),
-            )
-        }
+    SemVer::parse(lexeme).map_err(|_| {
+        // `SemVer::parse` can only fail for the non-locked `language-version`
+        // node: locked nodes are pinned to `EPF_VERSION` above and always
+        // parse, so the failure is always re-routed through `LANG_BAD_VERSION`
+        // (C-05).
+        epf_err(
+            "LANG_BAD_VERSION",
+            format!("language-version `{lexeme}` is not strict MAJOR.MINOR.PATCH"),
+        )
     })
 }
 
@@ -333,9 +330,9 @@ fn validate_metadata(node: &KdlNode) -> Result<model::Metadata, Error> {
 
 /// Validate the `manifest` block (C-11).
 ///
-/// Returns the validated phoneme path string so the caller can hand it to
+/// Returns the validated phoneme [`ResourcePath`]; the caller can hand it to
 /// [`crate::manifest::resolve_phonemes`] for the index-existence check.
-fn validate_manifest(node: &KdlNode) -> Result<String, Error> {
+fn validate_manifest(node: &KdlNode) -> Result<ResourcePath, Error> {
     reject_props(node)?;
     reject_args(node)?;
     let children = require_block(node)?;
@@ -398,25 +395,12 @@ fn validate_manifest(node: &KdlNode) -> Result<String, Error> {
     ensure_unicode(&path)?;
     // The `ResourcePath` constructor enforces the canonical path rules; any
     // failure is a manifest-level error in the v0.1.0 schema.
-    ResourcePath::new(path.clone()).map_err(|_| {
+    ResourcePath::new(&path).map_err(|_| {
         epf_err(
             "EPF_MANIFEST_INVALID",
             format!("invalid phoneme path {path:?}"),
         )
-    })?;
-
-    Ok(path)
-}
-
-/// Build a `Manifest` from a path string the validator already accepted.
-fn build_manifest(path: &str) -> Result<model::Manifest, Error> {
-    let rp = ResourcePath::new(path).map_err(|_| {
-        epf_err(
-            "EPF_MANIFEST_INVALID",
-            format!("invalid phoneme path {path:?}"),
-        )
-    })?;
-    Ok(model::Manifest::new(rp))
+    })
 }
 
 // ---- shared node-shape primitives ---------------------------------------
@@ -1116,5 +1100,29 @@ manifest { phonemes \"Linguistics/phonemes.eld\" }
             metadata {\n    identifier \"urn:elang:language:r:n:1.0.0\"\n    name 42\n}\n\
             manifest { phonemes \"a/b.eld\" }\n";
         assert_eq!(parse_err(src).code(), "EPF_BAD_METADATA_FIELD");
+    }
+
+    #[test]
+    fn metadata_field_without_argument_is_rejected() {
+        // `name` with zero arguments: the exactly-one-argument shape check
+        // fires before any value-level validation.
+        let src = "epf \"0.1.0\"\n\
+            eld \"0.1.0\"\n\
+            language-version \"1.0.0\"\n\
+            metadata {\n    identifier \"urn:elang:language:r:n:1.0.0\"\n    name\n}\n\
+            manifest { phonemes \"a/b.eld\" }\n";
+        assert_eq!(parse_err(src).code(), "EPF_BAD_ARITY");
+    }
+
+    #[test]
+    fn non_string_identifier_is_rejected() {
+        // `identifier` must be a string; an integer argument fails the
+        // string-type check with EPF_BAD_URN.
+        let src = "epf \"0.1.0\"\n\
+            eld \"0.1.0\"\n\
+            language-version \"1.0.0\"\n\
+            metadata {\n    identifier 42\n    name \"N\"\n}\n\
+            manifest { phonemes \"a/b.eld\" }\n";
+        assert_eq!(parse_err(src).code(), "EPF_BAD_URN");
     }
 }

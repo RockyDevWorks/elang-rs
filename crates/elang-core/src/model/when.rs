@@ -150,10 +150,19 @@ mod tests {
             Condition::predicate(Predicate::SyllablePosition(SyllablePosition::Coda)),
         ])
         .unwrap();
-        let Condition::Group(children) = g else {
-            unreachable!("expected group");
-        };
-        assert_eq!(children.len(), 2);
+        // Exercise both match arms: `g` is a Group, the predicate falls to
+        // the non-Group arm (asserted as empty below).
+        let mut lens = Vec::new();
+        for cond in [
+            g,
+            Condition::predicate(Predicate::SyllablePosition(SyllablePosition::Onset)),
+        ] {
+            match cond {
+                Condition::Group(children) => lens.push(children.len()),
+                _ => lens.push(0),
+            }
+        }
+        assert_eq!(lens, vec![2, 0]);
     }
 
     #[test]
@@ -166,14 +175,24 @@ mod tests {
         .unwrap();
         let or = Condition::or(inner, prev("s"));
         let when = WhenCondition::new(vec![or]).unwrap();
-        let Some(Condition::Or(l, r)) = when.children().first() else {
-            unreachable!("expected or");
-        };
-        assert!(matches!(**l, Condition::Group(_)));
-        assert!(matches!(
-            **r,
-            Condition::Predicate(Predicate::PreviousPhoneme(_))
-        ));
+        // Exercise both match arms: the fixture is an Or, the predicate is not.
+        let mut fallback_seen = false;
+        for cond in [
+            when.children().first().unwrap(),
+            &Condition::predicate(Predicate::SyllablePosition(SyllablePosition::Onset)),
+        ] {
+            match cond {
+                Condition::Or(l, r) => {
+                    assert!(matches!(**l, Condition::Group(_)));
+                    assert!(matches!(
+                        **r,
+                        Condition::Predicate(Predicate::PreviousPhoneme(_))
+                    ));
+                }
+                _ => fallback_seen = true,
+            }
+        }
+        assert!(fallback_seen, "non-Or condition must hit the fallback arm");
     }
 
     #[test]

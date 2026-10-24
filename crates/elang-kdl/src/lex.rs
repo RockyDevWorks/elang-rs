@@ -431,16 +431,15 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_ident(&mut self, start: usize) -> Result<Token, ParseError> {
+        // Build the identifier from valid chars; `char_at` guarantees every
+        // byte consumed is valid UTF-8, and NameTooLong at 256 bytes fires
+        // strictly before the 1 MiB MAX_ENCODED_TOKEN_BYTES ceiling, so the
+        // TokenTooLong check that exists for numbers/strings is redundant here.
+        let mut ident = String::new();
         while let Some(c) = self.char_at(self.pos).filter(|c| Self::is_ident_char(*c)) {
+            ident.push(c);
             self.pos += c.len_utf8();
             let len = self.pos - start;
-            if len > MAX_ENCODED_TOKEN_BYTES {
-                return Err(ParseError::at(
-                    ErrorCode::TokenTooLong,
-                    self.span(start),
-                    "identifier exceeds MAX_ENCODED_TOKEN_BYTES",
-                ));
-            }
             if len > MAX_NAME_BYTES {
                 return Err(ParseError::at(
                     ErrorCode::NameTooLong,
@@ -450,7 +449,7 @@ impl<'a> Lexer<'a> {
             }
         }
 
-        if self.pos == start {
+        if ident.is_empty() {
             // No progress: the byte is not a valid identifier start.
             self.pos += self.char_at(self.pos).map_or(1, char::len_utf8);
             return Err(ParseError::at(
@@ -460,22 +459,14 @@ impl<'a> Lexer<'a> {
             ));
         }
 
-        let raw = &self.input[start..self.pos];
-        let s = core::str::from_utf8(raw).map_err(|_| {
-            ParseError::at(
-                ErrorCode::InvalidUtf8,
-                self.span(start),
-                "identifier is not valid UTF-8",
-            )
-        })?;
-        if matches!(s, "true" | "false" | "null" | "inf" | "nan") {
+        if matches!(ident.as_str(), "true" | "false" | "null" | "inf" | "nan") {
             return Err(ParseError::at(
                 ErrorCode::InvalidIdentifier,
                 self.span(start),
                 "reserved word must be quoted or prefixed with `#`",
             ));
         }
-        Ok(Token::Ident(self.span(start), s.into()))
+        Ok(Token::Ident(self.span(start), ident.into_boxed_str()))
     }
 
     fn lex_number(&mut self, start: usize) -> Result<Token, ParseError> {
@@ -490,44 +481,36 @@ impl<'a> Lexer<'a> {
         let digits_start = self.pos;
 
         // Base prefixes: 0x / 0o / 0b
-        if self.byte() == Some(b'0') {
-            if let Some(p) = self.peek(1) {
-                let radix = match p {
-                    b'x' | b'X' => Some(16u32),
-                    b'o' | b'O' => Some(8u32),
-                    b'b' | b'B' => Some(2u32),
-                    _ => None,
-                };
-                if let Some(_radix) = radix {
-                    self.pos += 2;
-                    let prefix_digits_start = self.pos;
-                    while let Some(c) = self.byte() {
-                        if c.is_ascii_alphanumeric() || c == b'_' {
-                            self.pos += 1;
-                        } else {
-                            break;
-                        }
-                        if self.pos - start > MAX_ENCODED_TOKEN_BYTES {
-                            return Err(ParseError::at(
-                                ErrorCode::TokenTooLong,
-                                self.span(start),
-                                "number exceeds MAX_ENCODED_TOKEN_BYTES",
-                            ));
-                        }
-                    }
-                    if self.pos == prefix_digits_start {
-                        return Err(ParseError::at(
-                            ErrorCode::InvalidNumber,
-                            self.span(start),
-                            "number has no digits after base prefix",
-                        ));
-                    }
-                    let lexeme = core::str::from_utf8(&self.input[start..self.pos])
-                        .unwrap_or("")
-                        .to_string();
-                    return Ok(Token::Integer(self.span(start), lexeme.into_boxed_str()));
+        if self.byte() == Some(b'0')
+            && matches!(self.peek(1), Some(b'x' | b'X' | b'o' | b'O' | b'b' | b'B'))
+        {
+            self.pos += 2;
+            let prefix_digits_start = self.pos;
+            while let Some(c) = self.byte() {
+                if c.is_ascii_alphanumeric() || c == b'_' {
+                    self.pos += 1;
+                } else {
+                    break;
+                }
+                if self.pos - start > MAX_ENCODED_TOKEN_BYTES {
+                    return Err(ParseError::at(
+                        ErrorCode::TokenTooLong,
+                        self.span(start),
+                        "number exceeds MAX_ENCODED_TOKEN_BYTES",
+                    ));
                 }
             }
+            if self.pos == prefix_digits_start {
+                return Err(ParseError::at(
+                    ErrorCode::InvalidNumber,
+                    self.span(start),
+                    "number has no digits after base prefix",
+                ));
+            }
+            let lexeme = core::str::from_utf8(&self.input[start..self.pos])
+                .unwrap_or("")
+                .to_string();
+            return Ok(Token::Integer(self.span(start), lexeme.into_boxed_str()));
         }
 
         let mut is_float = false;
@@ -658,14 +641,16 @@ impl<'a> Lexer<'a> {
             encoded_end as u32,
             &mut self.scratch,
         )?;
-        let s = core::str::from_utf8(&self.scratch[..n as usize]).map_err(|_| {
-            ParseError::at(
-                ErrorCode::InvalidUtf8,
-                self.span(start),
-                "decoded string is not valid UTF-8",
-            )
-        })?;
-        let decoded: Box<str> = s.into();
+        // `decode_string` validates the body's UTF-8 and only writes valid
+        // UTF-8 (plain bytes copied through, escapes re-encoded), so the
+        // decoded scratch is valid by construction.
+        #[allow(
+            clippy::expect_used,
+            reason = "decode_string only emits valid UTF-8; see escape.rs contract"
+        )]
+        let decoded: Box<str> = core::str::from_utf8(&self.scratch[..n as usize])
+            .expect("decoded string is valid UTF-8")
+            .into();
         let bytes = decoded.len() as u64;
         // Charge the per-resource decoded-string budget.
         self.budgets
@@ -938,29 +923,20 @@ mod tests {
     #[test]
     fn lexes_string_with_escapes() {
         let toks = lex_all(r#""a\"b""#).unwrap();
-        match &toks[0] {
-            Token::Str(_, v) => assert_eq!(v.as_ref(), "a\"b"),
-            other => panic!("expected string, got {other:?}"),
-        }
+        assert!(matches!(&toks[0], Token::Str(_, v) if v.as_ref() == "a\"b"));
     }
 
     #[test]
     fn lexes_raw_string() {
         let toks = lex_all(r##"#"a\"b"#"##).unwrap();
-        match &toks[0] {
-            Token::RawStr(_, v) => assert_eq!(v.as_ref(), r#"a\"b"#),
-            other => panic!("expected raw string, got {other:?}"),
-        }
+        assert!(matches!(&toks[0], Token::RawStr(_, v) if v.as_ref() == r#"a\"b"#));
     }
 
     #[test]
     fn lexes_multi_hash_raw_string() {
         // Three fences each side: the content may contain `"#`.
         let toks = lex_all(r####"###"a"#b"###"####).unwrap();
-        match &toks[0] {
-            Token::RawStr(_, v) => assert_eq!(v.as_ref(), r##"a"#b"##),
-            other => panic!("expected raw string, got {other:?}"),
-        }
+        assert!(matches!(&toks[0], Token::RawStr(_, v) if v.as_ref() == r##"a"#b"##));
     }
 
     #[test]
@@ -1180,6 +1156,24 @@ mod tests {
     }
 
     #[test]
+    fn zero_leading_number_without_prefix_scans_decimal() {
+        // "09" starts with '0' but has no base prefix: the decimal fallthrough
+        // (the closing brace of the prefix branch) must be reached.
+        let toks = lex_all("09").unwrap();
+        assert!(matches!(&toks[0], Token::Integer(_, lex) if lex.as_ref() == "09"));
+    }
+
+    #[test]
+    fn mid_number_sign_breaks_token() {
+        // '4' after '+' not preceded by e/E ends the number scan; `+2` then
+        // lexes as its own signed number.
+        let toks = lex_all("1+2").unwrap();
+        assert!(matches!(&toks[0], Token::Integer(_, lex) if lex.as_ref() == "1"));
+        assert!(matches!(&toks[1], Token::Integer(_, lex) if lex.as_ref() == "+2"));
+        assert!(matches!(toks[2], Token::Eof(_)));
+    }
+
+    #[test]
     fn lexer_rejects_triple_quote_raw_string() {
         let err = lex_all("#\"\"\"x\"\"\"#").unwrap_err();
         assert_eq!(err.code, ErrorCode::UnexpectedByte);
@@ -1222,5 +1216,90 @@ mod tests {
         // falls through to the ident lexer which immediately fails.
         let err = lex_all("\0").unwrap_err();
         assert_eq!(err.code, ErrorCode::InvalidIdentifier);
+    }
+
+    #[test]
+    fn lexer_rejects_invalid_utf8_raw_string() {
+        // The raw-string scan advances byte-wise, so invalid UTF-8 content
+        // reaches the final `from_utf8` check and is rejected.
+        let input: &[u8] = b"#\"\xFF\"#";
+        let mut budgets = BudgetTracker::new();
+        let mut lx = Lexer::new(input, &mut budgets);
+        let err = lx.next_token().unwrap_err();
+        assert_eq!(err.code, ErrorCode::InvalidUtf8);
+    }
+
+    #[test]
+    fn span_range_out_of_bounds_is_invalid() {
+        let mut budgets = BudgetTracker::new();
+        let lx = Lexer::new(b"ab", &mut budgets);
+        let span = lx.span_range(10, 12);
+        assert_eq!(span.start, Position::INVALID);
+    }
+
+    #[test]
+    fn block_comment_over_byte_limit() {
+        let input = format!("/*{}", "x".repeat(MAX_COMMENT_BYTES + 10));
+        let err = lex_all(&input).unwrap_err();
+        assert_eq!(err.code, ErrorCode::CommentTooLong);
+    }
+
+    #[test]
+    fn base_prefix_number_over_token_limit() {
+        let input = format!("0x{}", "f".repeat(MAX_ENCODED_TOKEN_BYTES + 10));
+        let err = lex_all(&input).unwrap_err();
+        assert_eq!(err.code, ErrorCode::TokenTooLong);
+    }
+
+    #[test]
+    fn decimal_number_over_token_limit() {
+        let input = "1".repeat(MAX_ENCODED_TOKEN_BYTES + 10);
+        let err = lex_all(&input).unwrap_err();
+        assert_eq!(err.code, ErrorCode::TokenTooLong);
+    }
+
+    #[test]
+    fn plain_string_over_token_limit() {
+        let input = format!("\"{}", "a".repeat(MAX_ENCODED_TOKEN_BYTES + 10));
+        let err = lex_all(&input).unwrap_err();
+        assert_eq!(err.code, ErrorCode::TokenTooLong);
+    }
+
+    #[test]
+    fn escaped_string_over_token_limit() {
+        // The escape consumes two bytes (`\n`) and pushes the token past the
+        // encoded budget, hitting the escape branch's own length check.
+        let input = format!("\"{}\\n", "a".repeat(MAX_ENCODED_TOKEN_BYTES - 2));
+        let err = lex_all(&input).unwrap_err();
+        assert_eq!(err.code, ErrorCode::TokenTooLong);
+    }
+
+    #[test]
+    fn whitespace_escape_string_over_token_limit() {
+        // A backslash followed by a huge run of whitespace: the whitespace
+        // skip loop is what crosses the encoded budget.
+        let input = format!("\"a\\{}", " ".repeat(MAX_ENCODED_TOKEN_BYTES + 10));
+        let err = lex_all(&input).unwrap_err();
+        assert_eq!(err.code, ErrorCode::TokenTooLong);
+    }
+
+    #[test]
+    fn raw_string_hash_prefix_over_token_limit() {
+        let input = format!("{}\"x\"#", "#".repeat(MAX_ENCODED_TOKEN_BYTES + 5),);
+        let err = lex_all(&input).unwrap_err();
+        assert_eq!(err.code, ErrorCode::TokenTooLong);
+    }
+
+    #[test]
+    fn raw_string_content_over_token_limit() {
+        let input = format!("#\"{}", "a".repeat(MAX_ENCODED_TOKEN_BYTES + 10));
+        let err = lex_all(&input).unwrap_err();
+        assert_eq!(err.code, ErrorCode::TokenTooLong);
+    }
+
+    #[test]
+    fn parse_integer_rejects_empty_digits() {
+        assert_eq!(parse_integer("+"), None);
+        assert_eq!(parse_integer("_"), None);
     }
 }
