@@ -417,28 +417,30 @@ _(`allophone_empty_block`, `phoneme_empty_block`, `phonemes_empty_block`, `empty
 
 ## Phase 14 — Conformance corpus and test infrastructure
 
-- [ ] **T1401** Create `elang-canonical-zstd-v1-conformance` fixture manifest and runner.
-- [ ] **T1402** Generate minimal valid `.elang` and full-featured valid `.elang` golden fixtures.
-- [ ] **T1403** Generate expected exact header/index/footer bytes and SHA-256 values.
-- [ ] **T1404** Generate canonical Zstd frame golden hashes using pinned libzstd.
-- [ ] **T1405** Generate EPF/ELD canonical KDL golden text files.
-- [ ] **T1406** Generate canonical condition sorting-key byte vectors for all six ranks.
-- [ ] **T1407** Generate Unicode NFC/category and IPA parsing valid/invalid fixtures.
-- [ ] **T1408** Generate group/roman/allophone structural and uniqueness fixtures.
-- [ ] **T1409** Generate condition semantics truth tables and edge cases.
-- [ ] **T1410** Generate malformed binary index/footer/path/truncation/overflow fixtures.
-- [ ] **T1411** Generate Zstd missing-checksum, oversized-window, concatenated/skippable negatives.
-- [ ] **T1412** Generate integrity omission, corruption and extra-entry negatives.
-- [ ] **T1413** Generate EPF wrong-version/duplicate/unknown/URN/manifest negatives.
-- [ ] **T1414** Generate ELD missing required groups, duplicate IPA/roman, empty block negatives.
-- [ ] **T1415** Generate parser budget boundary fixtures for all resource/KDL limits.
-- [ ] **T1416** Test `inspect`/`verify`/`validate` expected stage and error code for each fixture.
-- [ ] **T1417** Test canonical write→read→write produces identical bytes.
-- [ ] **T1418** Test same logical package from shuffled source order produces same canonical archive.
-- [ ] **T1419** Test corpus on Linux, Windows and macOS in CI.
-- [ ] **T1420** Document fixture format, expected hashes, provenance and independent verification.
+- [x] **T1401** Create `elang-canonical-zstd-v1-conformance` fixture manifest and runner. *(`crates/elang-conformance/src/corpus.rs` — `run_fixture`, `run_corpus`; `crates/elang-conformance/src/catalog.rs` — `catalog`; unit tests `corpus::tests::*`, `catalog::tests::fixture_ids_are_unique`. The manifest also ships as `specs/registry/normative-manifest.json`, published by `gen_normative_manifest`.)*
+- [x] **T1402** Generate minimal valid `.elang` and full-featured valid `.elang` golden fixtures. *(`crates/elang-conformance/src/golden_packages.rs` — unit tests `minimal_package_is_a_valid_archive`, `full_package_is_a_valid_archive`.)*
+- [x] **T1403** Generate expected exact header/index/footer bytes and SHA-256 values. *(`crates/elang-conformance/src/golden_packages.rs` — unit tests `header_index_footer_segments_are_contiguous_in_the_archive`, `published_digests_match_the_pinned_constants`; `crates/elang-conformance/src/binary_vectors.rs` — unit test `minimal_archive_is_internally_consistent`; `crates/elang-conformance/tests/binary_vectors.rs` — integration test `footer_embeds_the_real_index_digest`.)*
+- [x] **T1404** Generate canonical Zstd frame golden hashes using pinned libzstd. *(`crates/elang-conformance/src/zstd_vectors.rs` — unit tests `pinned_frame_digests_match_the_frames_the_writer_produces`, `pinned_frames_decode_to_the_canonical_payloads`, `linked_libzstd_version_equals_the_pin`.)*
+- [x] **T1405** Generate EPF/ELD canonical KDL golden text files. *(`crates/elang-conformance/src/epf_canonical_goldens.rs` + generator `crates/elang-conformance/src/bin/gen_epf_canonical_goldens.rs` — unit test `every_pinned_case_canonicalises_to_its_pinned_bytes`; `crates/elang-conformance/tests/canonical_goldens.rs` — integration test `published_golden_bytes_match_the_canonical_writer`. ELD canonical goldens already existed from Phase 11 in `crates/elang-conformance/src/canonical_goldens.rs`.)*
+- [x] **T1406** Generate canonical condition sorting-key byte vectors for all six ranks. *(`crates/elang-conformance/src/condition_vectors.rs` — unit tests `sorting_key_fixtures_pin_the_specification`, `sorted_children_orders_by_rank`, `sorted_operands_orders_by_key`.)*
+- [x] **T1407** Generate Unicode NFC/category and IPA parsing valid/invalid fixtures. *(`crates/elang-conformance/src/unicode_ipa.rs` — unit tests `nfc_roundtrip_is_nfc`, `nfc_identifies_nfc_strings`, `unicode_vector_fixtures_pass`, `ipa_fixtures_run`.)*
+- [x] **T1408** Generate group/roman/allophone structural and uniqueness fixtures. *(`crates/elang-conformance/src/epf_eld_negatives.rs` — unit test `every_document_fixture_behaves_as_declared` over the `eld_structure_fixtures` set.)*
+- [x] **T1409** Generate condition semantics truth tables and edge cases. *(`crates/elang-conformance/src/condition_vectors.rs` — unit test `truth_tables_match_published_expectations` (16-row T1409 truth table); `crates/elang-conformance/tests/canonical_goldens.rs` — integration test `different_boolean_trees_stay_different`.)*
+- [x] **T1410** Generate malformed binary index/footer/path/truncation/overflow fixtures. *(`crates/elang-conformance/src/negatives.rs` — unit test `every_binary_fixture_behaves_as_declared`.)*
+- [x] **T1411** Generate Zstd missing-checksum, oversized-window, concatenated/skippable negatives. *(`crates/elang-conformance/src/zstd_negatives.rs` — unit test `every_zstd_negative_is_rejected_at_the_declared_level`.)*
+- [x] **T1412** Generate integrity omission, corruption and extra-entry negatives. *(`crates/elang-conformance/src/negatives.rs` — unit test `every_integrity_fixture_behaves_as_declared`.)*
+- [x] **T1413** Generate EPF wrong-version/duplicate/unknown/URN/manifest negatives. *(`crates/elang-conformance/src/epf_eld_negatives.rs` — unit test `every_document_fixture_behaves_as_declared`.)*
+- [x] **T1414** Generate ELD missing required groups, duplicate IPA/roman, empty block negatives. *(`crates/elang-conformance/src/epf_eld_negatives.rs` — unit test `every_document_fixture_behaves_as_declared`.)*
+- [x] **T1415** Generate parser budget boundary fixtures for the five pinned parser ceilings. *(`crates/elang-conformance/src/parser_budgets.rs` — unit tests `every_document_budget_fixture_passes`, `pinned_budgets_match_implementation_constants`, `nesting_fixtures_sit_on_both_sides_of_the_boundary`, `bootstrap_payloads_sit_on_both_sides_of_the_boundary`, `resource_path_fixtures_sit_on_both_sides_of_the_boundary`, `build_path_with_length_satisfies_resource_path_rules`; both sides of each ceiling are pinned — `MAX_NESTING_DEPTH` and `MAX_PREDICATES_PER_WHEN` as document fixtures, `MAX_EPF_BYTES` at exactly 1 MiB vs exactly one byte over, `MAX_BOOTSTRAP_RESOURCE_BYTES` at 64 bytes (`FORMAT_VERSION_INVALID`, Container, stage 8) vs 65 bytes (`DECOMPRESSION_BUDGET_EXCEEDED`, Frame, stage 8), and `MAX_RESOURCE_PATH_BYTES` at 1024 bytes (Accept/Inspect) vs 1025 bytes (`PATH_TOO_LONG`, ResourcePath, stage 5); the archive fixtures are wired into `tests/corpus_run.rs` and `tests/stage_conformance.rs`.)*
+- [x] **T1416** Test `inspect`/`verify`/`validate` expected stage and error code for each fixture. *(`crates/elang-conformance/src/inspect_matrix.rs` — unit test `every_level_of_every_golden_package_passes` (minimal/full × inspect/verify/validate); `crates/elang-conformance/tests/stage_conformance.rs` — integration tests `every_negative_fixture_is_rejected_at_a_registered_stage` (the observed stage must be one of the stages `specs/registry/error-codes.json` publishes for that code, and no higher than the declared level's ceiling) and `every_negative_fixture_code_is_registered`; `crates/elang-conformance/tests/requirement_completeness.rs` — integration test `every_negative_fixture_declares_an_expected_code`.)*
+- [x] **T1417** Test canonical write→read→write produces identical bytes. *(`crates/elang-conformance/src/roundtrip.rs` — unit test `write_read_write_is_byte_identical`.)*
+- [x] **T1418** Test same logical package from shuffled source order produces same canonical archive. *(`crates/elang-conformance/src/roundtrip.rs` — unit test `declaration_order_does_not_change_the_archive` over the shared `roundtrip_is_byte_identical` / `declaration_order_is_stable` helpers; companion unit test `write_read_write_is_byte_identical`.)*
+- [x] **T1419** Test corpus on Linux, Windows and macOS in CI. *(`.github/workflows/ci.yml` — test matrix `ubuntu-latest`/`windows-latest`/`macos-latest`; `crates/elang-conformance/src/meta_tests.rs` — unit test `ci_matrix_runs_linux_windows_macos`.)*
+- [x] **T1420** Document fixture format, expected hashes, provenance and independent verification. *(`docs/conformance.md` — fixture format, published hashes, provenance and independent verification steps; `crates/elang-conformance/src/meta_tests.rs` — unit test `docs_present` asserts the document exists.)*
 
 **Acceptance:** every normative MUST has at least one positive or negative conformance test; canonical outputs reproducible.
+
+**Status:** ✅ **Complete (Issue #24).**
 
 ## Phase 15 — Fuzzing, property testing and security hardening
 

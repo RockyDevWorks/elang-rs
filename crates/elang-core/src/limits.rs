@@ -89,6 +89,10 @@ mod tests {
         assert_eq!(MAX_RESOURCE_PATH_BYTES, 1024);
         assert_eq!(MAX_KDL_NESTING_DEPTH, 64);
         assert_eq!(MAX_RETAINED_DIAGNOSTICS, 100);
+        // REQ-LIMIT-008 — semantic references per archive and the
+        // semantic traversal depth ceiling.
+        assert_eq!(MAX_SEMANTIC_REFERENCES, 10_000_000);
+        assert_eq!(MAX_SEMANTIC_TRAVERSAL_DEPTH, 128);
     }
 
     #[test]
