@@ -18,7 +18,7 @@ mod common;
 use common::{build_canonical, build_with_manifest, build_with_swapped};
 use elang_core::error::Category;
 use elang_integrity::manifest::Algorithm;
-use elang_reader::Package;
+use elang_reader::{ArchiveView, Package};
 use sha2::{Digest, Sha256};
 
 // ---- Inspected surface ----------------------------------------------------
@@ -171,14 +171,12 @@ fn archive_view_is_empty_lookup_and_paths() {
     // `pkg.archive()` returns the raw bytes — borrowed, not owned.
     let _bytes: &[u8] = pkg.archive();
 
-    // The Inspected view exposes the underlying listing; the ArchiveView
-    // helpers (`is_empty`, `lookup(&ResourcePath)`, `paths`) are exercised
-    // through Inspected / Package.
+    // The Inspected view exposes the indexed paths and resource count.
     let inspected = pkg.inspect();
     assert!(!inspected.is_empty());
 
     // Walk every indexed path through `ResourcePath::new` and re-resolve
-    // it via Inspected — this guarantees the ArchiveView `lookup` path is
+    // it via ArchiveView — this guarantees the ArchiveView `lookup` path is
     // covered alongside the `lookup_str` path used by the stage functions.
     let paths: Vec<ResourcePath> = inspected
         .paths()
@@ -186,8 +184,10 @@ fn archive_view_is_empty_lookup_and_paths() {
         .map(|p| ResourcePath::new(p.to_string()).expect("indexed path is valid"))
         .collect();
     assert_eq!(paths.len(), 5);
+    let listing = pkg.listing();
+    let view = ArchiveView::new(listing.index(), listing.layout()).expect("consistent view");
     for rp in &paths {
-        assert!(inspected.paths().iter().any(|p| *p == rp.as_str()));
+        assert!(view.lookup(rp).is_some(), "indexed path resolves: {rp:?}");
     }
 }
 
