@@ -159,3 +159,270 @@ impl From<Error> for BuildError {
         }
     }
 }
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing
+)]
+mod tests {
+    //! Unit tests for the writer error surface (Phase 13, T1308/T1309).
+    //!
+    //! Every [`BuildError`] variant and every [`SizeKind`] value is exercised
+    //! here. Integration tests in `tests/writer_integration.rs` cover the
+    //! variants that surface through the public `write_archive` entry point;
+    //! this module covers the variant-level behaviour (Display formatting,
+    //! `source()` propagation, `code()` extraction, the `From<Error>` router,
+    //! and `SizeKind`'s name/code lookups) which the integration tests never
+    //! reach on their own.
+
+    use super::*;
+    use elang_core::Error;
+    use std::error::Error as _;
+
+    // ---- SizeKind ----
+
+    #[test]
+    fn size_kind_name_for_every_variant() {
+        assert_eq!(SizeKind::ResourceBytes.name(), "resource bytes");
+        assert_eq!(
+            SizeKind::UncompressedAggregate.name(),
+            "aggregate uncompressed bytes"
+        );
+        assert_eq!(SizeKind::ArchiveBytes.name(), "compressed archive bytes");
+        assert_eq!(SizeKind::IndexBytes.name(), "index bytes");
+        assert_eq!(SizeKind::ResourceCount.name(), "resource count");
+    }
+
+    #[test]
+    fn size_kind_ceiling_code_for_every_variant() {
+        assert_eq!(
+            SizeKind::ResourceBytes.ceiling_code(),
+            "LIMIT_RESOURCE_BYTES"
+        );
+        assert_eq!(
+            SizeKind::UncompressedAggregate.ceiling_code(),
+            "LIMIT_UNCOMPRESSED_AGGREGATE"
+        );
+        assert_eq!(SizeKind::ArchiveBytes.ceiling_code(), "LIMIT_ARCHIVE_BYTES");
+        assert_eq!(
+            SizeKind::IndexBytes.ceiling_code(),
+            "INDEX_SIZE_OVER_CEILING"
+        );
+        assert_eq!(
+            SizeKind::ResourceCount.ceiling_code(),
+            "INDEX_COUNT_OUT_OF_RANGE"
+        );
+    }
+
+    // ---- BuildError::code() ----
+
+    #[test]
+    fn code_passes_through_for_container_canonical_integrity() {
+        let e = BuildError::Container(Error::new("FOO", elang_core::Category::Container, "x"));
+        assert_eq!(e.code(), "FOO");
+        let e = BuildError::Canonical(Error::new("BAR", elang_core::Category::EpfSchema, "x"));
+        assert_eq!(e.code(), "BAR");
+        let e = BuildError::Integrity(Error::new("BAZ", elang_core::Category::Integrity, "x"));
+        assert_eq!(e.code(), "BAZ");
+    }
+
+    #[test]
+    fn code_returns_the_attached_code_for_invalid_config() {
+        let e = BuildError::InvalidConfig {
+            code: "WRITER_DUPLICATE_PATH",
+            message: "test".to_string(),
+        };
+        assert_eq!(e.code(), "WRITER_DUPLICATE_PATH");
+    }
+
+    #[test]
+    fn code_returns_the_ceiling_code_for_size_ceiling() {
+        let e = BuildError::SizeCeiling {
+            kind: SizeKind::ResourceBytes,
+            requested: 100,
+            ceiling: 50,
+        };
+        assert_eq!(e.code(), "LIMIT_RESOURCE_BYTES");
+    }
+
+    // ---- BuildError::Display ----
+
+    #[test]
+    fn display_prefixes_container_failures() {
+        // `FRAME_BAD_MAGIC` is a real registered code in `specs/registry/`,
+        // so the conformance scanner accepts this fixture.
+        let e = BuildError::Container(Error::new(
+            "FRAME_BAD_MAGIC",
+            elang_core::Category::Frame,
+            "frame magic mismatch",
+        ));
+        let rendered = format!("{e}");
+        assert!(
+            rendered.contains("container-layer failure"),
+            "expected container prefix: {rendered}"
+        );
+        assert!(
+            rendered.contains("FRAME_BAD_MAGIC"),
+            "should embed upstream code: {rendered}"
+        );
+    }
+
+    #[test]
+    fn display_prefixes_canonical_failures() {
+        // Test fixture, not a real code — keep it lowercase so the
+        // registry-completeness scanner does not flag it as an
+        // unregistered code emission.
+        let e = BuildError::Canonical(Error::new(
+            "epf_canonical_fixture",
+            elang_core::Category::EpfSchema,
+            "bad value",
+        ));
+        let rendered = format!("{e}");
+        assert!(
+            rendered.contains("canonical serialization failed"),
+            "expected canonical prefix: {rendered}"
+        );
+    }
+
+    #[test]
+    fn display_prefixes_integrity_failures() {
+        // Test fixture, not a real code — keep it lowercase.
+        let e = BuildError::Integrity(Error::new(
+            "integrity_fixture",
+            elang_core::Category::Integrity,
+            "missing entry",
+        ));
+        let rendered = format!("{e}");
+        assert!(
+            rendered.contains("integrity generation failed"),
+            "expected integrity prefix: {rendered}"
+        );
+    }
+
+    #[test]
+    fn display_renders_invalid_config_as_code_message() {
+        let e = BuildError::InvalidConfig {
+            code: "WRITER_DUPLICATE_PATH",
+            message: "two extras share the path \"x\"".to_string(),
+        };
+        assert_eq!(
+            format!("{e}"),
+            "WRITER_DUPLICATE_PATH: two extras share the path \"x\""
+        );
+    }
+
+    #[test]
+    fn display_renders_size_ceiling_with_requested_and_ceiling() {
+        let e = BuildError::SizeCeiling {
+            kind: SizeKind::UncompressedAggregate,
+            requested: 9_000_000_000,
+            ceiling: 8_589_934_592,
+        };
+        let rendered = format!("{e}");
+        assert!(
+            rendered.contains("LIMIT_UNCOMPRESSED_AGGREGATE"),
+            "expected code: {rendered}"
+        );
+        assert!(
+            rendered.contains("aggregate uncompressed bytes"),
+            "expected ceiling name: {rendered}"
+        );
+        assert!(
+            rendered.contains("9000000000") && rendered.contains("8589934592"),
+            "expected requested/ceiling numbers: {rendered}"
+        );
+    }
+
+    // ---- BuildError::source() ----
+
+    #[test]
+    fn source_returns_some_for_upstream_carriers() {
+        // Use a lowercase fixture code so the registry-completeness scanner
+        // does not flag this as an unregistered code emission.
+        let inner = Error::new("source_fixture", elang_core::Category::Container, "y");
+        let e = BuildError::Container(inner);
+        let s = e.source().expect("Container should expose source");
+        // `source()` returns `&dyn std::error::Error`; verify by Display.
+        let rendered = format!("{s}");
+        assert!(
+            rendered.contains("source_fixture"),
+            "source should carry the inner code: {rendered}"
+        );
+
+        let e = BuildError::Canonical(Error::new("x", elang_core::Category::EpfSchema, "y"));
+        assert!(e.source().is_some());
+
+        let e = BuildError::Integrity(Error::new("x", elang_core::Category::Integrity, "y"));
+        assert!(e.source().is_some());
+    }
+
+    #[test]
+    fn source_returns_none_for_writer_owned_variants() {
+        let e = BuildError::InvalidConfig {
+            code: "WRITER_INVALID_CONFIG",
+            message: "x".to_string(),
+        };
+        assert!(e.source().is_none());
+
+        let e = BuildError::SizeCeiling {
+            kind: SizeKind::ResourceBytes,
+            requested: 1,
+            ceiling: 0,
+        };
+        assert!(e.source().is_none());
+    }
+
+    // ---- From<Error> for BuildError ----
+
+    #[test]
+    fn from_integrity_category_routes_to_integrity_variant() {
+        let err = Error::new("X", elang_core::Category::Integrity, "y");
+        let be: BuildError = err.into();
+        assert!(
+            matches!(be, BuildError::Integrity(_)),
+            "Integrity category must route to BuildError::Integrity"
+        );
+    }
+
+    #[test]
+    fn from_epf_and_eld_schema_categories_route_to_canonical() {
+        for cat in [
+            elang_core::Category::EpfSchema,
+            elang_core::Category::EldSchema,
+        ] {
+            let err = Error::new("X", cat, "y");
+            let be: BuildError = err.into();
+            assert!(
+                matches!(be, BuildError::Canonical(_)),
+                "{cat:?} must route to BuildError::Canonical"
+            );
+        }
+    }
+
+    #[test]
+    fn from_other_categories_route_to_container() {
+        // Sample one from each non-handled category to prove the default arm.
+        for cat in [
+            elang_core::Category::Container,
+            elang_core::Category::Index,
+            elang_core::Category::Frame,
+            elang_core::Category::ResourcePath,
+            elang_core::Category::Unicode,
+            elang_core::Category::Ipa,
+            elang_core::Category::Roman,
+            elang_core::Category::When,
+            elang_core::Category::Limit,
+            elang_core::Category::Canonical,
+        ] {
+            let err = Error::new("X", cat, "y");
+            let be: BuildError = err.into();
+            assert!(
+                matches!(be, BuildError::Container(_)),
+                "{cat:?} must route to BuildError::Container (default arm)"
+            );
+        }
+    }
+}

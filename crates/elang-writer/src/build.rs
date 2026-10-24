@@ -74,13 +74,12 @@ pub(crate) fn write_archive(config: &PackageConfig) -> Result<Vec<u8>, BuildErro
     let integrity_bytes = elang_integrity::write::canonical_bytes(&integrity);
 
     // 4. Append the integrity manifest as the last resource, then sort
-    //    canonically. Sorting after the append keeps the integrity bytes
-    //    from being hashed twice (they were hashed via Sha256, not via
-    //    the manifest's own entry, but ordering them into place before
-    //    hashing would require a second hash pass).
+    //    canonically. `validate_paths` and the five hardcoded mandatory
+    //    names already guarantee that every path in `resources` is
+    //    unique, so `Index::with_entries` is the only remaining
+    //    uniqueness gate — no need for a separate post-sort dedup pass.
     resources.push(("META-INF/integrity.kdl".to_string(), integrity_bytes));
     resources.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
-    dedup_paths(&resources)?;
 
     // 5. Per-resource size ceilings (before encoding).
     for (path, bytes) in &resources {
@@ -180,7 +179,7 @@ pub(crate) fn write_archive(config: &PackageConfig) -> Result<Vec<u8>, BuildErro
 }
 
 /// Validate the pinned format-version string. Must be NFC, must encode
-/// `{major.minor}.{patch}` with ASCII digits and a non-empty patch, and
+/// `{major.minor}.{patch}` with ASCII digits and non-empty components, and
 /// major/minor must textually match the current container header.
 fn validate_format_version(version: &str) -> Result<(), BuildError> {
     if version.is_empty() {
@@ -205,25 +204,45 @@ fn validate_format_version(version: &str) -> Result<(), BuildError> {
             message: "format_version is not in Unicode NFC".to_string(),
         });
     }
-    let mut parts = version.split('.');
-    let major = parts.next().ok_or_else(|| BuildError::InvalidConfig {
-        code: "WRITER_INVALID_FORMAT_VERSION",
-        message: "format_version is missing the major component".to_string(),
-    })?;
-    let minor = parts.next().ok_or_else(|| BuildError::InvalidConfig {
-        code: "WRITER_INVALID_FORMAT_VERSION",
-        message: "format_version is missing the minor component".to_string(),
-    })?;
-    let patch = parts.next().ok_or_else(|| BuildError::InvalidConfig {
-        code: "WRITER_INVALID_FORMAT_VERSION",
-        message: format!("format_version must include a patch component ({version:?})"),
-    })?;
-    if parts.next().is_some() {
+    // Slice-match the split output so every arm is reachable: after the
+    // empty/length/NFC checks above, `version.split('.')` yields ≥1
+    // element, so the match has three viable cases plus the catch-all
+    // for 4+ components. The earlier `ok_or_else` shape had a
+    // guaranteed-Some first element and therefore a dead branch.
+    let parts: Vec<&str> = version.split('.').collect();
+    let (major, minor, patch) = match parts.as_slice() {
+        [major, minor, patch] => (*major, *minor, *patch),
+        [_major, _minor] => {
+            return Err(BuildError::InvalidConfig {
+                code: "WRITER_INVALID_FORMAT_VERSION",
+                message: "format_version must include a patch component".to_string(),
+            });
+        }
+        [_major] => {
+            return Err(BuildError::InvalidConfig {
+                code: "WRITER_INVALID_FORMAT_VERSION",
+                message: format!(
+                    "format_version must include the minor and patch components ({version:?})"
+                ),
+            });
+        }
+        _ => {
+            return Err(BuildError::InvalidConfig {
+                code: "WRITER_INVALID_FORMAT_VERSION",
+                message: format!(
+                    "format_version must be exactly three dot-separated components ({version:?})"
+                ),
+            });
+        }
+    };
+    // Empty components ("0.1.", "..", ".1.0") fire BEFORE the digits
+    // check: `is_ascii_digits("")` returns false (the `!is_empty()`
+    // guard), so checking digits first would shadow the "must not be
+    // empty" message with the generic "must be ASCII digits".
+    if major.is_empty() || minor.is_empty() || patch.is_empty() {
         return Err(BuildError::InvalidConfig {
             code: "WRITER_INVALID_FORMAT_VERSION",
-            message: format!(
-                "format_version must be exactly three dot-separated components ({version:?})"
-            ),
+            message: "format_version components must not be empty".to_string(),
         });
     }
     if !is_ascii_digits(major) || !is_ascii_digits(minor) || !is_ascii_digits(patch) {
@@ -243,33 +262,11 @@ fn validate_format_version(version: &str) -> Result<(), BuildError> {
             ),
         });
     }
-    if patch.is_empty() {
-        return Err(BuildError::InvalidConfig {
-            code: "WRITER_INVALID_FORMAT_VERSION",
-            message: "format_version patch component must not be empty".to_string(),
-        });
-    }
     Ok(())
 }
 
 fn is_ascii_digits(s: &str) -> bool {
     !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit())
-}
-
-/// Reject duplicate paths before the encode loop catches the same problem
-/// via `Index::with_entries`.
-fn dedup_paths(resources: &[(String, Vec<u8>)]) -> Result<(), BuildError> {
-    for pair in resources.windows(2) {
-        if let [prev, next] = pair {
-            if prev.0 == next.0 {
-                return Err(BuildError::InvalidConfig {
-                    code: "WRITER_DUPLICATE_PATH",
-                    message: format!("two resources share the path {:?}", prev.0),
-                });
-            }
-        }
-    }
-    Ok(())
 }
 
 /// Reject a resource count that would exceed `MAX_RESOURCES`.

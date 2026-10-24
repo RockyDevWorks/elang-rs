@@ -221,3 +221,198 @@ fn empty_format_version_rejected() {
     let err = write_archive(&config).expect_err("empty format_version must fail");
     assert_eq!(err.code(), "WRITER_INVALID_FORMAT_VERSION");
 }
+
+// ---------------------------------------------------------------------------
+// Additional format-version coverage for `validate_format_version` branches
+// not exercised by `bad_format_version_rejected` / `empty_format_version_rejected`.
+// Each case names the specific branch it covers so a future refactor that
+// drops one of the rejection paths fails the matching test by name.
+// ---------------------------------------------------------------------------
+
+/// `format_version` longer than `MAX_RESOURCE_PATH_BYTES` bytes is rejected
+/// (the `format_version.len() > MAX_RESOURCE_PATH_BYTES` branch).
+#[test]
+fn format_version_over_path_length_ceiling_rejected() {
+    use elang_core::limits::MAX_RESOURCE_PATH_BYTES;
+    let mut config = build_minimal_config();
+    // 1024-byte ceiling + 1 = 1025 ASCII digits, still well-formed semver.
+    config.format_version = "1".repeat(MAX_RESOURCE_PATH_BYTES + 1);
+    let err = write_archive(&config).expect_err("over-long format_version must fail");
+    assert_eq!(err.code(), "WRITER_INVALID_FORMAT_VERSION");
+}
+
+/// `format_version` that is not in Unicode NFC is rejected (the
+/// `!is_nfc(version)` branch — an NFD-decomposed string).
+#[test]
+fn format_version_not_in_nfc_rejected() {
+    let mut config = build_minimal_config();
+    // '0' '1' '0' 'e' + U+0301 (combining acute) is NFD-decomposed,
+    // NOT NFC — `is_ascii_digits` would accept every component but
+    // `is_nfc` rejects the whole string. Build it from code units so
+    // the source file itself stays NFC (no literal non-NFC string
+    // embedded in the test source, which would be a different lint
+    // failure).
+    let decomposed = String::from("0.1.0e") + "\u{0301}";
+    assert!(
+        !elang_unicode::is_nfc(&decomposed),
+        "fixture must actually be non-NFC"
+    );
+    config.format_version = decomposed;
+    let err = write_archive(&config).expect_err("non-NFC format_version must fail");
+    assert_eq!(err.code(), "WRITER_INVALID_FORMAT_VERSION");
+}
+
+/// `format_version` with no `.` separator is rejected (the missing-minor
+/// branch — `parts.next()` returns `None` after the major).
+#[test]
+fn format_version_missing_minor_rejected() {
+    let mut config = build_minimal_config();
+    config.format_version = "0".to_string();
+    let err = write_archive(&config).expect_err("format_version with no minor must fail");
+    assert_eq!(err.code(), "WRITER_INVALID_FORMAT_VERSION");
+}
+
+/// `format_version` with only one dot is rejected (the missing-patch branch).
+#[test]
+fn format_version_missing_patch_rejected() {
+    let mut config = build_minimal_config();
+    config.format_version = "0.1".to_string();
+    let err = write_archive(&config).expect_err("format_version with no patch must fail");
+    assert_eq!(err.code(), "WRITER_INVALID_FORMAT_VERSION");
+}
+
+/// `format_version` with more than three dot-separated components is
+/// rejected (the `parts.next().is_some()` branch).
+#[test]
+fn format_version_with_four_components_rejected() {
+    let mut config = build_minimal_config();
+    config.format_version = "0.1.0.0".to_string();
+    let err = write_archive(&config).expect_err("four-component format_version must fail");
+    assert_eq!(err.code(), "WRITER_INVALID_FORMAT_VERSION");
+}
+
+/// `format_version` with non-ASCII-digit characters is rejected (the
+/// `is_ascii_digits` branch — `not-a-version` is the only pre-existing
+/// case; this one confirms the empty-component edge `0.1.` also falls
+/// through the same check).
+#[test]
+fn format_version_with_empty_patch_rejected() {
+    let mut config = build_minimal_config();
+    config.format_version = "0.1.".to_string();
+    let err = write_archive(&config).expect_err("empty-patch format_version must fail");
+    assert_eq!(err.code(), "WRITER_INVALID_FORMAT_VERSION");
+}
+
+/// `format_version` whose middle (minor) component is empty is rejected
+/// (the slice-match `[major, minor, patch]` arm captures `0..0` because
+/// `"0..0".split('.')` yields `["0", "", "0"]`). The slice match now
+/// exposes an explicit "components must not be empty" message rather than
+/// the previous generic "must be ASCII digits" surface.
+#[test]
+fn format_version_with_empty_minor_rejected() {
+    let mut config = build_minimal_config();
+    config.format_version = "0..0".to_string();
+    let err = write_archive(&config).expect_err("empty-minor format_version must fail");
+    assert_eq!(err.code(), "WRITER_INVALID_FORMAT_VERSION");
+}
+
+/// `format_version` whose major component is empty is rejected (the
+/// `..0` shape still parses as a 3-element slice with an empty major).
+#[test]
+fn format_version_with_empty_major_rejected() {
+    let mut config = build_minimal_config();
+    config.format_version = ".1.0".to_string();
+    let err = write_archive(&config).expect_err("empty-major format_version must fail");
+    assert_eq!(err.code(), "WRITER_INVALID_FORMAT_VERSION");
+}
+
+/// `format_version` whose three components are non-empty but contain
+/// non-ASCII-digit characters (`"0.1.x"`) is rejected by the
+/// `is_ascii_digits` check, which fires AFTER the empty-component
+/// check. The previous pre-PR test `bad_format_version_rejected`
+/// covered `"not-a-version"` (which the slice match now routes through
+/// the missing-minor arm); this one pins the post-match digits branch.
+#[test]
+fn format_version_with_non_digit_component_rejected() {
+    let mut config = build_minimal_config();
+    config.format_version = "0.1.x".to_string();
+    let err = write_archive(&config).expect_err("non-digit format_version must fail");
+    assert_eq!(err.code(), "WRITER_INVALID_FORMAT_VERSION");
+}
+
+// ---------------------------------------------------------------------------
+// Extra-resource surface coverage
+// ---------------------------------------------------------------------------
+
+/// An extra resource whose path violates `ResourcePath::new` rules
+/// (absolute path) is rejected by the integrity-manifest build loop
+/// with a registered `PATH_*` code propagated as a `BuildError::Container`.
+#[test]
+fn invalid_extra_path_rejected_via_resource_path() {
+    let mut config = build_minimal_config();
+    config.extra_resources = vec![ExtraResource {
+        path: "/absolute/path.bin".to_string(),
+        canonical_bytes: b"x".to_vec(),
+    }];
+    let err = write_archive(&config).expect_err("absolute-path extra must fail");
+    // Category is `ResourcePath`, routed to `BuildError::Container` by the
+    // `From<Error>` impl — the registered code surfaces unchanged.
+    assert_eq!(err.code(), "PATH_ABSOLUTE");
+}
+
+/// A resource-count ceiling violation (≥ `MAX_RESOURCES + 1`) is rejected
+/// before any byte is emitted, surfacing as `INDEX_COUNT_OUT_OF_RANGE` via
+/// the `SizeKind::ResourceCount` arm of `BuildError::SizeCeiling`.
+///
+/// The check runs in O(n) over `extra_resources`, so the fixture is cheap
+/// to build: 24 996 small extras + the 5 mandatory resources = 25 001,
+/// one over `MAX_RESOURCES = 25_000`.
+#[test]
+fn resource_count_over_ceiling_rejected() {
+    use elang_core::limits::MAX_RESOURCES;
+    let mut config = build_minimal_config();
+    // 24_996 extras + 5 mandatory = 25_001, just over the ceiling.
+    let extras: usize = (MAX_RESOURCES as usize) - 5 + 1;
+    config.extra_resources = (0..extras)
+        .map(|i| ExtraResource {
+            // Variable-width numeric suffix keeps each path unique and
+            // well under the 1024-byte path ceiling.
+            path: format!("data/extras/x{i:06}.bin"),
+            canonical_bytes: b"x".to_vec(),
+        })
+        .collect();
+    assert_eq!(config.extra_resources.len() + 5, MAX_RESOURCES as usize + 1);
+    let err = write_archive(&config).expect_err("over-ceiling resource count must fail");
+    assert_eq!(err.code(), "INDEX_COUNT_OUT_OF_RANGE");
+}
+
+/// Two extras that share a canonical path are rejected with
+/// `WRITER_DUPLICATE_PATH`. The previous implementation of
+/// `PackageConfig::validate_paths` used a `windows(2)` adjacent-pair scan
+/// and so let non-adjacent duplicates slip through to a defensive
+/// post-sort check; that scan was replaced with a `HashSet`-based full
+/// pass, so this test now exercises the input-validation path directly
+/// rather than the (removed) post-sort dedup helper.
+#[test]
+fn duplicate_extra_path_rejected_via_validate_paths() {
+    let mut config = build_minimal_config();
+    // Three extras, two of which share `data/a.bin`. The duplicate is
+    // non-adjacent in the vector, which the previous `windows(2)`
+    // implementation missed entirely.
+    config.extra_resources = vec![
+        ExtraResource {
+            path: "data/a.bin".to_string(),
+            canonical_bytes: b"a".to_vec(),
+        },
+        ExtraResource {
+            path: "data/b.bin".to_string(),
+            canonical_bytes: b"b".to_vec(),
+        },
+        ExtraResource {
+            path: "data/a.bin".to_string(),
+            canonical_bytes: b"a2".to_vec(),
+        },
+    ];
+    let err = write_archive(&config).expect_err("duplicate path must fail");
+    assert_eq!(err.code(), "WRITER_DUPLICATE_PATH");
+}
