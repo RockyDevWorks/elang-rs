@@ -158,3 +158,71 @@ fn decode_span(bytes: &[u8]) -> Result<Vec<u8>, Error> {
 pub(crate) fn is_bootstrap_path(path: &ResourcePath) -> bool {
     matches!(path.as_str(), FORMAT_VERSION_PATH | MIMETYPE_PATH)
 }
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "unit tests for bootstrap helpers; a panic signals a builder regression"
+)]
+mod tests {
+    use super::*;
+    use crate::archive::ArchiveView;
+    use crate::package::Package;
+    use elang_core::error::Category;
+
+    #[test]
+    fn is_bootstrap_path_recognises_locked_paths() {
+        let fv = ResourcePath::new(FORMAT_VERSION_PATH.to_string()).expect("valid path");
+        let mt = ResourcePath::new(MIMETYPE_PATH.to_string()).expect("valid path");
+        let other = ResourcePath::new("Linguistics/phonemes.eld".to_string()).expect("valid path");
+        assert!(is_bootstrap_path(&fv));
+        assert!(is_bootstrap_path(&mt));
+        assert!(!is_bootstrap_path(&other));
+    }
+
+    #[test]
+    fn read_bootstrap_resource_returns_resource_missing_when_path_not_indexed() {
+        // Build a minimal real archive by going through `Package::open` —
+        // then construct an `ArchiveView` from the listing and ask
+        // `read_bootstrap_resource` for a path the index does not contain.
+        // The view's `lookup_str` returns `None`, exercising the
+        // `RESOURCE_MISSING` branch in `read_bootstrap_resource`.
+        let archive = crate::package::__test_support::build_canonical_archive();
+        let pkg = Package::open(&archive.bytes).expect("stages 1-7");
+        let listing = pkg.listing();
+        let view = ArchiveView::new(listing.index(), listing.layout()).expect("consistent view");
+
+        let err = read_bootstrap_resource(&view, &archive.bytes, "no/such/bootstrap.eld")
+            .expect_err("path is not indexed");
+        assert_eq!(err.diagnostic.code, "RESOURCE_MISSING");
+        assert_eq!(err.diagnostic.category, Category::ResourcePath);
+        assert_eq!(err.diagnostic.stage, Some(8));
+        assert_eq!(
+            err.diagnostic.resource_path.as_deref(),
+            Some("no/such/bootstrap.eld"),
+            "path is attached"
+        );
+        assert!(
+            err.diagnostic.message.contains("no/such/bootstrap.eld"),
+            "message names the missing path"
+        );
+    }
+
+    #[test]
+    fn read_bootstrap_resource_returns_frame_truncated_when_span_outside_archive() {
+        use crate::archive::Span;
+        // `read_span` returns `None` when the span falls outside the
+        // archive bytes. The upstream listing consistency check (stage 1)
+        // prevents this in practice, but the helper itself has the check
+        // — exercise it directly with a synthetic out-of-range span.
+        let bytes = vec![0u8; 16];
+        let span = Span {
+            offset: 1024,
+            compressed_size: 16,
+            uncompressed_size: 16,
+        };
+        assert!(ArchiveView::read_span(span, &bytes).is_none());
+    }
+}

@@ -315,3 +315,170 @@ fn enrich_with_resource_and_stage(e: Error, path: &str, stage: u8) -> Error {
 /// Re-export the [`elang_integrity::IntegrityEntry`] type used by the verify-pipeline outputs.
 #[allow(dead_code, reason = "API stability for downstream callers")]
 pub type IntegrityEntryRef = elang_integrity::IntegrityEntry;
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "unit tests for stage-adapter functions; a panic signals an adapter regression"
+)]
+mod tests {
+    use super::*;
+    use crate::archive::ArchiveView;
+    use crate::package::__test_support::build_canonical_archive;
+    use crate::package::Package;
+    use elang_core::error::{Category, Diagnostic, Error};
+    use elang_kdl::span::SourceSpan;
+
+    #[test]
+    fn missing_entry_err_attaches_path_and_stage() {
+        let err = missing_entry_err("Linguistics/phonemes.eld");
+        assert_eq!(err.diagnostic.code, "INTEGRITY_MISSING_ENTRY");
+        assert_eq!(err.diagnostic.category, Category::Integrity);
+        assert_eq!(err.diagnostic.stage, Some(11));
+        assert_eq!(
+            err.diagnostic.resource_path.as_deref(),
+            Some("Linguistics/phonemes.eld")
+        );
+    }
+
+    #[test]
+    fn integrity_coverage_err_retags_with_stage_9() {
+        let inner = Error {
+            diagnostic: Diagnostic::new("INTEGRITY_EXTRA_ENTRY", Category::Integrity, "extra"),
+        };
+        let outer = integrity_coverage_err(inner);
+        assert_eq!(outer.diagnostic.code, "INTEGRITY_EXTRA_ENTRY");
+        assert_eq!(outer.diagnostic.stage, Some(9));
+    }
+
+    #[test]
+    fn integrity_kdl_to_err_attaches_span_when_valid() {
+        // Build a synthetic ParseError with a non-invalid SourceSpan. The
+        // `kdl_parse` error type carries the span; the adapter copies it
+        // into the diagnostic's KdlSpan field.
+        let span = SourceSpan::from_range(b"hello world", 2, 5);
+        let parse_err = elang_kdl::ParseError::at(
+            elang_kdl::ErrorCode::InvalidUtf8,
+            span,
+            "synthetic parse error",
+        );
+        let err = integrity_kdl_to_err(parse_err);
+        assert_eq!(err.diagnostic.code, "INTEGRITY_STRUCTURE_INVALID");
+        assert_eq!(err.diagnostic.stage, Some(9));
+        assert_eq!(err.diagnostic.category, Category::Integrity);
+        // The synthetic span is non-invalid, so the adapter attaches it.
+        assert!(
+            err.diagnostic.span.is_some(),
+            "non-invalid span should be attached"
+        );
+    }
+
+    #[test]
+    fn phoneme_resolution_err_attaches_declared_path() {
+        let inner = Error {
+            diagnostic: Diagnostic::new(
+                "EPF_MANIFEST_PATH_NOT_INDEXED",
+                Category::EpfSchema,
+                "phoneme path missing",
+            ),
+        };
+        let outer = phoneme_resolution_err(inner, "Linguistics/missing.eld");
+        assert_eq!(outer.diagnostic.code, "EPF_MANIFEST_PATH_NOT_INDEXED");
+        assert_eq!(
+            outer.diagnostic.resource_path.as_deref(),
+            Some("Linguistics/missing.eld")
+        );
+    }
+
+    #[test]
+    fn enrich_with_resource_sets_resource_path() {
+        let inner = Error {
+            diagnostic: Diagnostic::new("INTEGRITY_HASH_MISMATCH", Category::Integrity, "mismatch"),
+        };
+        let outer = enrich_with_resource(inner, "Header/mimetype");
+        assert_eq!(outer.diagnostic.code, "INTEGRITY_HASH_MISMATCH");
+        assert_eq!(
+            outer.diagnostic.resource_path.as_deref(),
+            Some("Header/mimetype")
+        );
+    }
+
+    #[test]
+    fn enrich_with_resource_and_stage_sets_both() {
+        let inner = Error {
+            diagnostic: Diagnostic::new("FRAME_TRUNCATED", Category::Frame, "frame truncated"),
+        };
+        let outer = enrich_with_resource_and_stage(inner, "Linguistics/phonemes.eld", 11);
+        assert_eq!(outer.diagnostic.code, "FRAME_TRUNCATED");
+        assert_eq!(
+            outer.diagnostic.resource_path.as_deref(),
+            Some("Linguistics/phonemes.eld")
+        );
+        assert_eq!(outer.diagnostic.stage, Some(11));
+    }
+
+    #[test]
+    fn repertoire_load_err_attaches_stage_12() {
+        // Construct a RepertoireError variant. The adapter takes ownership
+        // of the upstream error and wraps it in a stage-12 diagnostic.
+        let inner = elang_repertoire::repertoire::RepertoireError::Metadata(
+            "synthetic missing repertoire".to_string(),
+        );
+        let err = repertoire_load_err(inner);
+        assert_eq!(err.diagnostic.code, "REPERTOIRE_LOAD_FAILED");
+        assert_eq!(err.diagnostic.category, Category::Ipa);
+        assert_eq!(err.diagnostic.stage, Some(12));
+    }
+
+    #[test]
+    fn decode_indexed_resource_returns_resource_missing_for_unindexed_path() {
+        // Build a real archive, then construct an ArchiveView from its
+        // listing and ask `decode_indexed_resource` for a path the index
+        // does not contain. The view's `lookup_str` returns `None`,
+        // exercising the `RESOURCE_MISSING` branch.
+        let archive = build_canonical_archive();
+        let pkg = Package::open(&archive.bytes).expect("stages 1-7");
+        let listing = pkg.listing();
+        let view = ArchiveView::new(listing.index(), listing.layout()).expect("consistent view");
+
+        let err = decode_indexed_resource(&view, &archive.bytes, "no/such/resource.eld", 1024, 9)
+            .expect_err("path is not indexed");
+        assert_eq!(err.diagnostic.code, "RESOURCE_MISSING");
+        assert_eq!(err.diagnostic.category, Category::ResourcePath);
+        assert_eq!(err.diagnostic.stage, Some(9)); // caller-supplied stage
+        assert_eq!(
+            err.diagnostic.resource_path.as_deref(),
+            Some("no/such/resource.eld")
+        );
+    }
+
+    #[test]
+    fn decode_indexed_resource_returns_frame_truncated_for_out_of_range_span() {
+        // Hand-craft a span that lies outside the archive bytes. Stage 1
+        // would never let this through the public API, so we exercise the
+        // defensive branch via the inner helper.
+        let view_bytes: Vec<u8> = vec![];
+        // Empty archive → every span is out-of-range. Pass a path that
+        // *is* indexed in some dummy view shape is not necessary — the
+        // helper returns `FRAME_TRUNCATED` when `read_span` returns `None`.
+        // The path does not need to be in the index for the frame-truncated
+        // branch because the resource-missing check fires first; instead
+        // we exercise it via `decode_one`, which assumes a valid span.
+        let span = crate::archive::Span {
+            offset: 4096,
+            compressed_size: 16,
+            uncompressed_size: 16,
+        };
+        let mut budget = elang_container::frame::DecodeBudget::new(1024);
+        let err = decode_one(&view_bytes, "anywhere.eld", span, &mut budget)
+            .expect_err("span is outside archive");
+        assert_eq!(err.diagnostic.code, "FRAME_TRUNCATED");
+        assert_eq!(err.diagnostic.category, Category::Frame);
+        assert_eq!(
+            err.diagnostic.resource_path.as_deref(),
+            Some("anywhere.eld")
+        );
+    }
+}

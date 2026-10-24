@@ -41,3 +41,48 @@ pub(crate) fn resource_err(
             .with_resource(resource_path),
     }
 }
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "unit tests for error builders; a panic signals a builder regression"
+)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bootstrap_err_attaches_stage_8_and_resource() {
+        let err = bootstrap_err(
+            "MIMETYPE_INVALID",
+            "Header/mimetype content does not match",
+            "Header/mimetype",
+        );
+        assert_eq!(err.diagnostic.code, "MIMETYPE_INVALID");
+        assert_eq!(err.diagnostic.category, Category::Container);
+        assert_eq!(err.diagnostic.stage, Some(8));
+        assert_eq!(
+            err.diagnostic.resource_path.as_deref(),
+            Some("Header/mimetype")
+        );
+    }
+
+    #[test]
+    fn resource_err_uses_caller_category_and_stage() {
+        let err = resource_err(
+            "INTEGRITY_HASH_MISMATCH",
+            Category::Integrity,
+            "hash mismatch",
+            "Linguistics/phonemes.eld",
+            11,
+        );
+        assert_eq!(err.diagnostic.code, "INTEGRITY_HASH_MISMATCH");
+        assert_eq!(err.diagnostic.category, Category::Integrity);
+        assert_eq!(err.diagnostic.stage, Some(11));
+        assert_eq!(
+            err.diagnostic.resource_path.as_deref(),
+            Some("Linguistics/phonemes.eld")
+        );
+    }
+}

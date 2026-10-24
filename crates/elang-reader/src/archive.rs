@@ -167,3 +167,74 @@ impl elang_epf::manifest::IndexLookup for ArchiveView<'_> {
         self.entries.iter().any(|e| e.path == path)
     }
 }
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    reason = "unit tests for ArchiveView helpers; a panic signals a helper regression"
+)]
+mod tests {
+    use super::*;
+    use crate::package::Package;
+
+    fn real_view() -> (Vec<u8>, ArchiveView<'static>) {
+        // Build a real archive, leak the listing into a Box to widen its
+        // lifetime to `'static`, then construct an ArchiveView borrowing
+        // from the leaked listing. The leak is scoped to a test process.
+        let archive = crate::package::__test_support::build_canonical_archive();
+        let pkg = Package::open(&archive.bytes).expect("stages 1-7");
+        let listing = Box::leak(Box::new(pkg.listing().clone()));
+        let view = ArchiveView::new(listing.index(), listing.layout()).expect("consistent view");
+        (archive.bytes, view)
+    }
+
+    #[test]
+    fn is_empty_returns_false_for_canonical_archive() {
+        let (_bytes, view) = real_view();
+        assert!(!view.is_empty());
+        assert_eq!(view.len(), 5);
+    }
+
+    #[test]
+    fn lookup_with_resource_path_finds_indexed_entries() {
+        let (_bytes, view) = real_view();
+        let rp = ResourcePath::new("Header/mimetype".to_string()).expect("valid path");
+        let span = view.lookup(&rp).expect("mimetype in index");
+        assert_eq!(
+            span.compressed_size,
+            view.lookup_str("Header/mimetype").unwrap().compressed_size
+        );
+        let missing = ResourcePath::new("no/such.eld".to_string()).expect("valid path");
+        assert!(view.lookup(&missing).is_none());
+    }
+
+    #[test]
+    fn paths_returns_indexed_paths_in_index_order() {
+        let (_bytes, view) = real_view();
+        let paths = view.paths();
+        assert_eq!(paths.len(), 5);
+        // Index order is bytewise-sorted.
+        let mut sorted = paths.clone();
+        sorted.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
+        assert_eq!(paths, sorted);
+    }
+
+    #[test]
+    fn read_span_returns_none_for_out_of_range_offset() {
+        let span = Span {
+            offset: u64::MAX,
+            compressed_size: 16,
+            uncompressed_size: 16,
+        };
+        assert!(ArchiveView::read_span(span, &[]).is_none());
+
+        let small = Span {
+            offset: 0,
+            compressed_size: 16,
+            uncompressed_size: 16,
+        };
+        assert!(ArchiveView::read_span(small, &[0u8; 8]).is_none());
+    }
+}

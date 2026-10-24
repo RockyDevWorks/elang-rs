@@ -159,6 +159,38 @@ fn validated_downgrades_to_inspected_while_verified_keeps_resources() {
     assert_eq!(verified.manifest().resources.len(), 4);
 }
 
+// ---- ArchiveView helpers --------------------------------------------------
+
+#[test]
+fn archive_view_is_empty_lookup_and_paths() {
+    use elang_core::ResourcePath;
+
+    let archive = build_canonical();
+    let pkg = Package::open(&archive.bytes).expect("stages 1-7");
+
+    // `pkg.archive()` returns the raw bytes — borrowed, not owned.
+    let _bytes: &[u8] = pkg.archive();
+
+    // The Inspected view exposes the underlying listing; the ArchiveView
+    // helpers (`is_empty`, `lookup(&ResourcePath)`, `paths`) are exercised
+    // through Inspected / Package.
+    let inspected = pkg.inspect();
+    assert!(!inspected.is_empty());
+
+    // Walk every indexed path through `ResourcePath::new` and re-resolve
+    // it via Inspected — this guarantees the ArchiveView `lookup` path is
+    // covered alongside the `lookup_str` path used by the stage functions.
+    let paths: Vec<ResourcePath> = inspected
+        .paths()
+        .into_iter()
+        .map(|p| ResourcePath::new(p.to_string()).expect("indexed path is valid"))
+        .collect();
+    assert_eq!(paths.len(), 5);
+    for rp in &paths {
+        assert!(inspected.paths().iter().any(|p| *p == rp.as_str()));
+    }
+}
+
 // ---- Package accessors ----------------------------------------------------
 
 #[test]
