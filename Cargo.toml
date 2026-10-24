@@ -12,6 +12,7 @@ members = [
     "crates/elang-reader",
     "crates/elang-cli",
     "crates/elang-unicode",
+    "crates/elang-writer",
 ]
 
 # Centralized package metadata inherited by every crate via `package.workspace = true`.

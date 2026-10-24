@@ -172,6 +172,19 @@ name = "elang-unicode"
 version = "0.1.0"
 
 [[package]]
+name = "elang-writer"
+version = "0.1.0"
+dependencies = [
+ "elang-container",
+ "elang-core",
+ "elang-eld",
+ "elang-epf",
+ "elang-integrity",
+ "elang-unicode",
+ "sha2",
+]
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
