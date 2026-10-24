@@ -522,10 +522,236 @@ pub fn verify(release_root: &Path) -> Result<(), ManifestError> {
 #[cfg(test)]
 mod tests {
     use super::jcs_canonicalize;
+    use crate::normative_manifest::{ManifestError, MANIFEST_PATH};
 
     #[test]
     fn non_bmp_character_is_emitted_as_raw_utf8() {
         let value = serde_json::json!("\u{1f600}");
         assert_eq!(jcs_canonicalize(&value).as_bytes(), b"\"\xf0\x9f\x98\x80\"");
+    }
+
+    // -----------------------------------------------------------------------
+    // Display impl for every ManifestError variant
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn manifest_error_io_display() {
+        let err = ManifestError::Io {
+            path: "some/path".into(),
+            message: "file not found".into(),
+        };
+        let s = err.to_string();
+        assert!(s.contains("io error at"));
+        assert!(s.contains("some/path"));
+        assert!(s.contains("file not found"));
+    }
+
+    #[test]
+    fn manifest_error_parse_display() {
+        let err = ManifestError::Parse {
+            path: "manifest.json".into(),
+            message: "expected object".into(),
+        };
+        let s = err.to_string();
+        assert!(s.contains("parse error in"));
+        assert!(s.contains("manifest.json"));
+        assert!(s.contains("expected object"));
+    }
+
+    #[test]
+    fn manifest_error_digest_mismatch_display() {
+        let err = ManifestError::DigestMismatch {
+            path: "file.bin".into(),
+            expected: "abc".into(),
+            actual: "def".into(),
+        };
+        let s = err.to_string();
+        assert!(s.contains("digest mismatch at"));
+        assert!(s.contains("file.bin"));
+        assert!(s.contains("abc"));
+        assert!(s.contains("def"));
+    }
+
+    #[test]
+    fn manifest_error_impl_error() {
+        use std::error::Error;
+        let err = ManifestError::Io {
+            path: "p".into(),
+            message: "m".into(),
+        };
+        assert!(err.source().is_none());
+    }
+
+    // -----------------------------------------------------------------------
+    // write_jcs: Null, Bool coverage
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn jcs_writer_null_bool() {
+        let mut out = String::new();
+        super::write_jcs(&serde_json::Value::Null, &mut out);
+        assert_eq!(out, "null");
+
+        let mut out = String::new();
+        super::write_jcs(&serde_json::Value::Bool(true), &mut out);
+        assert_eq!(out, "true");
+
+        let mut out = String::new();
+        super::write_jcs(&serde_json::Value::Bool(false), &mut out);
+        assert_eq!(out, "false");
+    }
+
+    // -----------------------------------------------------------------------
+    // write_jcs_string escape coverage: \b, \f, \n, \r, \t, control chars
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn jcs_writer_escapes_all_control_forms() {
+        let cases: &[(char, &str)] = &[
+            ('\u{0008}', r#""\b""#),
+            ('\u{000C}', r#""\f""#),
+            ('\u{000A}', r#""\n""#),
+            ('\u{000D}', r#""\r""#),
+            ('\u{0009}', r#""\t""#),
+        ];
+        for (ch, expected) in cases {
+            let mut out = String::new();
+            super::write_jcs_string(&ch.to_string(), &mut out);
+            assert_eq!(out, *expected, "escape for U+{:04X}", *ch as u32);
+        }
+    }
+
+    #[test]
+    fn jcs_writer_escapes_low_control_as_hex() {
+        let mut out = String::new();
+        super::write_jcs_string("\u{01}", &mut out);
+        assert_eq!(out, r#""\u0001""#);
+    }
+
+    // -----------------------------------------------------------------------
+    // build_manifest I/O error (nonexistent path)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn build_manifest_io_error_on_missing_file() {
+        use std::path::Path;
+        let root = Path::new("/nonexistent/path");
+        let err = super::build_manifest(root).expect_err("expected Io error");
+        assert!(matches!(err, ManifestError::Io { .. }));
+    }
+
+    // -----------------------------------------------------------------------
+    // write_manifest with a temp scratch directory
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn write_manifest_creates_file_and_returns_digest() {
+        use std::fs;
+        use std::path::Path;
+        let scratch = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../cache/scratch",));
+        let test_root = scratch.join("test_write_manifest");
+        let _ = fs::remove_dir_all(&test_root);
+        fs::create_dir_all(&test_root).expect("create test root");
+
+        // Create dummy artifact files so build_manifest succeeds.
+        // We must populate the repo-relative paths that ARTIFACTS references.
+        for a in crate::normative_manifest::ARTIFACTS {
+            let full = test_root.join(a.path);
+            if let Some(parent) = full.parent() {
+                fs::create_dir_all(parent).expect("create parent dir");
+            }
+            fs::write(&full, b"dummy content").expect("write dummy artifact");
+        }
+
+        let (jcs, digest) =
+            crate::normative_manifest::write_manifest(&test_root).expect("write_manifest");
+        assert!(!jcs.is_empty());
+        assert_eq!(digest.len(), 64);
+        assert!(digest.chars().all(|c| c.is_ascii_hexdigit()));
+        let written = fs::read(test_root.join(MANIFEST_PATH)).expect("read written manifest");
+        assert_eq!(written, jcs);
+        assert_eq!(digest, super::sha256_hex(&jcs));
+
+        // Clean up.
+        let _ = fs::remove_dir_all(&test_root);
+    }
+
+    // -----------------------------------------------------------------------
+    // verify error paths via crafted manifest files
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn verify_rejects_missing_manifest() {
+        use std::path::Path;
+        let root = Path::new("/nonexistent");
+        let err = super::verify(root).expect_err("expected Io error");
+        assert!(matches!(err, ManifestError::Io { .. }));
+    }
+
+    #[test]
+    fn verify_rejects_wrong_pinned_digest() {
+        use std::fs;
+        use std::path::Path;
+        let scratch = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../cache/scratch",));
+        let test_root = scratch.join("test_verify_wrong_digest");
+        let _ = fs::remove_dir_all(&test_root);
+        fs::create_dir_all(&test_root).expect("create test root");
+        let manifest_path = test_root.join(MANIFEST_PATH);
+        if let Some(parent) = manifest_path.parent() {
+            fs::create_dir_all(parent).expect("create parent");
+        }
+        // Write garbage (not the real manifest).
+        fs::write(&manifest_path, b"garbage bytes").expect("write garbage manifest");
+
+        let err = super::verify(&test_root).expect_err("expected Io error");
+        assert!(matches!(err, ManifestError::DigestMismatch { .. }));
+        let _ = fs::remove_dir_all(&test_root);
+    }
+
+    #[test]
+    fn verify_reports_artifact_digest_mismatch() {
+        // Use the actual manifest (real bytes = real pinned digest) to get
+        // past the pinned-digest guard.  Place it in a scratch directory
+        // alongside artifact files whose content we control.  When an
+        // artifact's content differs from what the manifest records, verify
+        // returns DigestMismatch.
+        use std::fs;
+        use std::path::Path;
+        let scratch = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../cache/scratch",));
+        let test_root = scratch.join("test_verify_artifact_digest");
+        let _ = fs::remove_dir_all(&test_root);
+        fs::create_dir_all(&test_root).expect("create test root");
+
+        // Copy the real committed manifest (byte-identical) into the scratch
+        // tree so its digest equals PINNED_SPEC_CHECKSUM.
+        let real_root = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
+        let real_manifest = fs::read(real_root.join(MANIFEST_PATH)).expect("read real manifest");
+        let manifest_path = test_root.join(MANIFEST_PATH);
+        if let Some(parent) = manifest_path.parent() {
+            fs::create_dir_all(parent).expect("create parent");
+        }
+        fs::write(&manifest_path, &real_manifest).expect("write manifest copy");
+
+        // Populate artifact paths that ARTIFACTS references with dummy
+        // content (NOT matching the real artifact digests).  This guarantees
+        // every manifest entry will mismatch.
+        for a in crate::normative_manifest::ARTIFACTS {
+            let full = test_root.join(a.path);
+            if let Some(parent) = full.parent() {
+                fs::create_dir_all(parent).expect("create parent dir");
+            }
+            fs::write(&full, b"wrong content").expect("write dummy artifact");
+        }
+
+        let err = super::verify(&test_root).expect_err("expected artifact digest mismatch");
+        match err {
+            ManifestError::DigestMismatch { path, .. } => {
+                assert!(super::ARTIFACTS
+                    .iter()
+                    .any(|a| path == test_root.join(a.path)));
+            }
+            other => panic!("expected artifact digest mismatch, got {other:?}"),
+        }
+        let _ = fs::remove_dir_all(&test_root);
     }
 }

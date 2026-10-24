@@ -1100,4 +1100,127 @@ mod tests {
             .iter()
             .all(|token| matches!(token, Token::Ident(..))));
     }
+
+    #[test]
+    fn bare_sign_is_malformed_number() {
+        let err = lex_all("+").unwrap_err();
+        assert_eq!(err.code, ErrorCode::InvalidNumber);
+
+        let err = lex_all("-").unwrap_err();
+        assert_eq!(err.code, ErrorCode::InvalidNumber);
+    }
+
+    #[test]
+    fn raw_string_missing_opening_quote_after_hashes() {
+        let err = lex_all("###x").unwrap_err();
+        assert_eq!(err.code, ErrorCode::UnexpectedByte);
+    }
+
+    #[test]
+    fn raw_string_unterminated() {
+        let err = lex_all("#\"abc").unwrap_err();
+        assert_eq!(err.code, ErrorCode::UnterminatedRawString);
+    }
+
+    #[test]
+    fn token_to_value_returns_none_for_non_value_tokens() {
+        // token_to_value should return None for newline, brace, paren, etc.
+        // Every token kind produced by this input must map to None.
+        let toks = lex_all(" ;\n{ } ( ) = / /-").unwrap();
+        assert_eq!(toks.len(), 10);
+        assert!(matches!(
+            toks.as_slice(),
+            [
+                Token::Newline(_),
+                Token::Newline(_),
+                Token::OpenBrace(_),
+                Token::CloseBrace(_),
+                Token::OpenParen(_),
+                Token::CloseParen(_),
+                Token::Equals(_),
+                Token::Slash(_),
+                Token::SlashDash(_),
+                Token::Eof(_)
+            ]
+        ));
+        let any_value = toks.iter().map(Lexer::token_to_value).any(|v| v.is_some());
+        assert!(
+            !any_value,
+            "expected no token to have a value, but at least one did"
+        );
+    }
+
+    #[test]
+    fn parse_float_recognises_keyword_forms() {
+        assert_eq!(parse_float("#inf"), Some(f64::INFINITY));
+        assert_eq!(parse_float("#-inf"), Some(f64::NEG_INFINITY));
+        let nan = parse_float("#nan").unwrap();
+        assert!(nan.is_nan());
+        // Empty string is not a valid float.
+        assert_eq!(parse_float(""), None);
+    }
+
+    #[test]
+    fn lexer_rejects_no_digits_after_base_prefix() {
+        // `0x` with no following digits.
+        let err = lex_all("0x").unwrap_err();
+        assert_eq!(err.code, ErrorCode::InvalidNumber);
+    }
+
+    #[test]
+    fn lexer_rejects_kdl_v1_raw_string_prefix() {
+        let err = lex_all("r#\"x\"#").unwrap_err();
+        assert_eq!(err.code, ErrorCode::InvalidIdentifier);
+    }
+
+    #[test]
+    fn lexer_rejects_unknown_keyword() {
+        let err = lex_all("#bogus").unwrap_err();
+        assert_eq!(err.code, ErrorCode::InvalidIdentifier);
+    }
+
+    #[test]
+    fn lexer_rejects_triple_quote_raw_string() {
+        let err = lex_all("#\"\"\"x\"\"\"#").unwrap_err();
+        assert_eq!(err.code, ErrorCode::UnexpectedByte);
+    }
+
+    #[test]
+    fn lexer_accepts_number_with_exponent_sign() {
+        let toks = lex_all("1e+10 1.5e-3").unwrap();
+        assert!(matches!(toks[0], Token::Float(..)));
+        assert!(matches!(toks[1], Token::Float(..)));
+        assert!(matches!(toks[2], Token::Eof(_)));
+    }
+
+    #[test]
+    fn charge_comment_exceeds_budget() {
+        // Create a BudgetTracker with a tiny per-resource comment limit.
+        use elang_core::limits::MAX_COMMENT_BYTES_PER_RESOURCE;
+        let mut budgets = BudgetTracker::new();
+        // MAX_COMMENT_BYTES_PER_RESOURCE is the default ceiling.  To trigger
+        // comment_budget_exceeded, we inflate the comment bytes past it.
+        // This is easier to test by draining the budget ahead of time.
+        budgets
+            .comment_bytes_resource()
+            .try_add(MAX_COMMENT_BYTES_PER_RESOURCE)
+            .unwrap();
+        let mut lx = Lexer::new(b"// a comment\n", &mut budgets);
+        let err = lx.next_token().unwrap_err();
+        assert_eq!(err.code, ErrorCode::CommentBudgetExceeded);
+    }
+
+    #[test]
+    fn lexer_rejects_multiline_string() {
+        let err = lex_all("\"\"\"text\"\"\"").unwrap_err();
+        assert_eq!(err.code, ErrorCode::UnexpectedByte);
+    }
+
+    #[test]
+    fn lexer_rejects_invalid_identifier_start() {
+        // A byte that is neither whitespace, newline, nor an identifier char
+        // falls through to the ident lexer which immediately fails.
+        let err = lex_all("\0").unwrap_err();
+        assert_eq!(err.code, ErrorCode::InvalidIdentifier);
+    }
 }

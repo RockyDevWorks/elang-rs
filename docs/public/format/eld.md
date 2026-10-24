@@ -1,9 +1,18 @@
-# ELD — phoneme inventory
+# ELD — Linguistic Definition
 
-`.eld` is the phoneme inventory, written in [KDL 2.0](https://kdl.dev). It is the
-one linguistic module ELANG v0.1.0 defines. An ELD document describes a
-language's sounds as **groups** of **root phonemes**, each with a romanization,
-optional **allophones**, and optional conditional realization rules.
+`.eld` is the **internal KDL 2.0 extension** ELANG uses for linguistic
+inventories. Each linguistic resource a language definition needs — phonemes
+in v0.1.0, and other linguistic types (the lexicon, morphology, phonotactics,
+syntax, prosody, etc.) in future versions — is carried as a distinct top-level
+node within an `.eld` document.
+
+v0.1.0 defines **only the `phonemes` module**. Every other module is reserved
+for future versions and is not part of this release. The shape of those future
+modules will be defined by later specifications.
+
+Within the v0.1.0 phonemes module, an ELD document describes a language's
+sounds as **groups** of **root phonemes**, each with a romanization, optional
+**allophones**, and optional conditional realization rules.
 
 ## Example
 

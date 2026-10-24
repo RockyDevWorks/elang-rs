@@ -35,8 +35,12 @@ Linguistics/phonemes.eld   # path is configurable via the EPF manifest
   and its resources.
 - **`META-INF/integrity.kdl`** — a SHA-256 manifest over the uncompressed bytes
   of every other resource.
-- **`.eld`** — the phoneme inventory: consonants, vowels, custom groups,
-  romanizations, allophones, and conditional realization rules.
+- **`.eld`** — the ELANG Linguistic Definition extension: an internal
+  [KDL 2.0](https://kdl.dev) document that carries linguistic inventories
+  as distinct top-level modules. v0.1.0 defines only the **`phonemes`**
+  module — consonants, vowels, custom groups, romanizations, allophones,
+  and conditional realization rules. Future versions will define additional
+  modules (lexicon, morphology, phonotactics, syntax, prosody, etc.).
 
 ## Why ELANG
 

@@ -21,13 +21,9 @@
 ELANG is a portable, deterministic definition and packaging format for
 constructed languages, together with its Rust reference tooling. This repository
 is the reference implementation: the `.elang` binary container, the KDL 2.0
-`package.epf` descriptor, the KDL 2.0 `.eld` phoneme inventory, SHA-256
-integrity, canonical reproducible encoding, and a reader/writer/validator SDK
-plus a CLI.
-
-> This project implements **ELANG alone**. It does not include ELANG Studio,
-> ELANG Hub, AION, HORIZON or ARKHE. ELANG's first and only linguistic module in
-> this release is **phonemes**.
+`package.epf` descriptor, the KDL 2.0 `.eld` Linguistic Definition extension
+(v0.1.0 ships the `phonemes` module only), SHA-256 integrity, canonical
+reproducible encoding, and a reader/writer/validator SDK plus a CLI.
 
 ## Documentation
 
