@@ -347,6 +347,50 @@ fn test_body_for(crate_name: &str, test_name: &str) -> Option<String> {
     extract_body(&file, test_name)
 }
 
+/// The index just past the closing quote of the character literal
+/// starting at `start`, if there is one.
+///
+/// A character literal is a quote, one character (or an escape
+/// sequence), and a closing quote. A quote followed by an identifier
+/// that is *not* closed by a quote is a lifetime (`'a`), not a
+/// literal — treating `'a'` as a literal would skip only the `a` and
+/// leave the closing quote to open a bogus string.
+fn char_literal_end(text: &str, start: usize) -> Option<usize> {
+    let bytes = text.as_bytes();
+
+    // Escape sequence: `'\n'`, `'\\'`, `'\''`, `'\u{1F600}'`.
+    if bytes.get(start + 1) == Some(&b'\\') {
+        let mut j = start + 1;
+        while j < bytes.len() {
+            if bytes[j] == b'\\' {
+                j += 2;
+                continue;
+            }
+            if bytes[j] == b'\'' {
+                return Some(j + 1);
+            }
+            j += 1;
+        }
+        return None;
+    }
+
+    // A plain character literal: one character, then a closing quote.
+    // The character may be a multi-byte scalar, so decode it rather
+    // than assuming one byte.
+    let after_open = start + 1;
+    let character = text.get(after_open..)?.chars().next()?;
+    if character == '\'' {
+        // `''` is not a character literal.
+        return None;
+    }
+    let after_character = after_open + character.len_utf8();
+    if bytes.get(after_character) == Some(&b'\'') {
+        Some(after_character + 1)
+    } else {
+        None
+    }
+}
+
 /// Extract the contents of every Rust string literal in `text`.
 ///
 /// Comments are skipped so a diagnostic named in prose cannot be
@@ -405,21 +449,12 @@ fn string_literals(text: &str) -> Vec<String> {
         // Character literal — skip it so a quote inside cannot open a
         // bogus string. A lifetime (`'a`) is not a char literal.
         if bytes[i] == b'\'' {
-            let is_char = bytes.get(i + 1) == Some(&b'\\')
-                || bytes
-                    .get(i + 1)
-                    .is_some_and(|c| !crate::meta_tests::is_ident_byte(*c));
-            if is_char {
-                let mut j = i + 1;
-                while j < bytes.len() && bytes[j] != b'\'' {
-                    if bytes[j] == b'\\' {
-                        j += 1;
-                    }
-                    j += 1;
-                }
-                i = (j + 1).min(bytes.len());
+            if let Some(end) = char_literal_end(text, i) {
+                i = end;
                 continue;
             }
+            // Not a character literal — a lifetime (`'a`). Skip the
+            // quote and let the identifier be scanned as code.
             i += 1;
             continue;
         }
@@ -556,21 +591,12 @@ fn assertion_arg_spans(text: &str) -> Vec<(usize, usize)> {
         // Skip character literals so a quote inside cannot open a
         // bogus string. A lifetime (`'a`) is not a char literal.
         if bytes[i] == b'\'' {
-            let is_char = bytes.get(i + 1) == Some(&b'\\')
-                || bytes
-                    .get(i + 1)
-                    .is_some_and(|c| !crate::meta_tests::is_ident_byte(*c));
-            if is_char {
-                let mut j = i + 1;
-                while j < bytes.len() && bytes[j] != b'\'' {
-                    if bytes[j] == b'\\' {
-                        j += 1;
-                    }
-                    j += 1;
-                }
-                i = (j + 1).min(bytes.len());
+            if let Some(end) = char_literal_end(text, i) {
+                i = end;
                 continue;
             }
+            // Not a character literal — a lifetime (`'a`). Skip the
+            // quote and let the identifier be scanned as code.
             i += 1;
             continue;
         }
@@ -669,21 +695,12 @@ fn matching_paren(text: &str, open: usize) -> Option<usize> {
             continue;
         }
         if bytes[i] == b'\'' {
-            let is_char = bytes.get(i + 1) == Some(&b'\\')
-                || bytes
-                    .get(i + 1)
-                    .is_some_and(|c| !crate::meta_tests::is_ident_byte(*c));
-            if is_char {
-                let mut j = i + 1;
-                while j < bytes.len() && bytes[j] != b'\'' {
-                    if bytes[j] == b'\\' {
-                        j += 1;
-                    }
-                    j += 1;
-                }
-                i = (j + 1).min(bytes.len());
+            if let Some(end) = char_literal_end(text, i) {
+                i = end;
                 continue;
             }
+            // Not a character literal — a lifetime (`'a`). Skip the
+            // quote and let the identifier be scanned as code.
             i += 1;
             continue;
         }
@@ -1120,6 +1137,49 @@ fn string_literal_extraction_ignores_comments_and_char_literals() {
         found.iter().cloned().collect::<Vec<_>>(),
         vec!["WHEN_BAD_VALUE".to_string()],
         "only the real asserted literal may count as an asserted diagnostic"
+    );
+}
+
+#[test]
+fn character_literals_are_not_mistaken_for_lifetimes() {
+    // `'a'` is a character literal, not a lifetime. The scanner must
+    // skip the whole literal — closing quote included — or the quote
+    // opens a bogus string and the diagnostic that follows is never
+    // found.
+    let body = r#"
+        let letter = 'a';
+        assert_eq!(e.code(), "WHEN_BAD_VALUE");
+    "#;
+    let found = diagnostics_in(body);
+    assert_eq!(
+        found.iter().cloned().collect::<Vec<_>>(),
+        vec!["WHEN_BAD_VALUE".to_string()],
+        "a character literal must not hide the diagnostic that follows it"
+    );
+
+    // An escape sequence is skipped as a unit.
+    let body = r#"
+        let newline = '\n';
+        assert_eq!(e.code(), "WHEN_GROUP_ARITY");
+    "#;
+    let found = diagnostics_in(body);
+    assert_eq!(
+        found.iter().cloned().collect::<Vec<_>>(),
+        vec!["WHEN_GROUP_ARITY".to_string()],
+        "an escape sequence must not hide the diagnostic that follows it"
+    );
+
+    // A genuine lifetime is not a literal and must not swallow the
+    // text that follows it.
+    let body = r#"
+        fn borrow<'a>(value: &'a str) -> &'a str { value }
+        assert_eq!(e.code(), "WHEN_BAD_VALUE");
+    "#;
+    let found = diagnostics_in(body);
+    assert_eq!(
+        found.iter().cloned().collect::<Vec<_>>(),
+        vec!["WHEN_BAD_VALUE".to_string()],
+        "a lifetime must not hide the diagnostic that follows it"
     );
 }
 
