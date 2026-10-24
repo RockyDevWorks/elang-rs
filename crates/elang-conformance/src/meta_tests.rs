@@ -64,10 +64,13 @@ fn workspace_root() -> Option<PathBuf> {
 /// `test`. The attribute run immediately above the `fn` is scanned
 /// backwards, skipping whitespace and any other `#[...]` attributes in
 /// between (for example `#[test]` followed by `#[ignore = "..."]`).
+/// Comments and literals are masked first so their contents cannot be
+/// mistaken for declarations or attributes.
 fn collect_fn_names(file: &Path) -> Vec<String> {
     let Ok(text) = std::fs::read_to_string(file) else {
         return Vec::new();
     };
+    let text = mask_non_code(&text);
     let bytes = text.as_bytes();
     let mut names = Vec::new();
     let mut i = 0usize;
@@ -116,6 +119,80 @@ fn collect_fn_names(file: &Path) -> Vec<String> {
     names
 }
 
+/// Replace Rust comments and literals with spaces, preserving byte offsets
+/// and newlines. Recognise literals so comment markers inside them cannot
+/// hide real code; block comments may nest.
+fn mask_non_code(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut masked = bytes.to_vec();
+    let mut i = 0;
+    while i < bytes.len() {
+        let start = i;
+        if bytes[i..].starts_with(b"//") {
+            while i < bytes.len() && bytes[i] != b'\n' {
+                i += 1;
+            }
+        } else if bytes[i..].starts_with(b"/*") {
+            i += 2;
+            let mut depth = 1;
+            while i < bytes.len() && depth > 0 {
+                if bytes[i..].starts_with(b"/*") {
+                    depth += 1;
+                    i += 2;
+                } else if bytes[i..].starts_with(b"*/") {
+                    depth -= 1;
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+        } else if bytes[i] == b'r' {
+            let mut quote = i + 1;
+            while bytes.get(quote) == Some(&b'#') {
+                quote += 1;
+            }
+            if bytes.get(quote) != Some(&b'"') {
+                i += 1;
+                continue;
+            }
+            let terminator = format!("\"{}", "#".repeat(quote - i - 1));
+            i = text[quote + 1..]
+                .find(&terminator)
+                .map_or(bytes.len(), |end| quote + 1 + end + terminator.len());
+        } else {
+            // Distinguish character literals from lifetimes such as `'a`.
+            let is_char = bytes[i] == b'\''
+                && (bytes.get(i + 1) == Some(&b'\\')
+                    || text[i + 1..]
+                        .chars()
+                        .next()
+                        .is_some_and(|c| bytes.get(i + 1 + c.len_utf8()) == Some(&b'\'')));
+            if bytes[i] != b'"' && !is_char {
+                i += 1;
+                continue;
+            }
+            let quote = bytes[i];
+            i += 1;
+            while i < bytes.len() {
+                if bytes[i] == b'\\' {
+                    i = (i + 2).min(bytes.len());
+                } else if bytes[i] == quote {
+                    i += 1;
+                    break;
+                } else {
+                    i += 1;
+                }
+            }
+        }
+        for byte in &mut masked[start..i] {
+            if !matches!(*byte, b'\n' | b'\r') {
+                *byte = b' ';
+            }
+        }
+    }
+    String::from_utf8(masked).expect("masking complete comments and literals preserves UTF-8")
+}
+
 /// What the attribute run above a function says about it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TestAttr {
@@ -132,14 +209,9 @@ enum TestAttr {
 /// starts at `fn_start`.
 ///
 /// Scans backwards from the `fn` keyword over the contiguous run of
-/// `#[...]` attributes and `//` doc comments above it, and classifies
-/// the run.
-///
-/// The doc-comment skip matters: this workspace writes its test
-/// docstrings *between* the attribute and the function
-/// (`#[test]` / ``/// `accepts nfc path`.`` / `fn accepts_nfc_path()`),
-/// so a scan that stops at the first non-`]` byte above the `fn` would
-/// miss most of the workspace's tests.
+/// `#[...]` attributes above it, and classifies the run. Comments have
+/// already been masked, including docstrings between an attribute and
+/// its function.
 ///
 /// `#[ignore]` matters for a different reason: an ignored test never
 /// runs, so naming one in a coverage row would claim coverage that is
@@ -149,8 +221,7 @@ enum TestAttr {
 fn classify_attributes(text: &str, fn_start: usize) -> TestAttr {
     let bytes = text.as_bytes();
     // `cursor` points just below the next thing to inspect. We walk it
-    // backwards over whitespace, an optional `async` keyword, doc
-    // comments and attributes.
+    // backwards over whitespace, an optional `async` keyword and attributes.
     let mut cursor = fn_start;
     let mut has_test = false;
     let mut has_ignore = false;
@@ -173,15 +244,6 @@ fn classify_attributes(text: &str, fn_start: usize) -> TestAttr {
         }
         if cursor == 0 {
             break;
-        }
-
-        // A `//` or `///` comment line above the function? Skip the
-        // whole line and keep looking.
-        let line_start = line_start_of(bytes, cursor - 1);
-        let line = text[line_start..cursor].trim_start();
-        if line.starts_with("//") {
-            cursor = line_start;
-            continue;
         }
 
         // The next thing above must be the closing `]` of an attribute.
@@ -229,15 +291,6 @@ fn classify_attributes(text: &str, fn_start: usize) -> TestAttr {
     } else {
         TestAttr::Test
     }
-}
-
-/// The index of the first byte of the line containing `pos`.
-fn line_start_of(bytes: &[u8], pos: usize) -> usize {
-    let mut i = pos;
-    while i > 0 && bytes[i - 1] != b'\n' {
-        i -= 1;
-    }
-    i
 }
 
 /// Whether the byte can appear inside a Rust identifier.
@@ -343,14 +396,34 @@ fn the_scanner_rejects_non_test_helpers() {
     let file = dir.join("probe.rs");
     std::fs::write(
         &file,
-        r#"
+        r##"
+const COMMENT_MARKERS: &str = "/* // \" escaped quote";
+const RAW_COMMENT_MARKERS: &str = r#"/* // " quote"#;
+const QUOTE: char = '"';
+fn lifetime_helper<'a>() {}
+
 fn helper_without_attribute() {}
 
 #[allow(dead_code)]
 fn helper_with_other_attribute() {}
 
 #[test]
+// fn phantom_line_test() {}
 fn a_real_test() {}
+
+#[test]
+/* fn phantom_block_test() {} */
+fn a_real_test_after_block_comment() {}
+
+#[test]
+/* outer comment
+   /* nested comment */
+   fn phantom_nested_block_test() {}
+*/
+fn a_real_test_after_nested_comment() {}
+
+/* #[test] */
+fn helper_after_commented_attribute() {}
 
 #[test]
 #[ignore = "provenance probe"]
@@ -362,7 +435,7 @@ fn an_ignored_test_reversed_order() {}
 
 #[tokio::test]
 async fn an_async_test() {}
-"#,
+"##,
     )
     .expect("write probe file");
 
@@ -373,6 +446,26 @@ async fn an_async_test() {}
         names.contains(&"a_real_test".to_string()),
         "a `#[test]` fn must be collected: {names:?}"
     );
+    for name in [
+        "a_real_test_after_block_comment",
+        "a_real_test_after_nested_comment",
+    ] {
+        assert!(
+            names.iter().any(|n| n == name),
+            "a real test after a comment must be collected: {name}: {names:?}"
+        );
+    }
+    for name in [
+        "phantom_line_test",
+        "phantom_block_test",
+        "phantom_nested_block_test",
+        "helper_after_commented_attribute",
+    ] {
+        assert!(
+            !names.iter().any(|n| n == name),
+            "comment contents must not fabricate a test: {name}: {names:?}"
+        );
+    }
     assert!(
         !names.contains(&"an_ignored_test".to_string()),
         "an `#[ignore]`d test never runs and must NOT be collected: {names:?}"

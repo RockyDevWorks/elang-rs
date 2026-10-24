@@ -34,8 +34,8 @@ use crate::corpus::VectorFixture;
 use elang_core::ids::IpaIdentifierText;
 use elang_core::model::when::{Condition, Predicate, SyllablePosition, WordPosition};
 use elang_eld::canon::key::{
-    atomic_key, composite_key, condition_key, RANK_GROUP, RANK_NEXT_PHONEME, RANK_OR,
-    RANK_PREVIOUS_PHONEME, RANK_SYLLABLE_POSITION, RANK_WORD_POSITION,
+    atomic_key, condition_key, RANK_GROUP, RANK_NEXT_PHONEME, RANK_OR, RANK_PREVIOUS_PHONEME,
+    RANK_SYLLABLE_POSITION, RANK_WORD_POSITION,
 };
 use elang_eld::canon::key::{syllable_position_value, word_position_value};
 
@@ -111,18 +111,20 @@ pub fn sorting_key_fixtures() -> Vec<VectorFixture> {
         "condition/atomic-key/next-phoneme-a",
     ));
 
-    // A composite key: `group { word-position "initial"  previous-phoneme "s" }`.
-    // Children are sorted by key before the parent's key is built.
-    let child_a = atomic_key(RANK_WORD_POSITION, "initial");
-    let child_b = atomic_key(RANK_PREVIOUS_PHONEME, "s");
-    let composite_actual = composite_key(RANK_GROUP, &[child_a.clone(), child_b.clone()]);
-    let composite_expected = expected_composite(RANK_GROUP, &[child_a, child_b]);
+    // Author rank 2 before rank 0 so this pins recursive child sorting too.
+    let group_condition = Condition::Group(vec![prev("s"), wp(WordPosition::Initial)]);
     fixtures.push(VectorFixture {
         id: "condition/composite-key/group-of-two".to_string(),
         description: "pinned composite sorting key for a `group` of two children",
         requirements: &["REQ-CANON-005"],
-        actual: composite_actual,
-        expected: composite_expected,
+        actual: condition_key(&group_condition),
+        expected: vec![
+            4, 0, 2, // group rank and u16BE child count
+            0, 0, 0, 10, // u32BE length of word-position key
+            0, 0, 7, b'i', b'n', b'i', b't', b'i', b'a', b'l', 0, 0, 0,
+            4, // u32BE length of previous-phoneme key
+            2, 0, 1, b's',
+        ],
     });
 
     // An `or` with two operands, also sorted. The operands are authored in
