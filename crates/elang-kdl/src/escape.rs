@@ -417,4 +417,65 @@ mod tests {
         assert_eq!(encode_string("hello world"), r#""hello world""#);
         assert_eq!(encode_string("\u{1F600}"), "\"\u{1F600}\"");
     }
+
+    // -----------------------------------------------------------------------
+    // decode_string defensive error paths (bounds, UTF-8, buffer sizing)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn rejects_start_after_end() {
+        // `content_start > content_end` is a malformed call.
+        let input = b"\"abc\"";
+        let mut out = [0u8; 8];
+        let err = decode_string(input, 5, 1, 6, &mut out).unwrap_err();
+        assert_eq!(err.code, ErrorCode::UnterminatedString);
+    }
+
+    #[test]
+    fn rejects_end_past_input() {
+        // `content_end` beyond the input slice is a malformed call.
+        let input = b"\"abc\"";
+        let mut out = [0u8; 8];
+        let err = decode_string(input, 1, 99, 100, &mut out).unwrap_err();
+        assert_eq!(err.code, ErrorCode::UnterminatedString);
+    }
+
+    #[test]
+    fn rejects_invalid_utf8_body() {
+        // The body itself contains a byte that is not valid UTF-8.
+        let input = b"\"\xFF\xFF\"";
+        let mut out = [0u8; 4];
+        let err = decode_string(input, 1, 3, 4, &mut out).unwrap_err();
+        assert_eq!(err.code, ErrorCode::InvalidUtf8);
+    }
+
+    #[test]
+    fn rejects_undersized_buffer() {
+        // Caller-provided buffer smaller than the encoded body is an internal
+        // programming error and must be surfaced as such.
+        let input = b"\"hello\"";
+        let mut out = [0u8; 3];
+        let err = decode_string(input, 1, 6, 7, &mut out).unwrap_err();
+        assert_eq!(err.code, ErrorCode::StringTooLong);
+    }
+
+    #[test]
+    fn rejects_decoded_string_over_the_limit() {
+        // A body of plain bytes decodes one-for-one; once the decoded length
+        // passes MAX_DECODED_STRING_BYTES the decoder must reject it even
+        // though the caller provided a large enough buffer.
+        use elang_core::limits::MAX_DECODED_STRING_BYTES;
+        let body: Vec<u8> = vec![b'a'; MAX_DECODED_STRING_BYTES + 1];
+        let mut input = Vec::with_capacity(body.len() + 2);
+        input.push(b'"');
+        input.extend_from_slice(&body);
+        input.push(b'"');
+        let mut out = vec![0u8; body.len()];
+        let content_start = 1u32;
+        let content_end = (body.len() + 1) as u32;
+        let encoded_end = (body.len() + 2) as u32;
+        let err =
+            decode_string(&input, content_start, content_end, encoded_end, &mut out).unwrap_err();
+        assert_eq!(err.code, ErrorCode::StringTooLong);
+    }
 }

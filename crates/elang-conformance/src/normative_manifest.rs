@@ -391,12 +391,9 @@ pub fn build_manifest(release_root: &Path) -> Result<(serde_json::Value, Vec<u8>
 pub fn write_manifest(release_root: &Path) -> Result<(Vec<u8>, String), ManifestError> {
     let (_value, jcs) = build_manifest(release_root)?;
     let manifest_path = release_root.join(MANIFEST_PATH);
-    if let Some(parent) = manifest_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| ManifestError::Io {
-            path: parent.to_path_buf(),
-            message: e.to_string(),
-        })?;
-    }
+    // `build_manifest` above already read every artifact, including the ones
+    // under `specs/registry/` (the manifest's own directory), so the parent
+    // directory is guaranteed to exist and `create_dir_all` would be a no-op.
     fs::write(&manifest_path, &jcs).map_err(|e| ManifestError::Io {
         path: manifest_path.clone(),
         message: e.to_string(),
@@ -429,11 +426,22 @@ pub fn verify(release_root: &Path) -> Result<(), ManifestError> {
             actual: committed_digest,
         });
     }
+    verify_manifest_bytes(&committed, release_root)
+}
+
+/// Verify the parse/re-canonicalization and per-artifact steps of [`verify`]
+/// against a caller-supplied manifest byte slice.
+///
+/// Splitting out the digest gate keeps [`verify`]'s public contract intact
+/// (bytes must hash to `PINNED_SPEC_CHECKSUM`) while letting the internal
+/// validation steps be exercised with crafted manifests.
+fn verify_manifest_bytes(committed: &[u8], release_root: &Path) -> Result<(), ManifestError> {
+    let manifest_path = release_root.join(MANIFEST_PATH);
 
     // Parse and re-canonicalize the committed manifest; the result must be
     // byte-identical to the committed bytes.
     let value: serde_json::Value =
-        serde_json::from_slice(&committed).map_err(|e| ManifestError::Parse {
+        serde_json::from_slice(committed).map_err(|e| ManifestError::Parse {
             path: manifest_path.clone(),
             message: e.to_string(),
         })?;
@@ -752,6 +760,169 @@ mod tests {
             }
             other => panic!("expected artifact digest mismatch, got {other:?}"),
         }
+        let _ = fs::remove_dir_all(&test_root);
+    }
+
+    // -----------------------------------------------------------------------
+    // write_manifest I/O error paths (create_dir_all / fs::write failures)
+    // -----------------------------------------------------------------------
+
+    /// Populate every artifact referenced by `ARTIFACTS` inside `test_root`
+    /// with dummy content so `build_manifest` can read them all.
+    fn populate_artifacts(test_root: &std::path::Path) {
+        use std::fs;
+        for a in crate::normative_manifest::ARTIFACTS {
+            let full = test_root.join(a.path);
+            if let Some(parent) = full.parent() {
+                fs::create_dir_all(parent).expect("create parent dir");
+            }
+            fs::write(&full, b"dummy content").expect("write dummy artifact");
+        }
+    }
+
+    fn scratch_root(name: &str) -> std::path::PathBuf {
+        use std::path::Path;
+        let scratch = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../cache/scratch",));
+        let root = scratch.join(name);
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("create test root");
+        root
+    }
+
+    #[test]
+    fn write_manifest_fails_when_path_is_a_directory() {
+        use std::fs;
+        let test_root = scratch_root("test_write_manifest_path_is_dir");
+        populate_artifacts(&test_root);
+
+        // `specs/registry/normative-manifest.json` exists as a directory, so
+        // `fs::write` fails.
+        let dir = test_root.join(MANIFEST_PATH);
+        fs::create_dir_all(&dir).expect("create manifest dir");
+
+        let err =
+            crate::normative_manifest::write_manifest(&test_root).expect_err("expected Io error");
+        assert!(matches!(err, ManifestError::Io { .. }));
+
+        let _ = fs::remove_dir_all(&test_root);
+    }
+
+    // -----------------------------------------------------------------------
+    // verify_manifest_bytes error paths (post-digest validation steps)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn verify_manifest_bytes_rejects_invalid_json() {
+        let test_root = scratch_root("test_verify_bytes_invalid_json");
+        // No artifacts needed: parse fails before the artifact loop.
+        let err = super::verify_manifest_bytes(b"not json at all", &test_root)
+            .expect_err("expected Parse error");
+        assert!(matches!(err, ManifestError::Parse { .. }));
+        let _ = std::fs::remove_dir_all(&test_root);
+    }
+
+    #[test]
+    fn verify_manifest_bytes_rejects_non_canonical_bytes() {
+        let test_root = scratch_root("test_verify_bytes_non_canonical");
+        // White-space-laden JSON parses but is not JCS-canonical, so the
+        // re-canonicalization byte comparison fails.
+        let bytes = b"{ \"artifacts\": [] }";
+        let err =
+            super::verify_manifest_bytes(bytes, &test_root).expect_err("expected DigestMismatch");
+        assert!(matches!(err, ManifestError::DigestMismatch { .. }));
+        let _ = std::fs::remove_dir_all(&test_root);
+    }
+
+    #[test]
+    fn verify_manifest_bytes_rejects_missing_artifacts_array() {
+        let test_root = scratch_root("test_verify_bytes_missing_artifacts");
+        let err = super::verify_manifest_bytes(b"{\"schema\":\"x\"}", &test_root)
+            .expect_err("expected Parse error");
+        assert!(matches!(err, ManifestError::Parse { .. }));
+        let _ = std::fs::remove_dir_all(&test_root);
+    }
+
+    #[test]
+    fn verify_manifest_bytes_io_error_on_missing_artifact() {
+        use std::fs;
+        let test_root = scratch_root("test_verify_bytes_missing_artifact");
+        // Populate all but the first artifact; the disk_entries loop hits Io.
+        let missing = crate::normative_manifest::ARTIFACTS[0].path;
+        for a in crate::normative_manifest::ARTIFACTS.iter().skip(1) {
+            let full = test_root.join(a.path);
+            if let Some(parent) = full.parent() {
+                fs::create_dir_all(parent).expect("create parent dir");
+            }
+            fs::write(&full, b"dummy content").expect("write dummy artifact");
+        }
+        assert!(
+            !test_root.join(missing).exists(),
+            "missing artifact must stay absent"
+        );
+
+        let err = super::verify_manifest_bytes(b"{\"artifacts\":[]}", &test_root)
+            .expect_err("expected Io error");
+        assert!(matches!(err, ManifestError::Io { .. }));
+        let _ = fs::remove_dir_all(&test_root);
+    }
+
+    #[test]
+    fn verify_manifest_bytes_rejects_missing_entry_id() {
+        let test_root = scratch_root("test_verify_bytes_missing_id");
+        populate_artifacts(&test_root);
+        let bytes = b"{\"artifacts\":[{\"path\":\"p\",\"sha256\":\"s\"}]}";
+        let err =
+            super::verify_manifest_bytes(bytes, &test_root).expect_err("expected Parse error");
+        assert!(matches!(err, ManifestError::Parse { .. }));
+        let _ = std::fs::remove_dir_all(&test_root);
+    }
+
+    #[test]
+    fn verify_manifest_bytes_rejects_missing_entry_path() {
+        let test_root = scratch_root("test_verify_bytes_missing_path");
+        populate_artifacts(&test_root);
+        let bytes = b"{\"artifacts\":[{\"id\":\"OA-1\",\"sha256\":\"s\"}]}";
+        let err =
+            super::verify_manifest_bytes(bytes, &test_root).expect_err("expected Parse error");
+        assert!(matches!(err, ManifestError::Parse { .. }));
+        let _ = std::fs::remove_dir_all(&test_root);
+    }
+
+    #[test]
+    fn verify_manifest_bytes_rejects_missing_entry_sha256() {
+        let test_root = scratch_root("test_verify_bytes_missing_sha");
+        populate_artifacts(&test_root);
+        let bytes = b"{\"artifacts\":[{\"id\":\"OA-1\",\"path\":\"p\"}]}";
+        let err =
+            super::verify_manifest_bytes(bytes, &test_root).expect_err("expected Parse error");
+        assert!(matches!(err, ManifestError::Parse { .. }));
+        let _ = std::fs::remove_dir_all(&test_root);
+    }
+
+    #[test]
+    fn verify_manifest_bytes_rejects_unknown_artifact_entry() {
+        let test_root = scratch_root("test_verify_bytes_unknown_entry");
+        populate_artifacts(&test_root);
+        // Valid canonical manifest referencing an artifact ARTIFACTS has no
+        // knowledge of: the per-entry lookup must fail.
+        let bytes =
+            b"{\"artifacts\":[{\"id\":\"OA-99\",\"path\":\"ghost.bin\",\"sha256\":\"aa\"}]}";
+        let err =
+            super::verify_manifest_bytes(bytes, &test_root).expect_err("expected Parse error");
+        assert!(matches!(err, ManifestError::Parse { .. }));
+        let _ = std::fs::remove_dir_all(&test_root);
+    }
+
+    #[test]
+    fn verify_manifest_bytes_rejects_leftover_artifacts() {
+        use std::fs;
+        let test_root = scratch_root("test_verify_bytes_leftover");
+        // All ARTIFACTS files exist on disk, but the manifest lists none of
+        // them — the post-loop leftover branch fires.
+        populate_artifacts(&test_root);
+        let err = super::verify_manifest_bytes(b"{\"artifacts\":[]}", &test_root)
+            .expect_err("expected Parse error");
+        assert!(matches!(err, ManifestError::Parse { .. }));
         let _ = fs::remove_dir_all(&test_root);
     }
 }

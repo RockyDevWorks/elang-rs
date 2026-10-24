@@ -489,13 +489,10 @@ impl<'a> Parser<'a> {
         // Look for `name = value` first.
         let first = self.bump()?;
         match &first {
-            Token::Ident(_, _) | Token::Str(_, _) | Token::RawStr(_, _) => {
+            Token::Ident(_, t) | Token::Str(_, t) | Token::RawStr(_, t) => {
                 if matches!(self.peek()?, Token::Equals(_)) {
                     let key_span = first.span();
-                    let key = match &first {
-                        Token::Ident(_, t) | Token::Str(_, t) | Token::RawStr(_, t) => t.clone(),
-                        _ => unreachable!(),
-                    };
+                    let key = t.clone();
                     if key.len() > elang_core::limits::MAX_NAME_BYTES {
                         return Err(ParseError::at(
                             ErrorCode::NameTooLong,
@@ -650,5 +647,20 @@ manifest {
         let metadata = d.nodes.iter().find(|n| n.name() == "metadata").unwrap();
         let m_children = metadata.children().unwrap();
         assert_eq!(m_children.len(), 3);
+    }
+
+    #[test]
+    fn slashdash_without_children_block_is_rejected() {
+        // `/-x` in children position must introduce a children block; a
+        // slashdash followed by a plain entry is a schema error.
+        let err = parse(b"foo {a} /-x").unwrap_err();
+        assert_eq!(err.code, ErrorCode::UnexpectedByte);
+    }
+
+    #[test]
+    fn equals_must_be_followed_by_value() {
+        // `x =` must be followed by a value; `{` is not one.
+        let err = parse(b"foo x = {").unwrap_err();
+        assert_eq!(err.code, ErrorCode::UnexpectedByte);
     }
 }

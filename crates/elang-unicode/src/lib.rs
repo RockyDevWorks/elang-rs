@@ -203,4 +203,11 @@ mod tests {
         // confirm a normal assigned letter is not treated as forbidden.
         assert!(check_scalar('A').is_ok());
     }
+
+    #[test]
+    fn ccc_re_export_delegates() {
+        // The crate-level `ccc` re-export delegates to `nfc::ccc`.
+        assert_eq!(ccc('\u{0301}'), 230);
+        assert_eq!(ccc('a'), 0);
+    }
 }

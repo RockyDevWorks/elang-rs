@@ -428,4 +428,46 @@ mod tests {
         let idx = i.rem_euclid(letters.chars().count());
         letters.chars().nth(idx).unwrap_or('a').to_string()
     }
+
+    // -----------------------------------------------------------------------
+    // Accessor-coverage tests (Allophone / RootPhoneme / Group / Inventory)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn allophone_accessors_return_expected_values() {
+        let a = Allophone::new(ipa("ɾ"), None, None);
+        assert_eq!(a.ipa().as_str(), "ɾ");
+        assert!(a.roman().is_none());
+        assert!(a.when().is_none());
+    }
+
+    #[test]
+    fn root_phoneme_accessors_return_expected_values() {
+        let w = WhenCondition::new(vec![Condition::predicate(Predicate::WordPosition(
+            WordPosition::Initial,
+        ))])
+        .unwrap();
+        let r = RootPhoneme::new(
+            ipa("t"),
+            roman("t"),
+            Some(w.clone()),
+            vec![Allophone::new(ipa("ɾ"), None, None)],
+        )
+        .unwrap();
+        assert_eq!(r.ipa().as_str(), "t");
+        assert_eq!(r.roman().as_str(), "t");
+        assert_eq!(r.when(), Some(&w));
+        assert_eq!(r.allophones().len(), 1);
+    }
+
+    #[test]
+    fn group_accessors_return_expected_values() {
+        let g = Group::new(
+            GroupKind::Consonants,
+            vec![RootPhoneme::new(ipa("t"), roman("t"), None, vec![]).unwrap()],
+        )
+        .unwrap();
+        assert_eq!(g.kind().name(), "consonants");
+        assert_eq!(g.roots().len(), 1);
+    }
 }
