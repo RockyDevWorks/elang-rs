@@ -40,7 +40,7 @@
 | REQ-PKG-005 | `specs/registry/resource-policy-v0.1.0.md`, ADR 0006 (T0121) | OA-15 ratified | Done (artifact) |
 | REQ-UNICODE-001..004 | `elang-unicode` (NFC + General_Category + noncharacter) | `elang-unicode` unit tests + NFC conformance (20,171 rows); `elang-repertoire::unicode` adapter tests | Done — Unicode **18.0.0** from pinned UCD (ADR 0007) |
 | T0116 (Unicode reference data) | pinned UCD 18.0.0 (`specs/sources/ucd-18.0.0/`), generated `gc_tables.rs`/`nfc_tables.rs` | official `NormalizationTest.txt` 18.0.0 passes | Done (OA-13 ratified) |
-| REQ-IPA-001..014 (inventory + parser) | `elang-repertoire::repertoire`, `::ipa`; `specs/schema/ipa-v1.json` | `repertoire::tests::*`, `ipa::tests::*`, `chart_crosscheck.rs` (30 tests pass); pinned JCS digest asserted; 27 combining diacritics + 9 spacing modifiers row-by-row reviewed against UNITIPA 2020 chart 2026-10-23 | Done (OA-1 / OA-4 Ratified; ADR 0008); OA-14 also ratified in Phase 11, so no artifact remains open |
+| REQ-IPA-001..014 (inventory + parser) | `elang-repertoire::repertoire`, `::ipa`; `specs/schema/ipa-v1.json` | `repertoire::tests::*`, `ipa::tests::*`, `chart_crosscheck.rs` (30 tests pass); pinned JCS digest asserted; 27 combining diacritics + 9 spacing modifiers row-by-row reviewed against UNITIPA 2020 chart 2026-10-23 | Done (OA-1 / OA-4 Ratified; ADR 0008); OA-14 also ratified in Phase 11, so no content artifact remains open; OA-17 freeze/tag work (T0123) remains open |
 | REQ-IPA (digest) | `PINNED_JCS_SHA256` + `canonical_jcs_sha256` | `pinned_digest_matches`, `jcs_digest_is_stable_and_nonempty` | Done |
 
 > "Done (artifact)" means the normative document exists and is ratified; the

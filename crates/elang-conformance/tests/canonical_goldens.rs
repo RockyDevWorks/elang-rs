@@ -252,8 +252,9 @@ fn every_golden_uses_the_canonical_layout() {
         assert!(!text.contains('\r'), "case `{}`", golden.id);
         assert!(!text.contains("\n\n"), "case `{}`", golden.id);
         for line in text.lines() {
+            let leading_spaces = line.bytes().take_while(|&byte| byte == b' ').count();
             assert!(
-                line.starts_with("    ") || !line.starts_with(' '),
+                leading_spaces.is_multiple_of(4),
                 "case `{}`: indentation must be a multiple of four spaces",
                 golden.id
             );

@@ -189,9 +189,9 @@ fn roots_are_sorted_by_authored_ipa_utf8_bytes() {
 
 #[test]
 fn ordering_is_bytewise_not_codepoint_count() {
-    // `tʰ` is "t" + U+02B0 (3 bytes, first byte 0x74) and `ɾ` is U+027E
-    // (3 bytes, first byte 0xE6). Bytewise order puts `tʰ` first even
-    // though both spellings have the same number of codepoints.
+    // `tʰ` is "t" + U+02B0 (74 CA B0; 3 bytes, 2 codepoints) and `ɾ` is
+    // U+027E (C9 BE; 2 bytes, 1 codepoint). Bytewise order puts `tʰ` first
+    // (0x74 < 0xC9 at index 0), despite its greater codepoint count.
     let source = r#"phonemes {
     consonants {
         phoneme "t" {
@@ -235,11 +235,12 @@ fn ordering_uses_authored_bytes_not_the_tie_bar_folded_key() {
     // ADR 0009 E-1: ordering uses the **authored** NFC bytes, never the
     // tie-bar-folded comparison key.
     //
-    // `t͜ʃ` (lower tie bar) is authored as 74 CC 81 C8 83 and `t͡a` (upper
-    // tie bar) as 74 CD 81 61. Authored bytewise order puts `t͜ʃ` first
-    // (0xCC < 0xCD at index 1). Folding the lower bar onto the upper one
-    // would compare 74 CD 81 C8 83 against 74 CD 81 61 and reverse the
-    // order. The two identifiers tie *different* units, so they are not
+    // `t͜ʃ` (lower tie bar U+035C) is authored as 74 CD 9C CA 83 (5 bytes,
+    // 3 codepoints) and `t͡a` (upper tie bar U+0361) as 74 CD A1 61 (4 bytes,
+    // 3 codepoints). Authored bytewise order puts `t͜ʃ` first (0x9C < 0xA1
+    // at index 2). Folding the lower bar onto the upper one would compare
+    // 74 CD A1 CA 83 against 74 CD A1 61 and reverse the order (0xCA > 0x61
+    // at index 3). The two identifiers tie *different* units, so they are not
     // tie-bar equivalents and both may be declared.
     let source = r#"phonemes {
     consonants {
