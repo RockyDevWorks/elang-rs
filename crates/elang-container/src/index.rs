@@ -85,6 +85,55 @@ pub struct IndexEntry {
 }
 
 impl IndexEntry {
+    /// Build an index entry for a writer (T1305/T1306).
+    ///
+    /// This is the symmetric constructor to [`IndexEntry`] as produced by
+    /// [`Index::decode`]: every invariant the decoder checks (legal compression
+    /// code, path fits the u16/u32 length fields) is also enforced here, so a
+    /// decoded entry and a freshly-built entry have the same observable
+    /// shape. The path is validated for UTF-8, NFC, and the §3.4 path rules
+    /// via [`elang_core::ResourcePath::new`].
+    ///
+    /// # Errors
+    ///
+    /// - `INDEX_BAD_VERSION` — `compression` is not the Zstd code
+    ///   ([`COMPRESSION_ZSTD`]).
+    /// - `INDEX_ENTRY_MALFORMED` — the path does not fit the u16 length field.
+    /// - `PATH_NOT_UTF8` / `PATH_NOT_NFC` / `PATH_ABSOLUTE` / `PATH_EMPTY_SEGMENT`
+    ///   / `PATH_NUL` / `PATH_BACKSLASH` / `PATH_TOO_LONG` — from
+    ///   `ResourcePath::new` after the writer's UTF-8 / NFC pre-check.
+    pub fn new(
+        path: &str,
+        frame_offset: u64,
+        compressed_size: u64,
+        uncompressed_size: u64,
+        compression: u8,
+    ) -> Result<Self> {
+        if compression != COMPRESSION_ZSTD {
+            return Err(index_err(
+                "INDEX_BAD_VERSION",
+                "only Zstd (compression code 1) is permitted in v0.1.0",
+            ));
+        }
+        if u16::try_from(path.len()).is_err() {
+            return Err(malformed("resource path does not fit the u16 length field"));
+        }
+        if !elang_unicode::is_nfc(path) {
+            return Err(path_err(
+                "PATH_NOT_NFC",
+                "resource path is not in Unicode NFC",
+            ));
+        }
+        let path = elang_core::ResourcePath::new(path)?;
+        Ok(Self {
+            path,
+            frame_offset,
+            compressed_size,
+            uncompressed_size,
+            compression,
+        })
+    }
+
     /// The validated, NFC-checked resource path.
     #[must_use]
     pub fn path(&self) -> &elang_core::ResourcePath {
@@ -149,6 +198,48 @@ pub struct Index {
 }
 
 impl Index {
+    /// Build an index from a vector of validated entries (T1305/T1306).
+    ///
+    /// Unlike [`Index::decode`], which trusts the byte-level format and defers
+    /// aggregate checks to [`elang_core::ResourceIndex`], this constructor
+    /// enforces the aggregate invariants up front: the entry count must fit
+    /// `MAX_RESOURCES`, and the entries must be in strictly ascending raw-UTF-8
+    /// path order with no duplicates. The same `INDEX_PATH_NOT_SORTED` /
+    /// `INDEX_DUPLICATE_PATH` codes that `ResourceIndex::new` raises are used
+    /// here so a writer sees the same diagnostic a reader would.
+    ///
+    /// # Errors
+    ///
+    /// - `INDEX_COUNT_OUT_OF_RANGE` — `entries.len() > MAX_RESOURCES`.
+    /// - `INDEX_PATH_NOT_SORTED` — entries are not in ascending raw-UTF-8
+    ///   path order.
+    /// - `INDEX_DUPLICATE_PATH` — two entries share the same path.
+    pub fn with_entries(entries: Vec<IndexEntry>) -> Result<Self> {
+        if u32::try_from(entries.len()).map_or(true, |n| n > elang_core::limits::MAX_RESOURCES) {
+            return Err(index_err(
+                "INDEX_COUNT_OUT_OF_RANGE",
+                "index declares more resources than the archive ceiling",
+            ));
+        }
+        for pair in entries.windows(2) {
+            let a = pair[0].path.as_str();
+            let b = pair[1].path.as_str();
+            if a == b {
+                return Err(index_err(
+                    "INDEX_DUPLICATE_PATH",
+                    "two index entries share the same resource path",
+                ));
+            }
+            if a.as_bytes() >= b.as_bytes() {
+                return Err(index_err(
+                    "INDEX_PATH_NOT_SORTED",
+                    "index entries are not in ascending raw-UTF-8 path order",
+                ));
+            }
+        }
+        Ok(Self { entries })
+    }
+
     /// Parse the serialized index bytes (header + entries).
     ///
     /// `bytes` is the exact index region — `index_size` bytes read from the
@@ -1066,5 +1157,89 @@ mod tests {
             "got {}",
             e.code()
         );
+    }
+
+    // ---- writer-side constructors (T1305/T1306) ----
+
+    #[test]
+    fn index_entry_new_accepts_a_well_formed_entry() {
+        let e = IndexEntry::new("a/b.eld", 32, 100, 200, COMPRESSION_ZSTD).unwrap();
+        assert_eq!(e.path().as_str(), "a/b.eld");
+        assert_eq!(e.frame_offset(), 32);
+        assert_eq!(e.compressed_size(), 100);
+        assert_eq!(e.uncompressed_size(), 200);
+        assert_eq!(e.compression(), COMPRESSION_ZSTD);
+    }
+
+    #[test]
+    fn index_entry_new_rejects_non_zstd_compression() {
+        let e = IndexEntry::new("a.eld", 32, 100, 200, 2).unwrap_err();
+        assert_eq!(e.code(), "INDEX_BAD_VERSION");
+    }
+
+    #[test]
+    fn index_entry_new_rejects_non_nfc_path() {
+        // Decomposed 'é' (e + U+0301 combining acute) is not NFC.
+        let decomposed = "cafe\u{0301}.eld";
+        assert!(!elang_unicode::is_nfc(decomposed));
+        let e = IndexEntry::new(decomposed, 32, 100, 200, COMPRESSION_ZSTD).unwrap_err();
+        assert_eq!(e.code(), "PATH_NOT_NFC");
+    }
+
+    #[test]
+    fn index_entry_new_rejects_an_over_long_path() {
+        let long = "a".repeat(elang_core::limits::MAX_RESOURCE_PATH_BYTES + 1);
+        let e = IndexEntry::new(&long, 32, 100, 200, COMPRESSION_ZSTD).unwrap_err();
+        // `ResourcePath::new` rejects it with PATH_TOO_LONG; a path that fits
+        // u16 but exceeds the ResourcePath ceiling takes this branch first.
+        assert!(
+            e.code() == "PATH_TOO_LONG" || e.code() == "INDEX_ENTRY_MALFORMED",
+            "got {}",
+            e.code()
+        );
+    }
+
+    #[test]
+    fn index_with_entries_accepts_a_sorted_unique_vector() {
+        let e1 = IndexEntry::new("a.eld", 32, 10, 20, COMPRESSION_ZSTD).unwrap();
+        let e2 = IndexEntry::new("b.eld", 52, 10, 20, COMPRESSION_ZSTD).unwrap();
+        let e3 = IndexEntry::new("c.eld", 72, 10, 20, COMPRESSION_ZSTD).unwrap();
+        let idx = Index::with_entries(vec![e1, e2, e3]).unwrap();
+        assert_eq!(idx.len(), 3);
+        assert_eq!(idx.entries()[1].path().as_str(), "b.eld");
+    }
+
+    #[test]
+    fn index_with_entries_rejects_unsorted_entries() {
+        let e1 = IndexEntry::new("z.eld", 32, 10, 20, COMPRESSION_ZSTD).unwrap();
+        let e2 = IndexEntry::new("a.eld", 52, 10, 20, COMPRESSION_ZSTD).unwrap();
+        let e = Index::with_entries(vec![e1, e2]).unwrap_err();
+        assert_eq!(e.code(), "INDEX_PATH_NOT_SORTED");
+    }
+
+    #[test]
+    fn index_with_entries_rejects_duplicate_paths() {
+        let e1 = IndexEntry::new("a.eld", 32, 10, 20, COMPRESSION_ZSTD).unwrap();
+        let e2 = IndexEntry::new("a.eld", 52, 10, 20, COMPRESSION_ZSTD).unwrap();
+        let e = Index::with_entries(vec![e1, e2]).unwrap_err();
+        assert_eq!(e.code(), "INDEX_DUPLICATE_PATH");
+    }
+
+    #[test]
+    fn writer_construct_round_trips_through_encode_decode() {
+        // The end-to-end property the writer needs: building an Index via the
+        // new constructors and encoding it produces bytes that decode back to
+        // an equal Index. Proves the new constructors and the existing
+        // encode/decode pair agree on the wire format.
+        let e1 = IndexEntry::new("Header/format.version", 32, 48, 6, COMPRESSION_ZSTD).unwrap();
+        let e2 =
+            IndexEntry::new("Linguistics/phonemes.eld", 80, 100, 50, COMPRESSION_ZSTD).unwrap();
+        let e3 = IndexEntry::new("META-INF/integrity.kdl", 180, 50, 25, COMPRESSION_ZSTD).unwrap();
+        let e4 = IndexEntry::new("mimetype", 230, 12, 4, COMPRESSION_ZSTD).unwrap();
+        let e5 = IndexEntry::new("package.epf", 242, 30, 15, COMPRESSION_ZSTD).unwrap();
+        let built = Index::with_entries(vec![e1, e2, e3, e4, e5]).unwrap();
+        let bytes = built.encode().unwrap();
+        let parsed = Index::decode(&bytes).unwrap();
+        assert_eq!(built, parsed);
     }
 }
