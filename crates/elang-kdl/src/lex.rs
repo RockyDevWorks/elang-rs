@@ -1127,7 +1127,22 @@ mod tests {
         // token_to_value should return None for newline, brace, paren, etc.
         // Every token kind produced by this input must map to None.
         let toks = lex_all(" ;\n{ } ( ) = / /-").unwrap();
-        assert!(!toks.is_empty(), "expected at least one token");
+        assert_eq!(toks.len(), 10);
+        assert!(matches!(
+            toks.as_slice(),
+            [
+                Token::Newline(_),
+                Token::Newline(_),
+                Token::OpenBrace(_),
+                Token::CloseBrace(_),
+                Token::OpenParen(_),
+                Token::CloseParen(_),
+                Token::Equals(_),
+                Token::Slash(_),
+                Token::SlashDash(_),
+                Token::Eof(_)
+            ]
+        ));
         let any_value = toks.iter().map(Lexer::token_to_value).any(|v| v.is_some());
         assert!(
             !any_value,
