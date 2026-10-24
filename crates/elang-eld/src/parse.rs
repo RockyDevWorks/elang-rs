@@ -59,7 +59,13 @@ pub fn parse(input: &[u8], repertoire: &Repertoire) -> Result<EldDocument, Error
 /// validators.
 pub fn parse_document(doc: &KdlDocument, repertoire: &Repertoire) -> Result<EldDocument, Error> {
     let groups = validate_top_level(doc, repertoire)?;
-    Ok(EldDocument::new(groups))
+    let document = EldDocument::new(groups);
+    // Phase 10: validate every `when` block (shape, value domains,
+    // budgets, IPA reference resolution). Failures here fail the
+    // whole document — a malformed condition is just as much a
+    // stage-12 violation as a malformed root shape.
+    crate::when::parse_all(&document, repertoire)?;
+    Ok(document)
 }
 
 // --------------------------------------------------------------------------
