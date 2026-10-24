@@ -62,7 +62,8 @@ pub struct ArchiveView<'a> {
 /// Paths are stored as `String` (not [`ResourcePath`]) because the container
 /// layer validates them with NFC checks already; converting back would
 /// re-run the same checks for no benefit and would lose the original byte
-/// view the EPF layer's [`IndexLookup::contains`](elang_epf::manifest::IndexLookup::contains) expects.
+/// view the EPF layer's
+/// [`elang_epf::manifest::IndexLookup::contains`] expects.
 #[derive(Debug, Clone)]
 struct ArcEntry {
     path: String,

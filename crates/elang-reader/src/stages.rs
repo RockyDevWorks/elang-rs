@@ -9,10 +9,10 @@
 //!
 //! | Function | Stages | Output |
 //! |---|---|---|
-//! | [`run_integrity_structure`] | 9 | parsed [`IntegrityManifest`] |
+//! | [`run_integrity_structure`] | 9 | parsed [`elang_integrity::IntegrityManifest`] |
 //! | [`run_epf`] | 10 | parsed [`EpfPackage`] |
 //! | [`run_resource_integrity`] | 11 | decoded resources + per-resource errors |
-//! | [`run_eld_semantics`] | 12 | validated [`PhonemeInventory`](elang_core::model::eld::PhonemeInventory) |
+//! | [`run_eld_semantics`] | 12 | validated [`elang_core::model::eld::PhonemeInventory`] |
 //!
 //! Bootstrap content checks (stage 8) live in [`crate::bootstrap`]. Each
 //! stage attaches the resource path and stage to upstream diagnostics.
@@ -156,7 +156,7 @@ pub fn run_resource_integrity(
 ///
 /// Loads the pinned IPA repertoire, parses the declared phoneme `.eld`,
 /// parses every `when` block (Phase 10 reference resolution), and builds the
-/// validated [`PhonemeInventory`](elang_core::model::eld::PhonemeInventory).
+/// validated [`elang_core::model::eld::PhonemeInventory`].
 ///
 /// # Errors
 ///

@@ -5,7 +5,8 @@
 //! [`crate::Verified`] ceiling, plus full ELD structural and semantic validation
 //! (allophones parsed, IPA identifiers resolved against the pinned
 //! repertoire, `when` conditions parsed and cross-referenced, romanization
-//! uniqueness enforced, and the validated [`PhonemeInventory`] built).
+//! uniqueness enforced, and the validated
+//! [`elang_core::model::eld::PhonemeInventory`] built).
 //!
 //! The [`Validated`] type deliberately owns the inventory it exposes — no
 //! reference back to the original archive bytes — so it can outlive the
@@ -17,8 +18,8 @@
 //!
 //! [`Validated`] exposes:
 //! * [`Validated::epf`] / [`Validated::metadata`] — the parsed `package.epf` block.
-//! * [`Validated::groups`] / [`Validated::group_by_name`] / [`Validated::root_count`] —
-//!   group-level enumeration.
+//! * [`Validated::groups`] / [`Validated::group_by_name`] /
+//!   [`Validated::root_count`] — group-level enumeration.
 //! * [`Validated::find_root`] / [`Validated::roots`] — root-phoneme access by IPA.
 //! * [`Validated::condition_for`] / [`Validated::allophone_when`] — phonological
 //!   condition access (Phase 10).
@@ -41,7 +42,8 @@ use crate::inspected::Inspected;
 /// [`crate::Verified`] ceiling, plus full ELD structural and semantic validation
 /// (allophones parsed, IPA identifiers resolved against the pinned
 /// repertoire, `when` conditions parsed and cross-referenced, romanization
-/// uniqueness enforced, and the validated [`PhonemeInventory`] built).
+/// uniqueness enforced, and the validated
+/// [`elang_core::model::eld::PhonemeInventory`] built).
 ///
 /// The [`Validated`] type deliberately owns the inventory it exposes — no
 /// reference back to the original archive bytes — so it can outlive the
@@ -145,7 +147,7 @@ impl Validated {
     ///
     /// Returns the root's `when` if the IPA is a root phoneme; otherwise
     /// `None`. Allophone-level `when` conditions are accessible via
-    /// [`Self::allophone_when`].
+    /// [`Validated::allophone_when`].
     #[must_use]
     pub fn condition_for(&self, ipa: &str) -> Option<&WhenCondition> {
         self.find_root(ipa).and_then(|r| r.when())
