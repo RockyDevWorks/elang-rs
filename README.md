@@ -25,10 +25,6 @@ is the reference implementation: the `.elang` binary container, the KDL 2.0
 integrity, canonical reproducible encoding, and a reader/writer/validator SDK
 plus a CLI.
 
-> This project implements **ELANG alone**. It does not include ELANG Studio,
-> ELANG Hub, AION, HORIZON or ARKHE. ELANG's first and only linguistic module in
-> this release is **phonemes**.
-
 ## Documentation
 
 The public documentation site is built with [Zensical](https://zensical.org) from
