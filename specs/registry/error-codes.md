@@ -43,7 +43,7 @@ primary stage(s) at which it can fire.
 |---|---|---|
 | `ARCHIVE_TOO_SMALL` | 1 | File smaller than minimal header+index+footer. |
 | `ARCHIVE_SIZE_INCONSISTENT` | 1 | Declared offsets/sizes vs file size inconsistent. |
-| `HEADER_BAD_MAGIC` | 2 | First 8 bytes ≠ `ELANG\r\n\x1A`. |
+| `HEADER_BAD_MAGIC` | 1/2 | First 8 bytes ≠ `ELANG\r\n\x1A` (reader preflight at stage 1; direct header decode at stage 2). |
 | `HEADER_BAD_VERSION` | 2 | major≠0 or minor≠1. |
 | `HEADER_NONZERO_FLAGS` | 2 | flags field nonzero/unknown. |
 | `HEADER_RESERVED_NONZERO` | 2 | reserved 16 bytes not all zero. |
@@ -54,7 +54,7 @@ primary stage(s) at which it can fire.
 | `CONTAINER_BAD_VERSION` | 8 | Binary container version string not strict `MAJOR.MINOR.PATCH`. |
 | `MIMETYPE_INVALID` | 8 | `mimetype` ≠ exact `application/vnd.elang`. |
 
-### INDEX (stages 4–6)
+### INDEX (stages 4–6, 9)
 
 | Code | Stage | Meaning |
 |---|---|---|
@@ -72,8 +72,9 @@ primary stage(s) at which it can fire.
 | `FRAME_LAYOUT_TRAILING_BYTES` | 6 | Frames do not end exactly at index offset. |
 | `INDEX_RANGE_OUT_OF_BOUNDS` | 5 | `offset + compressed_size` exceeds the archive, or overflows `u64`. |
 | `INDEX_SIZE_OVER_CEILING` | 5 | A resource's `uncompressed_size` exceeds the 1 GiB per-resource ceiling. |
+| `INDEX_PATH_INVALID` | 9 | Container returned a path that the core layer rejects as invalid. |
 
-### RESOURCE_PATH (stage 5)
+### RESOURCE_PATH (stages 5, 8–12)
 
 | Code | Stage | Meaning |
 |---|---|---|
@@ -84,25 +85,26 @@ primary stage(s) at which it can fire.
 | `PATH_NUL` | 5 | Contains NUL. |
 | `PATH_EMPTY_SEGMENT` | 5 | Empty, `.`, or `..` segment. |
 | `PATH_TOO_LONG` | 5 | > 1024 UTF-8 bytes. |
+| `RESOURCE_MISSING` | 8/9/10/11/12 | A required resource (e.g. `Header/format.version`, `META-INF/integrity.kdl`, `package.epf`, declared phoneme `.eld`) is not present in the archive index. |
 
-### FRAME (stage 7, 11)
+### FRAME (stages 7–12)
 
 | Code | Stage | Meaning |
 |---|---|---|
-| `FRAME_BAD_MAGIC` | 7 | Fewer than four bytes, incorrect frame magic, or an Unused/Reserved descriptor bit is set. |
-| `FRAME_MISSING_CONTENT_SIZE` | 7 | Frame content size not present. |
-| `FRAME_MISSING_CHECKSUM` | 7 | Frame checksum not present. |
-| `FRAME_WINDOW_TOO_LARGE` | 7 | Window > 128 MiB. |
-| `FRAME_DICTIONARY_DEPENDENCY` | 7 | Dictionary ID / external dictionary. |
-| `FRAME_SKIPPABLE` | 7 | Skippable frame present. |
-| `FRAME_CONCATENATED` | 7 | More than one frame per resource. |
-| `FRAME_TRUNCATED` | 7/11 | Incomplete/truncated frame. |
+| `FRAME_BAD_MAGIC` | 7/8/9/10/11/12 | Fewer than four bytes, incorrect frame magic, or an Unused/Reserved descriptor bit is set. |
+| `FRAME_MISSING_CONTENT_SIZE` | 7/8/9/10/11/12 | Frame content size not present. |
+| `FRAME_MISSING_CHECKSUM` | 7/8/9/10/11/12 | Frame checksum not present. |
+| `FRAME_WINDOW_TOO_LARGE` | 7/8/9/10/11/12 | Window > 128 MiB. |
+| `FRAME_DICTIONARY_DEPENDENCY` | 7/8/9/10/11/12 | Dictionary ID / external dictionary. |
+| `FRAME_SKIPPABLE` | 7/8/9/10/11/12 | Skippable frame present. |
+| `FRAME_CONCATENATED` | 7/8/9/10/11/12 | More than one frame per resource. |
+| `FRAME_TRUNCATED` | 7/8/9/10/11/12 | Incomplete/truncated frame. |
 | `FRAME_CONTENT_SIZE_MISMATCH` | 11 | Declared size ≠ index `uncompressed_size`. |
-| `FRAME_CHECKSUM_MISMATCH` | 11 | Zstd checksum fails. |
-| `FRAME_DECOMPRESSED_SIZE_MISMATCH` | 11 | Actual decompressed bytes ≠ index. |
-| `FRAME_DECOMPRESS_FAILED` | 11 | libzstd rejected the frame body during streaming decode. |
+| `FRAME_CHECKSUM_MISMATCH` | 8/9/10/11/12 | Zstd checksum fails. |
+| `FRAME_DECOMPRESSED_SIZE_MISMATCH` | 8/9/10/11/12 | Actual decompressed bytes ≠ index. |
+| `FRAME_DECOMPRESS_FAILED` | 8/9/10/11/12 | libzstd rejected the frame body during streaming decode. |
 | `FRAME_ENCODE_FAILED` | — | libzstd rejected an encode request (parameter or compress call). |
-| `DECOMPRESSION_BUDGET_EXCEEDED` | 11 | Per-resource or 8 GiB aggregate budget exceeded. |
+| `DECOMPRESSION_BUDGET_EXCEEDED` | 8/9/10/11/12 | Per-resource or 8 GiB aggregate budget exceeded. |
 
 ### INTEGRITY (stages 9, 11)
 
@@ -115,6 +117,12 @@ primary stage(s) at which it can fire.
 | `INTEGRITY_EXTRA_ENTRY` | 9 | Entry for a non-indexed path or for integrity.kdl itself. |
 | `INTEGRITY_DUPLICATE_ENTRY` | 9 | Duplicate resource path. |
 | `INTEGRITY_HASH_MISMATCH` | 11 | Resource digest ≠ declared digest. |
+
+### CONTAINER (stage 1, reader-internal)
+
+| Code | Stage | Meaning |
+|---|---|---|
+| `READER_INTERNAL` | 1 | Reader-internal invariant violation; should never occur in practice. |
 
 ### EPF_SCHEMA (stage 10)
 
@@ -167,6 +175,7 @@ primary stage(s) at which it can fire.
 | Code | Stage | Meaning |
 |---|---|---|
 | `IPA_NOT_IN_REPERTOIRE` | 12 | Symbol not in approved allowlist. |
+| `REPERTOIRE_LOAD_FAILED` | 12 | Pinned IPA repertoire JSON failed to load from the embedded artifact. |
 | `IPA_TOO_MANY_SCALARS` | 12 | > 8 Unicode scalars. |
 | `IPA_TOO_MANY_UNITS` | 12 | > 4 logical base units. |
 | `IPA_TOO_MANY_MODIFICATIONS` | 12 | > 1 modification on a unit. |

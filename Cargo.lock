@@ -143,6 +143,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "elang-reader"
+version = "0.1.0"
+dependencies = [
+ "elang-container",
+ "elang-core",
+ "elang-eld",
+ "elang-epf",
+ "elang-integrity",
+ "elang-kdl",
+ "elang-repertoire",
+ "sha2",
+]
+
+[[package]]
 name = "elang-repertoire"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,39 @@
+[package]
+name = "elang-reader"
+description = "ELANG v0.1.0 package reader and public Rust SDK: integrated 12-stage inspect/verify/validate pipeline, bounded resource retrieval and read-only validated-data accessors."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Stage 1–7 — header, footer, index, frame layout, per-frame header inspect.
+elang-core.workspace = true
+elang-container.workspace = true
+# Stage 8 — bootstrap checks over the in-archive format.version / mimetype
+# resources. No extra dependency beyond `elang-core` is required: the bootstrap
+# resource contents are validated as plain UTF-8 strings against the header's
+# own format.version and the locked `application/elang-package` mimetype.
+# Stage 9 — integrity manifest structure. `elang-kdl` is used to tokenise
+# `META-INF/integrity.kdl` before handing the resulting `KdlDocument` to
+# `elang-integrity::parse_document`. `elang-integrity` already brings in
+# `sha2` for its `Hasher`, which the resource-integrity stage reuses.
+elang-kdl.workspace = true
+elang-integrity.workspace = true
+# Stage 10 — EPF parse + manifest resolution.
+elang-epf.workspace = true
+# Stage 12 — ELD parse, reference resolution and validated inventory build.
+elang-eld.workspace = true
+# Stage 12 — IPA allowlist + repertoire lookups (`previous-phoneme` /
+# `next-phoneme` validation, tie-bar normalization, comparison keys).
+elang-repertoire.workspace = true
+
+[dev-dependencies]
+# Test fixtures build canonical archives and need direct SHA-256 access to
+# compute integrity manifest digests for `META-INF/integrity.kdl`.
+sha2 = { workspace = true }

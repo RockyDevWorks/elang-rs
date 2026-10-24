@@ -196,7 +196,7 @@ pub const RELEASE: &str = "v0.1.0";
 /// release-tag half of OA-17 stays blocked by OA-14 and is not implemented
 /// here.
 pub const PINNED_SPEC_CHECKSUM: &str =
-    "f50bf40763dd0599311ea0948f07a10107d799fcca4ce6a05a43e7b8b145a8fa";
+    "7037dd309e8aa3dcbcb5bb1271820637b5bec9c75c31c200862d8206faaf4a4a";
 
 /// Errors produced by [`build_manifest`] and [`verify`].
 #[derive(Debug)]
