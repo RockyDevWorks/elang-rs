@@ -58,8 +58,9 @@ impl Package {
     /// Stages 1–7 validate the binary header, terminal footer, index hash,
     /// sorted unique paths, per-resource size ceilings, the contiguous frame
     /// layout and the per-frame header inspection. No frame body is
-    /// decompressed at this point, so [`Package::open`] is `O(index size)`
-    /// regardless of how large the archive is.
+    /// decompressed at this point. Opening also copies the entire archive
+    /// into owned storage, costing `O(archive size)` time and memory in
+    /// addition to parsing and retaining the index and frame metadata.
     ///
     /// # Errors
     ///
@@ -67,7 +68,12 @@ impl Package {
     /// `INDEX` / `FRAME` / `LIMIT` category, stages 1–7). The error carries
     /// the stage number on its diagnostic.
     pub fn open(archive: &[u8]) -> Result<Self, Error> {
-        let listing = ArchiveListing::parse(archive)?;
+        let listing = ArchiveListing::parse(archive).map_err(|mut e| {
+            if e.diagnostic.code == "HEADER_BAD_MAGIC" {
+                e.diagnostic = e.diagnostic.with_stage(1);
+            }
+            e
+        })?;
         let mut tracker = StageTracker::new();
         // Stages 1–7 are advanced in order. `ArchiveListing::parse` runs
         // them in the right order; the tracker records that fact for the
@@ -157,7 +163,7 @@ impl Package {
         bootstrap::run(&view, &self.archive, &header_version)?;
         let manifest = stages::run_integrity_structure(&view, &self.archive)?;
         let epf = stages::run_epf(&view, &self.archive)?;
-        let _decoded = stages::run_resource_integrity(&view, &self.archive, &manifest)?;
+        stages::run_resource_integrity(&view, &self.archive, &manifest)?;
         let inventory = stages::run_eld_semantics(&view, &self.archive, &epf)?;
         advance_range(&mut self.tracker, 8, 12);
 

@@ -8,17 +8,18 @@
 //! the reader refuses to advance past stage 8 with the matching diagnostic.
 //!
 //! These resources are small (≤ 64 bytes each, per
-//! [`MAX_BOOTSTRAP_RESOURCE_BYTES`](elang_core::limits::MAX_BOOTSTRAP_RESOURCE_BYTES)),
+//! [`MAX_BOOTSTRAP_RESOURCE_BYTES`]),
 //! so the stage uses a tight per-resource decode budget and a fresh
 //! [`DecodeBudget`] that does **not** share the aggregate counter with the
 //! later resource-integrity pass (stage 11 owns the aggregate).
 
 use elang_container::frame::{decode, DecodeBudget};
+use elang_core::error::{Category, Error};
 use elang_core::limits::MAX_BOOTSTRAP_RESOURCE_BYTES;
 use elang_core::ResourcePath;
 
-use crate::archive::{ArchiveView, Span};
-use crate::error::{bootstrap_err, bootstrap_err_no_path};
+use crate::archive::ArchiveView;
+use crate::error::{bootstrap_err, resource_err};
 
 /// Path of the in-archive `format.version` resource.
 pub const FORMAT_VERSION_PATH: &str = "Header/format.version";
@@ -32,15 +33,17 @@ pub const EXPECTED_MIMETYPE: &[u8] = b"application/vnd.elang";
 ///
 /// # Errors
 ///
-/// Returns a stage-8 `CONTAINER`-category diagnostic with the resource path
+/// Returns a stage-8 diagnostic with the resource path
 /// attached when:
-/// * either resource is missing from the index (`RESOURCE_MISSING`),
-/// * decompressing either resource fails or exceeds the per-resource budget
-///   (`FRAME_TRUNCATED`),
+/// * either resource is missing from the index (`RESOURCE_MISSING`,
+///   `RESOURCE_PATH` category),
+/// * reading or decompressing either resource fails or exceeds the
+///   per-resource budget (the original `FRAME`-category diagnostic),
 /// * `format.version` is not valid UTF-8 or its major.minor prefix does
-///   not match the binary header's `major.minor` (`FORMAT_VERSION_INVALID`),
+///   not match the binary header's `major.minor` (`FORMAT_VERSION_INVALID`,
+///   `CONTAINER` category),
 /// * `mimetype` does not equal [`EXPECTED_MIMETYPE`] exactly
-///   (`MIMETYPE_INVALID`).
+///   (`MIMETYPE_INVALID`, `CONTAINER` category).
 pub fn run(
     view: &ArchiveView<'_>,
     archive: &[u8],
@@ -118,26 +121,33 @@ fn read_bootstrap_resource(
     path: &str,
 ) -> Result<Vec<u8>, elang_core::Error> {
     let span = view.lookup_str(path).ok_or_else(|| {
-        bootstrap_err_no_path(
+        resource_err(
             "RESOURCE_MISSING",
+            Category::ResourcePath,
             format!("archive index does not contain required bootstrap resource {path:?}"),
+            path,
+            8,
         )
     })?;
-    decode_span(span, archive).ok_or_else(|| {
-        bootstrap_err(
+    let bytes = ArchiveView::read_span(span, archive).ok_or_else(|| {
+        resource_err(
             "FRAME_TRUNCATED",
+            Category::Frame,
             format!("bootstrap resource {path:?} frame falls outside the archive"),
             path,
+            8,
         )
+    })?;
+    decode_span(bytes).map_err(|e| Error {
+        diagnostic: e.diagnostic.with_resource(path).with_stage(8),
     })
 }
 
 /// Decode a single resource's frame, enforcing the bootstrap per-resource
 /// ceiling.
-fn decode_span(span: Span, archive: &[u8]) -> Option<Vec<u8>> {
-    let bytes = ArchiveView::read_span(span, archive)?;
+fn decode_span(bytes: &[u8]) -> Result<Vec<u8>, Error> {
     let mut budget = DecodeBudget::new(MAX_BOOTSTRAP_RESOURCE_BYTES);
-    decode(bytes, &mut budget).ok()
+    decode(bytes, &mut budget)
 }
 
 /// Validate a `ResourcePath` is one of the locked bootstrap paths.

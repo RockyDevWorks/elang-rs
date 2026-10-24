@@ -2,7 +2,7 @@
 //!
 //! Construction is restricted to [`crate::Package::validate`]. A value of
 //! this type proves the 12 stages completed in order: every step of the
-//! `Verified` ceiling, plus full ELD structural and semantic validation
+//! [`crate::Verified`] ceiling, plus full ELD structural and semantic validation
 //! (allophones parsed, IPA identifiers resolved against the pinned
 //! repertoire, `when` conditions parsed and cross-referenced, romanization
 //! uniqueness enforced, and the validated [`PhonemeInventory`] built).
@@ -11,20 +11,21 @@
 //! reference back to the original archive bytes — so it can outlive the
 //! [`crate::Package`] that produced it.
 //!
+//! Keep a [`crate::Verified`] value when random-access resources are needed.
+//!
 //! # Public SDK surface (T1209)
 //!
 //! [`Validated`] exposes:
-//! * [`Self::epf`] / [`Self::metadata`] — the parsed `package.epf` block.
-//! * [`Self::groups`] / [`Self::group_by_name`] / [`Self::root_count`] —
+//! * [`Validated::epf`] / [`Validated::metadata`] — the parsed `package.epf` block.
+//! * [`Validated::groups`] / [`Validated::group_by_name`] / [`Validated::root_count`] —
 //!   group-level enumeration.
-//! * [`Self::find_root`] / [`Self::roots`] — root-phoneme access by IPA.
-//! * [`Self::condition_for`] / [`Self::allophone_when`] — phonological
+//! * [`Validated::find_root`] / [`Validated::roots`] — root-phoneme access by IPA.
+//! * [`Validated::condition_for`] / [`Validated::allophone_when`] — phonological
 //!   condition access (Phase 10).
-//! * [`Self::canonical_phoneme_bytes`] — Phase 11 canonical serialization
+//! * [`Validated::canonical_phoneme_bytes`] — Phase 11 canonical serialization
 //!   (T1210).
 
 use elang_container::ArchiveListing;
-use elang_core::error::Error;
 use elang_core::model::eld::{Group, PhonemeInventory, RootPhoneme};
 use elang_core::model::when::WhenCondition;
 use elang_epf::model::EpfPackage;
@@ -33,12 +34,11 @@ use elang_integrity::IntegrityManifest;
 use crate::inspected::Inspected;
 
 /// Public read-only view over an archive after all 12 stages (T1203, T1209,
-///
 /// T1210, T1211).
 ///
 /// Construction is restricted to [`crate::Package::validate`]. A value of
 /// this type proves the 12 stages completed in order: every step of the
-/// `Verified` ceiling, plus full ELD structural and semantic validation
+/// [`crate::Verified`] ceiling, plus full ELD structural and semantic validation
 /// (allophones parsed, IPA identifiers resolved against the pinned
 /// repertoire, `when` conditions parsed and cross-referenced, romanization
 /// uniqueness enforced, and the validated [`PhonemeInventory`] built).
@@ -74,30 +74,6 @@ impl Validated {
     #[must_use]
     pub fn as_inspected(&self) -> Inspected {
         Inspected::new(self.listing.clone())
-    }
-
-    /// Downgrade to the [`Verified`](crate::verified::Verified) view. Requires
-    /// re-encoding the cached decoded bytes, which are *not* stored on the
-    /// `Validated` type (they were only needed for the ELD parse and the
-    /// integrity verification, both already done). Callers that still want
-    /// random-access retrieval should keep the original `Verified` rather
-    /// than downgrading.
-    ///
-    /// # Errors
-    ///
-    /// Currently infallible; the `Result` return shape matches [`Verified`]
-    /// construction and reserves room for a future check that depends on the
-    /// archive bytes (e.g. re-verifying the manifest after downgrade).
-    pub fn as_verified(&self) -> Result<crate::verified::Verified, Error> {
-        // `Validated` was built from a `Verified`, so the decoded resource
-        // cache was discarded. Returning a `Verified` here would be dishonest;
-        // surface that explicitly through the empty cache.
-        Ok(crate::verified::Verified::new(
-            self.listing.clone(),
-            self.manifest.clone(),
-            self.epf.clone(),
-            Vec::new(),
-        ))
     }
 
     /// The validated `package.epf`.

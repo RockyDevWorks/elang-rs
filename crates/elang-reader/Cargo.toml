@@ -37,4 +37,3 @@ elang-repertoire.workspace = true
 # Test fixtures build canonical archives and need direct SHA-256 access to
 # compute integrity manifest digests for `META-INF/integrity.kdl`.
 sha2 = { workspace = true }
-zstd = { workspace = true }

@@ -3,7 +3,7 @@
 //! Each function runs one (or one cluster) of validation stages and returns
 //! the data the next stage needs. The functions are pure with respect to the
 //! [`crate::Package`] state — they take the archive bytes, the validated
-//! [`ArchiveView`](crate::archive::ArchiveView), and any required inputs as
+//! [`ArchiveView`], and any required inputs as
 //! arguments, and return the next stage's outputs. This keeps the per-stage
 //! work independently testable.
 //!
@@ -12,11 +12,10 @@
 //! | [`run_integrity_structure`] | 9 | parsed [`IntegrityManifest`] |
 //! | [`run_epf`] | 10 | parsed [`EpfPackage`] |
 //! | [`run_resource_integrity`] | 11 | decoded resources + per-resource errors |
-//! | [`run_eld_semantics`] | 12 | validated [`PhonemeInventory`] |
+//! | [`run_eld_semantics`] | 12 | validated [`PhonemeInventory`](elang_core::model::eld::PhonemeInventory) |
 //!
-//! Bootstrap (stage 8) lives in [`crate::bootstrap`] because its error model
-//! (CONTAINER category with stage 8 and a resource path) differs from the
-//! stage-9+ errors that flow through the upstream crates' diagnostics.
+//! Bootstrap content checks (stage 8) live in [`crate::bootstrap`]. Each
+//! stage attaches the resource path and stage to upstream diagnostics.
 
 use std::collections::BTreeSet;
 
@@ -38,7 +37,7 @@ use elang_kdl::ParseError;
 use elang_repertoire::repertoire::load as repertoire_load;
 
 use crate::archive::{ArchiveView, Span};
-use crate::error::bootstrap_err;
+use crate::error::resource_err;
 
 /// Path of the integrity manifest resource.
 pub const INTEGRITY_PATH: &str = "META-INF/integrity.kdl";
@@ -52,15 +51,18 @@ pub const EPF_PATH: &str = "package.epf";
 /// * `INTEGRITY_STRUCTURE_INVALID` (or any stage-9 integrity code) when the
 ///   KDL document fails parsing.
 /// * `INTEGRITY_MISSING_ENTRY` / `INTEGRITY_EXTRA_ENTRY` via
-///   [`IntegrityManifest::verify_coverage`] when the manifest's entries
+///   [`elang_integrity::verify_coverage`] when the manifest's entries
 ///   disagree with the resource index (T1206).
 pub fn run_integrity_structure(
     view: &ArchiveView<'_>,
     archive: &[u8],
 ) -> Result<IntegrityManifest, Error> {
     let bytes = decode_indexed_resource(view, archive, INTEGRITY_PATH, MAX_INTEGRITY_BYTES, 9)?;
-    let doc = kdl_parse(&bytes).map_err(integrity_kdl_to_err)?;
-    let manifest = integrity_parse_document(&doc)?;
+    let doc = kdl_parse(&bytes)
+        .map_err(integrity_kdl_to_err)
+        .map_err(|e| enrich_with_resource(e, INTEGRITY_PATH))?;
+    let manifest =
+        integrity_parse_document(&doc).map_err(|e| enrich_with_resource(e, INTEGRITY_PATH))?;
     let mut indexed_paths: BTreeSet<ResourcePath> = BTreeSet::new();
     for (path, _) in view.iter() {
         let rp = ResourcePath::new(path).map_err(|e| {
@@ -102,7 +104,8 @@ pub fn run_integrity_structure(
 /// `resolve_phonemes`.
 pub fn run_epf(view: &ArchiveView<'_>, archive: &[u8]) -> Result<EpfPackage, Error> {
     let bytes = decode_indexed_resource(view, archive, EPF_PATH, MAX_EPF_BYTES, 10)?;
-    let pkg = elang_epf::parse(&bytes)?;
+    let pkg =
+        elang_epf::parse(&bytes).map_err(|e| enrich_with_resource_and_stage(e, EPF_PATH, 10))?;
     resolve_phonemes(pkg.manifest().phonemes().as_str(), view)
         .map_err(|e| phoneme_resolution_err(e, pkg.manifest().phonemes().as_str()))?;
     Ok(pkg)
@@ -170,9 +173,12 @@ pub fn run_eld_semantics(
     let phonemes_path = epf.manifest().phonemes().as_str();
     let bytes = decode_indexed_resource(view, archive, phonemes_path, MAX_ELD_BYTES, 12)?;
     let repertoire = repertoire_load().map_err(repertoire_load_err)?;
-    let doc = eld_parse(&bytes, &repertoire)?;
-    eld_parse_all(&doc, &repertoire)?;
-    let inventory = eld_inventory_from_document(&doc, &repertoire)?;
+    let doc = eld_parse(&bytes, &repertoire)
+        .map_err(|e| enrich_with_resource_and_stage(e, phonemes_path, 12))?;
+    eld_parse_all(&doc, &repertoire)
+        .map_err(|e| enrich_with_resource_and_stage(e, phonemes_path, 12))?;
+    let inventory = eld_inventory_from_document(&doc, &repertoire)
+        .map_err(|e| enrich_with_resource_and_stage(e, phonemes_path, 12))?;
     Ok(inventory)
 }
 
@@ -189,17 +195,21 @@ fn decode_indexed_resource(
     stage: u8,
 ) -> Result<Vec<u8>, Error> {
     let span = view.lookup_str(path).ok_or_else(|| {
-        bootstrap_err(
+        resource_err(
             "RESOURCE_MISSING",
+            Category::ResourcePath,
             format!("required resource {path:?} is not in the archive index"),
             path,
+            stage,
         )
     })?;
     let frame = ArchiveView::read_span(span, archive).ok_or_else(|| {
-        bootstrap_err(
+        resource_err(
             "FRAME_TRUNCATED",
+            Category::Frame,
             format!("resource {path:?} frame falls outside the archive"),
             path,
+            stage,
         )
     })?;
     let mut budget = DecodeBudget::new(max_resource);
@@ -214,10 +224,12 @@ fn decode_one(
     budget: &mut DecodeBudget,
 ) -> Result<Vec<u8>, Error> {
     let frame = ArchiveView::read_span(span, archive).ok_or_else(|| {
-        bootstrap_err(
+        resource_err(
             "FRAME_TRUNCATED",
+            Category::Frame,
             format!("resource {path:?} frame falls outside the archive"),
             path,
+            11,
         )
     })?;
     decode(frame, budget).map_err(|e| enrich_with_resource_and_stage(e, path, 11))
@@ -237,11 +249,11 @@ fn missing_entry_err(path: &str) -> Error {
     }
 }
 
-/// Adapter: re-tag a [`IntegrityEntry::verify_coverage`] error with a
+/// Adapter: re-tag a [`elang_integrity::verify_coverage`] error with a
 /// stage-9 marker (the underlying code is already correct).
 fn integrity_coverage_err(e: Error) -> Error {
     Error {
-        diagnostic: e.diagnostic.with_stage(9),
+        diagnostic: e.diagnostic.with_stage(9).with_resource(INTEGRITY_PATH),
     }
 }
 
@@ -285,7 +297,7 @@ fn repertoire_load_err(e: elang_repertoire::repertoire::RepertoireError) -> Erro
     }
 }
 
-/// Re-tag a [`crate::error::bootstrap_err`]'s diagnostic with the given
+/// Re-tag an upstream diagnostic with the given
 /// resource path (and leave the stage unchanged).
 fn enrich_with_resource(e: Error, path: &str) -> Error {
     Error {
@@ -300,6 +312,6 @@ fn enrich_with_resource_and_stage(e: Error, path: &str, stage: u8) -> Error {
     }
 }
 
-/// Re-export the [`IntegrityEntry`] type used by the verify-pipeline outputs.
+/// Re-export the [`elang_integrity::IntegrityEntry`] type used by the verify-pipeline outputs.
 #[allow(dead_code, reason = "API stability for downstream callers")]
 pub type IntegrityEntryRef = elang_integrity::IntegrityEntry;

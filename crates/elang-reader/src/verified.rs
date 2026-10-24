@@ -80,6 +80,16 @@ impl Verified {
         self.decoded.len()
     }
 
+    /// Retrieve a decoded resource by its position in index order.
+    ///
+    /// Returns `None` when `index` is out of range.
+    #[must_use]
+    pub fn resource_at(&self, index: usize) -> Option<(&str, &[u8])> {
+        self.decoded
+            .get(index)
+            .map(|(path, bytes)| (path.as_str(), bytes.as_slice()))
+    }
+
     /// Look up a decoded resource by its path.
     #[must_use]
     pub fn get_resource(&self, path: &str) -> Option<&[u8]> {

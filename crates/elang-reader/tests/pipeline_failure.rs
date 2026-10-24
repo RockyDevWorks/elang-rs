@@ -16,6 +16,29 @@ use elang_core::error::Category;
 use elang_reader::Package;
 use sha2::{Digest, Sha256};
 
+fn assert_diagnostic(
+    error: elang_core::Error,
+    code: &str,
+    category: Category,
+    stage: u8,
+    path: &str,
+) {
+    let diag = error.diagnostic;
+    assert_eq!(diag.code, code, "{diag:?}");
+    assert_eq!(diag.category, category, "{diag:?}");
+    assert_eq!(diag.stage, Some(stage), "{diag:?}");
+    assert_eq!(diag.resource_path.as_deref(), Some(path), "{diag:?}");
+}
+
+fn resource_specs() -> Vec<common::Spec> {
+    vec![
+        common::Spec::new("Header/mimetype", common::MIMETYPE_PAYLOAD),
+        common::Spec::new("Header/format.version", common::FORMAT_VERSION_PAYLOAD),
+        common::Spec::new("package.epf", common::EPF_PAYLOAD),
+        common::Spec::new("Linguistics/phonemes.eld", common::ELD_PAYLOAD),
+    ]
+}
+
 /// Stage 1 — header magic mismatch (flip the first magic byte).
 #[test]
 fn header_bad_magic_emits_header_bad_magic_at_stage_1() {
@@ -26,10 +49,7 @@ fn header_bad_magic_emits_header_bad_magic_at_stage_1() {
     let err = Package::open(&archive.bytes).expect_err("stage 1 fails");
     let diag = &err.diagnostic;
     assert_eq!(diag.code, "HEADER_BAD_MAGIC");
-    // The container layer emits stage 1–7 diagnostics; the reader does not
-    // currently re-tag them with a stage number on every path. The code
-    // alone identifies the failure, which is the contract every stage
-    // shares (T1207).
+    assert_eq!(diag.stage, Some(1));
     assert_eq!(diag.category, Category::Container);
 }
 
@@ -133,4 +153,155 @@ fn missing_resource_emits_resource_missing() {
     let diag = &err.diagnostic;
     assert_eq!(diag.code, "RESOURCE_MISSING");
     assert_eq!(diag.category, Category::ResourcePath);
+}
+
+#[test]
+fn bootstrap_decode_budget_failure_is_preserved() {
+    let archive = build_with_swapped("Header/format.version", vec![b'0'; 65]);
+    let err = Package::open(&archive.bytes).unwrap().verify().unwrap_err();
+    assert_diagnostic(
+        err,
+        "DECOMPRESSION_BUDGET_EXCEEDED",
+        Category::Frame,
+        8,
+        "Header/format.version",
+    );
+}
+
+#[test]
+fn integrity_coverage_failures_report_stage_9_and_manifest_path() {
+    for (code, extra) in [
+        ("INTEGRITY_MISSING_ENTRY", false),
+        ("INTEGRITY_EXTRA_ENTRY", true),
+    ] {
+        let mut resources = build_canonical().resources;
+        if extra {
+            resources.push(("extra.eld".to_string(), Vec::new()));
+        } else {
+            resources.retain(|(path, _)| path != "Linguistics/phonemes.eld");
+        }
+        let manifest = common::manifest_for(&resources);
+        let archive = build_with_manifest(&resource_specs(), &manifest);
+        let err = Package::open(&archive.bytes).unwrap().verify().unwrap_err();
+        assert_diagnostic(err, code, Category::Integrity, 9, "META-INF/integrity.kdl");
+    }
+}
+
+#[test]
+fn epf_failures_report_stage_10_and_resource_path() {
+    for (payload, code, path) in [
+        (
+            b"epf \"0.1.0\"\n".to_vec(),
+            "EPF_MISSING_NODE",
+            "package.epf",
+        ),
+        (
+            String::from_utf8(common::EPF_PAYLOAD.to_vec())
+                .unwrap()
+                .replace("Linguistics/phonemes.eld", "Linguistics/missing.eld")
+                .into_bytes(),
+            "EPF_MANIFEST_PATH_NOT_INDEXED",
+            "Linguistics/missing.eld",
+        ),
+    ] {
+        let archive = build_with_swapped("package.epf", payload);
+        let err = Package::open(&archive.bytes).unwrap().verify().unwrap_err();
+        assert_diagnostic(err, code, Category::EpfSchema, 10, path);
+    }
+}
+
+#[test]
+fn eld_failures_report_stage_12_and_phoneme_path() {
+    for (payload, code, category) in [
+        (
+            b"unexpected\n".to_vec(),
+            "ELD_TOPLEVEL_INVALID",
+            Category::EldSchema,
+        ),
+        (
+            String::from_utf8(common::ELD_PAYLOAD.to_vec())
+                .unwrap()
+                .replace("phoneme \"p\"", "phoneme \"☃\"")
+                .into_bytes(),
+            "IPA_NOT_IN_REPERTOIRE",
+            Category::Ipa,
+        ),
+    ] {
+        let archive = build_with_swapped("Linguistics/phonemes.eld", payload);
+        let err = Package::open(&archive.bytes)
+            .unwrap()
+            .validate()
+            .unwrap_err();
+        assert_diagnostic(err, code, category, 12, "Linguistics/phonemes.eld");
+    }
+}
+
+#[test]
+fn missing_stage_resources_use_resource_path_category_and_callers_stage() {
+    for (stage, path) in [
+        (8, "Header/format.version"),
+        (9, "META-INF/integrity.kdl"),
+        (10, "package.epf"),
+        (12, "Linguistics/phonemes.eld"),
+    ] {
+        let mut specs = resource_specs();
+        specs.retain(|spec| spec.path != path);
+        let archive = common::build(&specs);
+        let pkg = Package::open(&archive.bytes).unwrap();
+        let view =
+            elang_reader::ArchiveView::new(pkg.listing().index(), pkg.listing().layout()).unwrap();
+        let epf = elang_epf::parse(common::EPF_PAYLOAD).unwrap();
+        // These public stage functions can also be called independently.
+        let err = match stage {
+            8 => elang_reader::bootstrap::run(&view, &archive.bytes, "0.1").unwrap_err(),
+            9 => elang_reader::stages::run_integrity_structure(&view, &archive.bytes).unwrap_err(),
+            10 => elang_reader::stages::run_epf(&view, &archive.bytes).unwrap_err(),
+            12 => elang_reader::stages::run_eld_semantics(&view, &archive.bytes, &epf).unwrap_err(),
+            _ => unreachable!(),
+        };
+        assert_diagnostic(err, "RESOURCE_MISSING", Category::ResourcePath, stage, path);
+    }
+}
+
+#[test]
+fn frame_failures_preserve_their_category_code_and_callers_stage() {
+    let archive = build_canonical();
+    let pkg = Package::open(&archive.bytes).unwrap();
+    let view =
+        elang_reader::ArchiveView::new(pkg.listing().index(), pkg.listing().layout()).unwrap();
+    let manifest = elang_reader::stages::run_integrity_structure(&view, &archive.bytes).unwrap();
+    let epf = elang_epf::parse(common::EPF_PAYLOAD).unwrap();
+
+    for (stage, path) in [
+        (8, "Header/format.version"),
+        (9, "META-INF/integrity.kdl"),
+        (10, "package.epf"),
+        (11, "Header/format.version"),
+        (12, "Linguistics/phonemes.eld"),
+    ] {
+        // A listing can be reused with bytes that were truncated or corrupted
+        // after parsing. Test both the read_span and decode failure paths.
+        let mut corrupt = archive.bytes.clone();
+        let span = view.lookup_str(path).unwrap();
+        let checksum_end =
+            usize::try_from(span.offset.checked_add(span.compressed_size).unwrap()).unwrap();
+        *corrupt
+            .get_mut(checksum_end.checked_sub(1).unwrap())
+            .unwrap() ^= 1;
+        for (bytes, code) in [
+            (&[][..], "FRAME_TRUNCATED"),
+            (corrupt.as_slice(), "FRAME_CHECKSUM_MISMATCH"),
+        ] {
+            let err = match stage {
+                8 => elang_reader::bootstrap::run(&view, bytes, "0.1").unwrap_err(),
+                9 => elang_reader::stages::run_integrity_structure(&view, bytes).unwrap_err(),
+                10 => elang_reader::stages::run_epf(&view, bytes).unwrap_err(),
+                11 => elang_reader::stages::run_resource_integrity(&view, bytes, &manifest)
+                    .unwrap_err(),
+                12 => elang_reader::stages::run_eld_semantics(&view, bytes, &epf).unwrap_err(),
+                _ => unreachable!(),
+            };
+            assert_diagnostic(err, code, Category::Frame, stage, path);
+        }
+    }
 }

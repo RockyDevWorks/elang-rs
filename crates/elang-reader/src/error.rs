@@ -1,12 +1,9 @@
 //! Error construction helpers for the integrated reader pipeline.
 //!
-//! Diagnostics emitted from this crate carry the registry category and stage
-//! for the *stage the diagnostic surfaced from*. Stages 1–7 are owned by
-//! `elang-container` (its diagnostics already carry the right stage), stages
-//! 8–9 by this crate (bootstrap / integrity-structure cross-checks), and
-//! stages 10–12 by `elang-epf` / `elang-eld` (their errors propagate with the
-//! stage the upstream layer assigned). The helpers here only build the
-//! stage-8 bootstrap diagnostics; everything else passes through unchanged.
+//! Diagnostics emitted from this crate carry the registered category and the
+//! stage where the failure surfaced. Bootstrap content checks use stage 8
+//! and the `CONTAINER` category; resource lookup and frame errors retain
+//! their own categories and are tagged with the caller's stage.
 
 use elang_core::error::{Category, Diagnostic, Error};
 
@@ -21,19 +18,26 @@ pub(crate) fn bootstrap_err(
     message: impl Into<String>,
     resource_path: impl Into<String>,
 ) -> Error {
-    Error {
-        diagnostic: Diagnostic::new(code, Category::Container, message)
-            .with_stage(BOOTSTRAP_STAGE)
-            .with_resource(resource_path),
-    }
+    resource_err(
+        code,
+        Category::Container,
+        message,
+        resource_path,
+        BOOTSTRAP_STAGE,
+    )
 }
 
-/// Build a `CONTAINER`-category, stage-8 diagnostic without a resource tag.
-///
-/// Used when the failure is the absence of a required bootstrap resource
-/// (no path to attach).
-pub(crate) fn bootstrap_err_no_path(code: &'static str, message: impl Into<String>) -> Error {
+/// Build a resource diagnostic with its registered category and caller's stage.
+pub(crate) fn resource_err(
+    code: &'static str,
+    category: Category,
+    message: impl Into<String>,
+    resource_path: impl Into<String>,
+    stage: u8,
+) -> Error {
     Error {
-        diagnostic: Diagnostic::new(code, Category::Container, message).with_stage(BOOTSTRAP_STAGE),
+        diagnostic: Diagnostic::new(code, category, message)
+            .with_stage(stage)
+            .with_resource(resource_path),
     }
 }

@@ -117,3 +117,27 @@ fn bootstrap_resources_agree_with_binary_header() {
     assert_eq!(mimetype, b"application/vnd.elang");
     assert_eq!(format_version, b"0.1.0\n");
 }
+
+#[test]
+fn verified_resources_are_accessible_in_index_order_and_bounds_checked() {
+    let archive = build_canonical();
+    let verified = Package::open(&archive.bytes).unwrap().verify().unwrap();
+    let inspected = verified.as_inspected();
+    let paths = inspected.paths();
+    for (index, path) in paths.iter().enumerate() {
+        let (actual_path, bytes) = verified.resource_at(index).expect("indexed resource");
+        assert_eq!(actual_path, *path);
+        assert_eq!(Some(bytes), verified.get_resource(path));
+    }
+    assert_eq!(verified.resource_at(verified.resource_count()), None);
+    assert_eq!(verified.resource_at(usize::MAX), None);
+}
+
+#[test]
+fn package_and_pipeline_results_are_send_and_sync() {
+    fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<Package>();
+    assert_send_sync::<elang_reader::Inspected>();
+    assert_send_sync::<elang_reader::Verified>();
+    assert_send_sync::<elang_reader::Validated>();
+}
