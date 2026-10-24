@@ -161,12 +161,13 @@ tag — not any missing artifact.
 
 The Phase 14 corpus closes the acceptance criterion "every normative MUST has
 at least one positive or negative conformance test". The coverage table in
-`crates/elang-conformance/src/requirement_coverage_data.rs` has **317 rows**
+`crates/elang-conformance/src/requirement_coverage_data.rs` has **374 rows**
 mapping all **169** normative `MUST`/`MUST NOT` requirements from
 `.kiro/specs/elang-v0.1.0/requirements.md` to a `(crate, test)` pair. Every
 row names a real test: `crates/elang-conformance/src/meta_tests.rs` scans the
-workspace source tree and fails if a named test does not exist or does not
-carry a `#[test]`-family attribute, and
+workspace source tree and fails if a named test does not exist, does not
+carry a `#[test]`-family attribute, is `#[ignore]`d, or does not live in the
+crate the row declares, and
 `crates/elang-conformance/tests/requirement_completeness.rs` parses the
 `requirements.md` requirement table at runtime — checking the mapping in both
 directions, and checking that every `GoldenPackage.requirements` list names

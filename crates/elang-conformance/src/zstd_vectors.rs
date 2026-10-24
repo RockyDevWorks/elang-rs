@@ -173,20 +173,21 @@ pub fn fixtures() -> Vec<VectorFixture> {
         expected: pinned_version_bytes(),
     }];
 
-    if let Ok(pkg) = minimal() {
-        fixtures.extend(frame_fixtures(
-            &pkg,
-            PINNED_MINIMAL_FRAME_SHA256,
-            "zstd/minimal-frame-sha256",
-        ));
-    }
-    if let Ok(pkg) = full() {
-        fixtures.extend(frame_fixtures(
-            &pkg,
-            PINNED_FULL_FRAME_SHA256,
-            "zstd/full-frame-sha256",
-        ));
-    }
+    // A golden-package writer failure is a corpus-authoring bug, not a
+    // runtime condition. Silently dropping the frame-digest fixtures
+    // would publish a corpus that claims to pin the per-frame digests
+    // but doesn't; the test-level `>= 12` assertion catches the visible
+    // symptom, but failing at the source makes the cause unambiguous.
+    fixtures.extend(frame_fixtures(
+        &minimal().expect("the minimal golden package must build"),
+        PINNED_MINIMAL_FRAME_SHA256,
+        "zstd/minimal-frame-sha256",
+    ));
+    fixtures.extend(frame_fixtures(
+        &full().expect("the full golden package must build"),
+        PINNED_FULL_FRAME_SHA256,
+        "zstd/full-frame-sha256",
+    ));
     fixtures
 }
 

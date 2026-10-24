@@ -106,7 +106,7 @@ pub fn eld_structure_fixtures() -> Vec<DocumentFixture> {
     fixtures.push(DocumentFixture {
         id: "eld/accept-minimal",
         description: "A minimal consonants+vowels document parses cleanly",
-        requirements: &["REQ-ELD-001"],
+        requirements: &["REQ-ELD-001", "REQ-ELD-003", "REQ-ELD-006"],
         schema: Schema::Eld,
         source: base_eld(),
         expectation: DocumentExpectation::Accept,
@@ -128,7 +128,7 @@ pub fn eld_structure_fixtures() -> Vec<DocumentFixture> {
         fixtures.push(DocumentFixture {
             id: "eld/accept-extra-group",
             description: "A custom group alongside the mandatory ones parses cleanly",
-            requirements: &["REQ-ELD-002"],
+            requirements: &["REQ-ELD-002", "REQ-ELD-004"],
             schema: Schema::Eld,
             source: src.into_bytes(),
             expectation: DocumentExpectation::Accept,
@@ -151,7 +151,7 @@ pub fn eld_structure_fixtures() -> Vec<DocumentFixture> {
         fixtures.push(DocumentFixture {
             id: "eld/reject-duplicate-group",
             description: "A repeated group name is rejected as ELD_GROUP_DUPLICATE",
-            requirements: &["REQ-ELD-003"],
+            requirements: &["REQ-ELD-003", "REQ-ELD-005"],
             schema: Schema::Eld,
             source: src.into_bytes(),
             expectation: DocumentExpectation::Reject {
@@ -167,7 +167,7 @@ pub fn eld_structure_fixtures() -> Vec<DocumentFixture> {
         fixtures.push(DocumentFixture {
             id: "eld/reject-duplicate-roman",
             description: "Two phonemes sharing a romanisation are rejected",
-            requirements: &["REQ-ELD-004"],
+            requirements: &["REQ-ELD-013"],
             schema: Schema::Eld,
             source: src,
             expectation: DocumentExpectation::Reject {
@@ -183,7 +183,7 @@ pub fn eld_structure_fixtures() -> Vec<DocumentFixture> {
         fixtures.push(DocumentFixture {
             id: "eld/reject-duplicate-ipa",
             description: "Two phonemes sharing an IPA are rejected",
-            requirements: &["REQ-ELD-005"],
+            requirements: &["REQ-ELD-015"],
             schema: Schema::Eld,
             source: src,
             expectation: DocumentExpectation::Reject {
@@ -211,7 +211,7 @@ pub fn eld_structure_fixtures() -> Vec<DocumentFixture> {
         fixtures.push(DocumentFixture {
             id: "eld/accept-allophone",
             description: "An allophone with a distinct IPA and roman parses cleanly",
-            requirements: &["REQ-ELD-006"],
+            requirements: &["REQ-ELD-009", "REQ-ELD-010", "REQ-ELD-011"],
             schema: Schema::Eld,
             source: src.into_bytes(),
             expectation: DocumentExpectation::Accept,
@@ -236,7 +236,7 @@ pub fn eld_structure_fixtures() -> Vec<DocumentFixture> {
         fixtures.push(DocumentFixture {
             id: "eld/reject-allophone-duplicate-ipa",
             description: "An allophone reusing its root's IPA is rejected",
-            requirements: &["REQ-ELD-007"],
+            requirements: &["REQ-ELD-015"],
             schema: Schema::Eld,
             source: src.into_bytes(),
             expectation: DocumentExpectation::Reject {
@@ -262,7 +262,7 @@ pub fn epf_fixtures() -> Vec<DocumentFixture> {
     fixtures.push(DocumentFixture {
         id: "epf/accept-minimal",
         description: "A minimal EPF document parses cleanly",
-        requirements: &["REQ-EPF-001"],
+        requirements: &["REQ-EPF-001", "REQ-EPF-003", "REQ-EPF-005"],
         schema: Schema::Epf,
         source: epf_with(
             "0.1.0",
@@ -276,7 +276,7 @@ pub fn epf_fixtures() -> Vec<DocumentFixture> {
     fixtures.push(DocumentFixture {
         id: "epf/reject-wrong-version",
         description: "An unsupported `epf` version is rejected as EPF_BAD_VERSION",
-        requirements: &["REQ-EPF-002"],
+        requirements: &["REQ-EPF-004"],
         schema: Schema::Epf,
         source: epf_with(
             "0.2.0",
@@ -293,7 +293,7 @@ pub fn epf_fixtures() -> Vec<DocumentFixture> {
     fixtures.push(DocumentFixture {
         id: "epf/reject-wrong-eld-version",
         description: "An unsupported `eld` version is rejected as EPF_BAD_VERSION",
-        requirements: &["REQ-EPF-002"],
+        requirements: &["REQ-EPF-004"],
         schema: Schema::Epf,
         source: epf_with(
             "0.1.0",
@@ -310,7 +310,7 @@ pub fn epf_fixtures() -> Vec<DocumentFixture> {
     fixtures.push(DocumentFixture {
         id: "epf/reject-bad-urn",
         description: "A non-ELANG identifier URN is rejected",
-        requirements: &["REQ-EPF-003"],
+        requirements: &["REQ-EPF-006"],
         schema: Schema::Epf,
         source: epf_with(
             "0.1.0",
@@ -340,7 +340,7 @@ pub fn epf_fixtures() -> Vec<DocumentFixture> {
         fixtures.push(DocumentFixture {
             id: "epf/reject-unknown-metadata-field",
             description: "An unknown metadata field is rejected as EPF_BAD_METADATA_FIELD",
-            requirements: &["REQ-EPF-004"],
+            requirements: &["REQ-EPF-011"],
             schema: Schema::Epf,
             source: src.into_bytes(),
             expectation: DocumentExpectation::Reject {
@@ -369,7 +369,7 @@ pub fn epf_fixtures() -> Vec<DocumentFixture> {
         fixtures.push(DocumentFixture {
             id: "epf/reject-empty-name",
             description: "An empty metadata name is rejected as EPF_BAD_METADATA_FIELD",
-            requirements: &["REQ-EPF-004"],
+            requirements: &["REQ-EPF-009"],
             schema: Schema::Epf,
             source: src.into_bytes(),
             expectation: DocumentExpectation::Reject {
@@ -399,7 +399,7 @@ pub fn epf_fixtures() -> Vec<DocumentFixture> {
         fixtures.push(DocumentFixture {
             id: "epf/reject-manifest-path-not-eld",
             description: "A manifest path without the `.eld` extension is rejected",
-            requirements: &["REQ-EPF-005"],
+            requirements: &["REQ-EPF-012"],
             schema: Schema::Epf,
             source: src.into_bytes(),
             expectation: DocumentExpectation::Reject {
@@ -431,7 +431,7 @@ pub fn eld_negative_fixtures() -> Vec<DocumentFixture> {
         fixtures.push(DocumentFixture {
             id: "eld/reject-missing-vowels-group",
             description: "A document without the mandatory `vowels` group is rejected",
-            requirements: &["REQ-ELD-010"],
+            requirements: &["REQ-ELD-003"],
             schema: Schema::Eld,
             source: src.into_bytes(),
             expectation: DocumentExpectation::Reject {
@@ -451,7 +451,7 @@ pub fn eld_negative_fixtures() -> Vec<DocumentFixture> {
         fixtures.push(DocumentFixture {
             id: "eld/reject-missing-consonants-group",
             description: "A document without the mandatory `consonants` group is rejected",
-            requirements: &["REQ-ELD-011"],
+            requirements: &["REQ-ELD-003"],
             schema: Schema::Eld,
             source: src.into_bytes(),
             expectation: DocumentExpectation::Reject {
@@ -473,7 +473,7 @@ pub fn eld_negative_fixtures() -> Vec<DocumentFixture> {
         fixtures.push(DocumentFixture {
             id: "eld/reject-empty-group",
             description: "A declared group with no members is rejected",
-            requirements: &["REQ-ELD-012"],
+            requirements: &["REQ-ELD-006"],
             schema: Schema::Eld,
             source: src.into_bytes(),
             expectation: DocumentExpectation::Reject {

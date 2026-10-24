@@ -29,7 +29,7 @@
 #![allow(clippy::expect_used, reason = "tests are the spec")]
 
 use crate::requirement_coverage_data::{rows, CoverageKind};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 /// The workspace root, found by walking up from this crate's manifest dir.
@@ -103,9 +103,11 @@ fn collect_fn_names(file: &Path) -> Vec<String> {
             k += 1;
         }
         let is_empty_args = k + 1 < bytes.len() && bytes[k] == b'(' && bytes[k + 1] == b')';
+        // Only keep `#[test]` functions that are not `#[ignore]`d: an
+        // ignored test never runs and cannot prove a requirement.
         if is_empty_args
             && name.chars().next().is_some_and(|c| c.is_ascii_lowercase())
-            && has_test_attribute(&text, i)
+            && matches!(classify_attributes(&text, i), TestAttr::Test)
         {
             names.push(name.to_string());
         }
@@ -114,25 +116,44 @@ fn collect_fn_names(file: &Path) -> Vec<String> {
     names
 }
 
-/// Whether the function whose `fn` keyword starts at `fn_start` carries a
-/// test attribute.
+/// What the attribute run above a function says about it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TestAttr {
+    /// No test attribute: the function is a plain helper.
+    NotATest,
+    /// A test attribute is present and the test is not ignored.
+    Test,
+    /// A test attribute is present but the test carries `#[ignore]`,
+    /// so it never runs and cannot prove a requirement.
+    IgnoredTest,
+}
+
+/// Classify the attribute run above the function whose `fn` keyword
+/// starts at `fn_start`.
 ///
 /// Scans backwards from the `fn` keyword over the contiguous run of
-/// `#[...]` attributes and `//` doc comments above it, and reports
-/// whether any of the attributes names a test (`#[test]`,
-/// `#[tokio::test]`, …).
+/// `#[...]` attributes and `//` doc comments above it, and classifies
+/// the run.
 ///
 /// The doc-comment skip matters: this workspace writes its test
 /// docstrings *between* the attribute and the function
 /// (`#[test]` / ``/// `accepts nfc path`.`` / `fn accepts_nfc_path()`),
 /// so a scan that stops at the first non-`]` byte above the `fn` would
 /// miss most of the workspace's tests.
-fn has_test_attribute(text: &str, fn_start: usize) -> bool {
+///
+/// `#[ignore]` matters for a different reason: an ignored test never
+/// runs, so naming one in a coverage row would claim coverage that is
+/// never exercised. The whole attribute run is collected — `#[test]`
+/// and `#[ignore]` may appear in either order — before the verdict is
+/// decided.
+fn classify_attributes(text: &str, fn_start: usize) -> TestAttr {
     let bytes = text.as_bytes();
     // `cursor` points just below the next thing to inspect. We walk it
     // backwards over whitespace, an optional `async` keyword, doc
     // comments and attributes.
     let mut cursor = fn_start;
+    let mut has_test = false;
+    let mut has_ignore = false;
 
     loop {
         // Skip whitespace backwards (this crosses newlines too).
@@ -151,7 +172,7 @@ fn has_test_attribute(text: &str, fn_start: usize) -> bool {
             }
         }
         if cursor == 0 {
-            return false;
+            break;
         }
 
         // A `//` or `///` comment line above the function? Skip the
@@ -165,7 +186,7 @@ fn has_test_attribute(text: &str, fn_start: usize) -> bool {
 
         // The next thing above must be the closing `]` of an attribute.
         if bytes[cursor - 1] != b']' {
-            return false;
+            break;
         }
         let close = cursor - 1;
 
@@ -176,25 +197,37 @@ fn has_test_attribute(text: &str, fn_start: usize) -> bool {
             open -= 1;
         }
         if open == 0 || bytes[open] != b'[' {
-            return false;
+            break;
         }
         if open == 0 || bytes[open - 1] != b'#' {
-            return false;
+            break;
         }
 
         // The attribute body is everything between `[` and `]`.
         let body = &text[open + 1..close];
         let body = body.trim();
+        // The attribute *path* is what comes before any `= value`
+        // part: `ignore = "reason"` has the path `ignore`.
+        let path = body.split('=').next().unwrap_or(body).trim();
         // `test`, `tokio::test`, `rstest`, … — the last path segment
         // must be `test`. `cfg(test)` has no `::`, so its last segment
-        // is the whole body and does NOT match.
-        let last_segment = body.rsplit("::").next().unwrap_or(body).trim();
+        // is the whole path and does NOT match.
+        let last_segment = path.rsplit("::").next().unwrap_or(path).trim();
         if last_segment == "test" {
-            return true;
+            has_test = true;
+        } else if last_segment == "ignore" {
+            has_ignore = true;
         }
-        // Otherwise keep walking: another attribute may sit above this
-        // one.
+        // Keep walking: another attribute may sit above this one.
         cursor = open.saturating_sub(2);
+    }
+
+    if !has_test {
+        TestAttr::NotATest
+    } else if has_ignore {
+        TestAttr::IgnoredTest
+    } else {
+        TestAttr::Test
     }
 }
 
@@ -229,9 +262,16 @@ fn walk_rs(dir: &Path) -> Vec<PathBuf> {
     out
 }
 
-/// Every test fn name present in the workspace.
-fn all_test_names() -> BTreeSet<String> {
-    let mut names = BTreeSet::new();
+/// Every test fn name present in the workspace, keyed by owning crate.
+///
+/// The crate key matters. Flattening every crate into one set would
+/// let a coverage row claim `crate_name: "elang-epf"` while naming a
+/// test that actually lives in `elang-conformance` — the row would
+/// still "pass" the existence check while pointing at the wrong crate.
+/// Keying by crate makes the row's `crate_name` field part of the
+/// guarantee rather than decoration.
+fn all_test_names() -> BTreeMap<String, BTreeSet<String>> {
+    let mut names: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let Some(root) = workspace_root() else {
         return names;
     };
@@ -240,6 +280,10 @@ fn all_test_names() -> BTreeSet<String> {
         .flatten()
         .map(|e| e.path())
     {
+        let Some(crate_name) = crate_dir.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        let entry = names.entry(crate_name.to_string()).or_default();
         for sub in ["src", "tests"] {
             let p = crate_dir.join(sub);
             if !p.exists() {
@@ -247,7 +291,7 @@ fn all_test_names() -> BTreeSet<String> {
             }
             for file in walk_rs(&p) {
                 for n in collect_fn_names(&file) {
-                    names.insert(n);
+                    entry.insert(n);
                 }
             }
         }
@@ -257,21 +301,29 @@ fn all_test_names() -> BTreeSet<String> {
 
 #[test]
 fn every_named_test_in_the_coverage_table_exists() {
+    // Per-crate lookup, so a row must name a test that lives in the
+    // crate it claims — not merely a test somewhere in the workspace.
     let available = all_test_names();
-    let mut missing: Vec<&str> = Vec::new();
+    let mut missing: Vec<String> = Vec::new();
     for row in rows() {
         if row.kind == CoverageKind::Meta || row.kind == CoverageKind::Doc {
             continue;
         }
-        if !available.contains(row.test) {
-            missing.push(row.test);
+        let found = available
+            .get(row.crate_name)
+            .is_some_and(|names| names.contains(row.test));
+        if !found {
+            missing.push(format!(
+                "{}::{} (crate `{}`)",
+                row.requirement, row.test, row.crate_name
+            ));
         }
     }
     missing.sort_unstable();
     missing.dedup();
     assert!(
         missing.is_empty(),
-        "{} named test(s) do not exist in the workspace:\n  {}",
+        "{} named test(s) do not exist in the claimed crate:\n  {}",
         missing.len(),
         missing.join("\n  ")
     );
@@ -302,6 +354,10 @@ fn a_real_test() {}
 #[ignore = "provenance probe"]
 fn an_ignored_test() {}
 
+#[ignore = "provenance probe"]
+#[test]
+fn an_ignored_test_reversed_order() {}
+
 #[tokio::test]
 async fn an_async_test() {}
 "#,
@@ -316,8 +372,12 @@ async fn an_async_test() {}
         "a `#[test]` fn must be collected: {names:?}"
     );
     assert!(
-        names.contains(&"an_ignored_test".to_string()),
-        "a `#[test]` fn with an additional attribute must be collected: {names:?}"
+        !names.contains(&"an_ignored_test".to_string()),
+        "an `#[ignore]`d test never runs and must NOT be collected: {names:?}"
+    );
+    assert!(
+        !names.contains(&"an_ignored_test_reversed_order".to_string()),
+        "an `#[ignore]`d test must NOT be collected in either attribute order: {names:?}"
     );
     assert!(
         !names.contains(&"helper_without_attribute".to_string()),

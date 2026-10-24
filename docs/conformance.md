@@ -252,7 +252,7 @@ behaviour — a container test for `REQ-BIN-013`, a KDL test for
 it. The corpus therefore keeps a second, explicit table:
 
 `crates/elang-conformance/src/requirement_coverage_data.rs` — one row per
-`(requirement, crate, test_name, kind)`. It currently holds **317 rows
+`(requirement, crate, test_name, kind)`. It currently holds **374 rows
 covering all 169** normative `MUST` / `MUST NOT` requirements in
 `.kiro/specs/elang-v0.1.0/requirements.md`.
 
@@ -295,6 +295,19 @@ The attribute requirement matters: a zero-argument helper function
 named like a test would otherwise satisfy a bare `fn name()` scan while
 proving nothing. Renaming a test without updating the table fails CI;
 the table cannot drift away from the code it claims to describe.
+
+Two further conditions make the claim honest rather than merely
+well-formed:
+
+- **The test must live in the crate the row declares.** The scanner
+  indexes test names *per crate*, so a row claiming `elang-epf` cannot
+  be satisfied by a same-named test in `elang-conformance`. Without
+  this, the `crate_name` column would be decoration.
+- **The test must not be `#[ignore]`d.** An ignored test never runs, so
+  naming one would claim coverage that is never exercised. The
+  scanner reads the whole attribute run above a function — `#[test]`
+  and `#[ignore]` may appear in either order — and rejects ignored
+  tests outright.
 
 The same module pins the corpus's internal discipline:
 

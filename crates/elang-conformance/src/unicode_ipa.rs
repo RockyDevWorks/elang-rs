@@ -121,10 +121,12 @@ pub fn vector_fixtures() -> Vec<VectorFixture> {
 /// schema so the `IPA_*` codes surface from the right stage.
 #[must_use]
 pub fn ipa_fixtures() -> Vec<DocumentFixture> {
-    let rep = match load() {
-        Ok(r) => r,
-        Err(_) => return Vec::new(),
-    };
+    // A repertoire that fails to load is a corpus-authoring failure, not
+    // a runtime condition. Returning an empty vector here would silently
+    // drop every IPA fixture; the count assertion at the end of this
+    // function would then fire with a misleading message. Fail at the
+    // source instead.
+    let rep = load().expect("the IPA repertoire must load");
 
     let mut fixtures = Vec::new();
 
