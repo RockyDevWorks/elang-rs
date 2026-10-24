@@ -9,6 +9,7 @@ members = [
     "crates/elang-repertoire",
     "crates/elang-integrity",
     "crates/elang-conformance",
+    "crates/elang-reader",
     "crates/elang-cli",
     "crates/elang-unicode",
 ]
@@ -34,6 +35,7 @@ elang-eld = { path = "crates/elang-eld", version = "0.1.0" }
 elang-repertoire = { path = "crates/elang-repertoire", version = "0.1.0" }
 elang-integrity = { path = "crates/elang-integrity", version = "0.1.0" }
 elang-conformance = { path = "crates/elang-conformance", version = "0.1.0" }
+elang-reader = { path = "crates/elang-reader", version = "0.1.0" }
 elang-unicode = { path = "crates/elang-unicode", version = "0.1.0" }
 
 # External crates (pinned). These are introduced only as the phases that need

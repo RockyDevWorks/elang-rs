@@ -84,8 +84,9 @@ primary stage(s) at which it can fire.
 | `PATH_NUL` | 5 | Contains NUL. |
 | `PATH_EMPTY_SEGMENT` | 5 | Empty, `.`, or `..` segment. |
 | `PATH_TOO_LONG` | 5 | > 1024 UTF-8 bytes. |
+| `RESOURCE_MISSING` | 8/9/10/11/12 | A required resource (e.g. `Header/format.version`, `META-INF/integrity.kdl`, `package.epf`, declared phoneme `.eld`) is not present in the archive index. |
 
-### FRAME (stage 7, 11)
+### FRAME (stage 7, 8, 11)
 
 | Code | Stage | Meaning |
 |---|---|---|
@@ -115,6 +116,13 @@ primary stage(s) at which it can fire.
 | `INTEGRITY_EXTRA_ENTRY` | 9 | Entry for a non-indexed path or for integrity.kdl itself. |
 | `INTEGRITY_DUPLICATE_ENTRY` | 9 | Duplicate resource path. |
 | `INTEGRITY_HASH_MISMATCH` | 11 | Resource digest ≠ declared digest. |
+
+### CONTAINER (stages 1–8, reader-internal)
+
+| Code | Stage | Meaning |
+|---|---|---|
+| `READER_INTERNAL` | 1 | Reader-internal invariant violation; should never occur in practice. |
+| `INDEX_PATH_INVALID` | 9 | Container returned a path that the core layer rejects as invalid. |
 
 ### EPF_SCHEMA (stage 10)
 
@@ -167,6 +175,7 @@ primary stage(s) at which it can fire.
 | Code | Stage | Meaning |
 |---|---|---|
 | `IPA_NOT_IN_REPERTOIRE` | 12 | Symbol not in approved allowlist. |
+| `REPERTOIRE_LOAD_FAILED` | 12 | Pinned IPA repertoire JSON failed to load from the embedded artifact. |
 | `IPA_TOO_MANY_SCALARS` | 12 | > 8 Unicode scalars. |
 | `IPA_TOO_MANY_UNITS` | 12 | > 4 logical base units. |
 | `IPA_TOO_MANY_MODIFICATIONS` | 12 | > 1 modification on a unit. |
