@@ -406,6 +406,7 @@ fn string_literals(text: &str) -> Vec<String> {
         // bogus string. A lifetime (`'a`) is not a char literal.
         if bytes[i] == b'\'' {
             let is_char = bytes.get(i + 1) == Some(&b'\\')
+                || bytes.get(i + 2) == Some(&b'\'')
                 || bytes
                     .get(i + 1)
                     .is_some_and(|c| !crate::meta_tests::is_ident_byte(*c));
@@ -557,6 +558,7 @@ fn assertion_arg_spans(text: &str) -> Vec<(usize, usize)> {
         // bogus string. A lifetime (`'a`) is not a char literal.
         if bytes[i] == b'\'' {
             let is_char = bytes.get(i + 1) == Some(&b'\\')
+                || bytes.get(i + 2) == Some(&b'\'')
                 || bytes
                     .get(i + 1)
                     .is_some_and(|c| !crate::meta_tests::is_ident_byte(*c));
@@ -670,6 +672,7 @@ fn matching_paren(text: &str, open: usize) -> Option<usize> {
         }
         if bytes[i] == b'\'' {
             let is_char = bytes.get(i + 1) == Some(&b'\\')
+                || bytes.get(i + 2) == Some(&b'\'')
                 || bytes
                     .get(i + 1)
                     .is_some_and(|c| !crate::meta_tests::is_ident_byte(*c));
@@ -1113,7 +1116,8 @@ fn string_literal_extraction_ignores_comments_and_char_literals() {
         // "WHEN_TOO_DEEP" is mentioned in a comment.
         /* "WHEN_GROUP_ARITY" in a block comment. */
         let c = '"';
-        assert_eq!(e.code(), "WHEN_BAD_VALUE");
+        let letter = 'a';
+        assert!(letter == 'a' && e.code() == "WHEN_BAD_VALUE");
     "#;
     let found = diagnostics_in(body);
     assert_eq!(
