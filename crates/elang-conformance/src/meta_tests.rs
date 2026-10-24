@@ -33,7 +33,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 /// The workspace root, found by walking up from this crate's manifest dir.
-fn workspace_root() -> Option<PathBuf> {
+pub(crate) fn workspace_root() -> Option<PathBuf> {
     let mut dir: &Path = Path::new(env!("CARGO_MANIFEST_DIR"));
     loop {
         if dir.join(".kiro").is_dir() && dir.join("Cargo.toml").is_file() {
@@ -47,18 +47,17 @@ fn workspace_root() -> Option<PathBuf> {
 ///
 /// The scan is deliberately dependency-free: the corpus is a developer
 /// tool, and pulling in a regex engine to find `fn` keywords would add a
-/// dependency to a crate that exists to check other crates.
+/// dependency to a crate that exists to check other crates. The
+/// wrapper `test_body_for` in `when_attribution.rs` reuses this scanner
+/// to locate the file containing a named test, then extracts the body.
 ///
 /// The matcher walks the text looking for the `fn` keyword at a token
 /// boundary (preceded by a non-identifier character), reads the
 /// identifier that follows, and keeps it only when it is immediately
 /// followed by an empty argument list — which is what a `#[test]`
-/// function looks like.
-///
-/// A bare `fn name()` match is not enough: the workspace is full of
-/// zero-argument *helpers* (`fn minimal_groups()`, `fn all_test_names()`)
-/// that are not tests. A coverage row naming one of those would pass an
-/// existence check while proving nothing, so the matcher additionally
+/// function looks like. A bare `fn name()` match is not enough: the
+/// workspace is full of zero-argument *helpers* (`fn minimal_groups()`,
+/// `fn all_test_names()`) that are not tests. The matcher additionally
 /// requires the function to carry a test attribute — `#[test]`,
 /// `#[tokio::test]`, or any other attribute whose last path segment is
 /// `test`. The attribute run immediately above the `fn` is scanned
@@ -66,7 +65,7 @@ fn workspace_root() -> Option<PathBuf> {
 /// between (for example `#[test]` followed by `#[ignore = "..."]`).
 /// Comments and literals are masked first so their contents cannot be
 /// mistaken for declarations or attributes.
-fn collect_fn_names(file: &Path) -> Vec<String> {
+pub(crate) fn collect_fn_names(file: &Path) -> Vec<String> {
     let Ok(text) = std::fs::read_to_string(file) else {
         return Vec::new();
     };
@@ -122,7 +121,7 @@ fn collect_fn_names(file: &Path) -> Vec<String> {
 /// Replace Rust comments and literals with spaces, preserving byte offsets
 /// and newlines. Recognise literals so comment markers inside them cannot
 /// hide real code; block comments may nest.
-fn mask_non_code(text: &str) -> String {
+pub(crate) fn mask_non_code(text: &str) -> String {
     let bytes = text.as_bytes();
     let mut masked = bytes.to_vec();
     let mut i = 0;
@@ -294,12 +293,12 @@ fn classify_attributes(text: &str, fn_start: usize) -> TestAttr {
 }
 
 /// Whether the byte can appear inside a Rust identifier.
-fn is_ident_byte(b: u8) -> bool {
+pub(crate) fn is_ident_byte(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_'
 }
 
 /// Walk a directory recursively, returning every `.rs` file path.
-fn walk_rs(dir: &Path) -> Vec<PathBuf> {
+pub(crate) fn walk_rs(dir: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let Ok(read) = std::fs::read_dir(dir) else {
         return out;

@@ -161,7 +161,7 @@ than claiming Positive coverage it does not have.
 
 The Phase 14 corpus closes the acceptance criterion "every normative MUST has
 at least one positive or negative conformance test". The coverage table in
-`crates/elang-conformance/src/requirement_coverage_data.rs` has **388 rows**
+`crates/elang-conformance/src/requirement_coverage_data.rs` has **432 rows**
 mapping all **169** normative `MUST`/`MUST NOT` requirements from
 `.kiro/specs/elang-v0.1.0/requirements.md` to a `(crate, test)` pair. Every
 row names a real test: `crates/elang-conformance/src/meta_tests.rs` scans the

@@ -59,5 +59,6 @@ pub mod parser_budgets;
 pub mod requirement_coverage_data;
 pub mod roundtrip;
 pub mod unicode_ipa;
+pub mod when_attribution;
 pub mod zstd_negatives;
 pub mod zstd_vectors;
