@@ -1524,8 +1524,20 @@ static COVERAGE: &[CoverageRow] = &[
     },
     CoverageRow {
         requirement: "REQ-PKG-004",
-        crate_name: "elang-writer",
-        test: "resource_count_over_ceiling_rejected",
+        crate_name: "elang-epf",
+        test: "rejects_input_over_max_epf_bytes",
+        kind: CoverageKind::Negative,
+    },
+    CoverageRow {
+        requirement: "REQ-PKG-004",
+        crate_name: "elang-integrity",
+        test: "rejects_one_byte_over_cap",
+        kind: CoverageKind::Negative,
+    },
+    CoverageRow {
+        requirement: "REQ-PKG-004",
+        crate_name: "elang-container",
+        test: "parse_enforces_the_per_resource_size_ceiling",
         kind: CoverageKind::Negative,
     },
     CoverageRow {
