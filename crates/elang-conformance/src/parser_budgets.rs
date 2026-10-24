@@ -245,7 +245,7 @@ pub fn fixtures() -> Vec<DocumentFixture> {
     fixtures.push(DocumentFixture {
         id: "budget/when-nesting-at-limit",
         description: "A condition tree at exactly MAX_NESTING_DEPTH is accepted",
-        requirements: &["REQ-LIMIT-001"],
+        requirements: &["REQ-WHEN-008"],
         schema: Schema::Eld,
         source: eld_with_nested_when(MAX_NESTING_DEPTH),
         expectation: DocumentExpectation::Accept,
@@ -255,7 +255,7 @@ pub fn fixtures() -> Vec<DocumentFixture> {
     fixtures.push(DocumentFixture {
         id: "budget/when-nesting-over-limit",
         description: "A condition tree one level past MAX_NESTING_DEPTH is rejected",
-        requirements: &["REQ-LIMIT-001"],
+        requirements: &["REQ-WHEN-008"],
         schema: Schema::Eld,
         source: eld_with_nested_when(MAX_NESTING_DEPTH + 1),
         expectation: DocumentExpectation::Reject {
@@ -290,7 +290,7 @@ pub fn fixtures() -> Vec<DocumentFixture> {
         fixtures.push(DocumentFixture {
             id: "budget/when-predicates-at-limit",
             description: "A when block with exactly MAX_PREDICATES_PER_WHEN predicates is accepted",
-            requirements: &["REQ-LIMIT-004"],
+            requirements: &["REQ-WHEN-008"],
             schema: Schema::Eld,
             source: src.into_bytes(),
             expectation: DocumentExpectation::Accept,
@@ -321,7 +321,7 @@ pub fn fixtures() -> Vec<DocumentFixture> {
         fixtures.push(DocumentFixture {
             id: "budget/when-predicates-over-limit",
             description: "A when block with one predicate past the ceiling is rejected",
-            requirements: &["REQ-LIMIT-004"],
+            requirements: &["REQ-WHEN-008"],
             schema: Schema::Eld,
             source: src.into_bytes(),
             expectation: DocumentExpectation::Reject {
