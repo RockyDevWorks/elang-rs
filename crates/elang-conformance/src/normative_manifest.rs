@@ -668,6 +668,9 @@ mod tests {
         assert!(!jcs.is_empty());
         assert_eq!(digest.len(), 64);
         assert!(digest.chars().all(|c| c.is_ascii_hexdigit()));
+        let written = fs::read(test_root.join(MANIFEST_PATH)).expect("read written manifest");
+        assert_eq!(written, jcs);
+        assert_eq!(digest, super::sha256_hex(&jcs));
 
         // Clean up.
         let _ = fs::remove_dir_all(&test_root);
@@ -740,8 +743,15 @@ mod tests {
             fs::write(&full, b"wrong content").expect("write dummy artifact");
         }
 
-        let err = super::verify(&test_root).expect_err("expected Io error");
-        assert!(matches!(err, ManifestError::DigestMismatch { .. }));
+        let err = super::verify(&test_root).expect_err("expected artifact digest mismatch");
+        match err {
+            ManifestError::DigestMismatch { path, .. } => {
+                assert!(super::ARTIFACTS
+                    .iter()
+                    .any(|a| path == test_root.join(a.path)));
+            }
+            other => panic!("expected artifact digest mismatch, got {other:?}"),
+        }
         let _ = fs::remove_dir_all(&test_root);
     }
 }

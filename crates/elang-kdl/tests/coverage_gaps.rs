@@ -829,18 +829,24 @@ fn slash_not_followed_by_version_keyword_is_rejected() {
 
 #[test]
 fn slashdash_requires_children_block() {
-    // `/-` at end of block without `{` is an error.
+    // After a children block, `/-` must target another children block.
     let mut b = budgets();
-    let err = elang_kdl::parse_with_budgets(b"/-\n", &mut b).unwrap_err();
+    let err = elang_kdl::parse_with_budgets(b"n {} /-\n", &mut b).unwrap_err();
     assert_eq!(err.code(), ErrorCode::UnexpectedByte);
+    assert!(err
+        .message
+        .contains("expected children block after slashdash"));
 }
 
 #[test]
 fn missing_children_block_after_slashdash_within_block() {
-    // Within a children block, `/-` must be followed by a `{` block.
+    // The same requirement applies to a node nested within a children block.
     let mut b = budgets();
-    let err = elang_kdl::parse_with_budgets(b"p { /-\n }\n", &mut b).unwrap_err();
+    let err = elang_kdl::parse_with_budgets(b"p { n {} /-\n }\n", &mut b).unwrap_err();
     assert_eq!(err.code(), ErrorCode::UnexpectedByte);
+    assert!(err
+        .message
+        .contains("expected children block after slashdash"));
 }
 
 // ---------------------------------------------------------------------------
