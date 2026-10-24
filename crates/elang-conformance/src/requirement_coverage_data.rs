@@ -1841,10 +1841,28 @@ static COVERAGE: &[CoverageRow] = &[
         kind: CoverageKind::Negative,
     },
     CoverageRow {
+        requirement: "REQ-WHEN-002",
+        crate_name: "elang-eld",
+        test: "single_when_block_on_a_root_is_accepted",
+        kind: CoverageKind::Positive,
+    },
+    CoverageRow {
+        requirement: "REQ-WHEN-002",
+        crate_name: "elang-eld",
+        test: "single_when_block_on_an_allophone_is_accepted",
+        kind: CoverageKind::Positive,
+    },
+    CoverageRow {
         requirement: "REQ-WHEN-003",
         crate_name: "elang-core",
         test: "group_requires_two_children",
         kind: CoverageKind::Negative,
+    },
+    CoverageRow {
+        requirement: "REQ-WHEN-003",
+        crate_name: "elang-eld",
+        test: "group_with_two_children_is_accepted",
+        kind: CoverageKind::Positive,
     },
     CoverageRow {
         requirement: "REQ-WHEN-003",
@@ -1923,6 +1941,12 @@ static COVERAGE: &[CoverageRow] = &[
         crate_name: "elang-eld",
         test: "parse_block_top_gate_rejects_unknown_node_name",
         kind: CoverageKind::Negative,
+    },
+    CoverageRow {
+        requirement: "REQ-WHEN-005",
+        crate_name: "elang-eld",
+        test: "atomic_with_one_string_arg_is_accepted",
+        kind: CoverageKind::Positive,
     },
     CoverageRow {
         requirement: "REQ-WHEN-005",

@@ -253,6 +253,157 @@ fn atomic_with_property_is_rejected() {
 }
 
 // ===========================================================================
+// Positive acceptance paths (T1002..T1005, T1007)
+// ===========================================================================
+//
+// The Negative rows above prove that malformed input is *rejected*.
+// They cannot prove the converse: an implementation that rejected every
+// `when` block would pass them all. These tests pin the accepted side
+// of each structural boundary, so an over-strict parser is caught as
+// loudly as an over-permissive one.
+//
+// REQ-WHEN-004 (`Reject explicit and/not and unknown predicates`) is
+// deliberately absent: it is a `MUST NOT`, so the rejection *is* the
+// satisfaction path and a Positive row would misstate it.
+
+#[test]
+fn single_when_block_on_a_root_is_accepted() {
+    // REQ-WHEN-002 (T1002): a root may carry at most one `when` block.
+    // The single-`when` root is the ordinary case and must parse.
+    let src = "phonemes {\n\
+        consonants { phoneme \"p\" {\n\
+            roman \"p\"\n\
+            when { word-position \"initial\" }\n\
+        } }\n\
+        vowels { phoneme \"a\" { roman \"a\" } }\n\
+    }";
+    let doc = parse_ok(src);
+    let when = when_of_root(&doc);
+    let ast = parse_block(when, &InventoryRefs::from_document(&doc), &rep())
+        .expect("a root with one `when` block must parse");
+    assert_eq!(ast.children().len(), 1);
+}
+
+#[test]
+fn single_when_block_on_an_allophone_is_accepted() {
+    // REQ-WHEN-002 (T1002): the same one-`when` bound applies to an
+    // allophone, not just to its owning root.
+    let src = "phonemes {\n\
+        consonants { phoneme \"t\" {\n\
+            roman \"t\"\n\
+            allophone \"d\" { when { word-position \"initial\" } }\n\
+        } }\n\
+        vowels { phoneme \"a\" { roman \"a\" } }\n\
+    }";
+    let doc = parse_ok(src);
+    let allophone = doc.groups()[0].roots()[0].allophones()[0].clone();
+    let ast = parse_block(
+        allophone.when().expect("allophone has a when block"),
+        &InventoryRefs::from_document(&doc),
+        &rep(),
+    )
+    .expect("an allophone with one `when` block must parse");
+    assert_eq!(ast.children().len(), 1);
+}
+
+#[test]
+fn group_with_two_children_is_accepted() {
+    // REQ-WHEN-003 (T1004): `group` requires at least 2 direct
+    // children. Two children is the minimum legal shape and must parse.
+    let src = "phonemes {\n\
+        consonants { phoneme \"p\" {\n\
+            roman \"p\"\n\
+            when {\n\
+                group {\n\
+                    word-position \"initial\"\n\
+                    previous-phoneme \"a\"\n\
+                }\n\
+            }\n\
+        } }\n\
+        vowels { phoneme \"a\" { roman \"a\" } }\n\
+    }";
+    let doc = parse_ok(src);
+    let ast = parse_block(
+        when_of_root(&doc),
+        &InventoryRefs::from_document(&doc),
+        &rep(),
+    )
+    .expect("`group` with two children must parse");
+    assert_eq!(ast.children().len(), 1);
+    assert!(
+        matches!(
+            ast.children()[0],
+            elang_core::model::when::Condition::Group(_)
+        ),
+        "the `group` must be preserved as a Group node"
+    );
+}
+
+#[test]
+fn or_with_two_children_is_accepted() {
+    // REQ-WHEN-003 (T1005): `or` requires exactly 2 direct children.
+    // The exact-arity case must parse.
+    let src = "phonemes {\n\
+        consonants { phoneme \"p\" {\n\
+            roman \"p\"\n\
+            when {\n\
+                or {\n\
+                    word-position \"initial\"\n\
+                    previous-phoneme \"a\"\n\
+                }\n\
+            }\n\
+        } }\n\
+        vowels { phoneme \"a\" { roman \"a\" } }\n\
+    }";
+    let doc = parse_ok(src);
+    let ast = parse_block(
+        when_of_root(&doc),
+        &InventoryRefs::from_document(&doc),
+        &rep(),
+    )
+    .expect("`or` with two children must parse");
+    assert_eq!(ast.children().len(), 1);
+    assert!(
+        matches!(
+            ast.children()[0],
+            elang_core::model::when::Condition::Or(_, _)
+        ),
+        "the `or` must be preserved as a binary Or node"
+    );
+}
+
+#[test]
+fn atomic_with_one_string_arg_is_accepted() {
+    // REQ-WHEN-005 (T1007): an atomic predicate takes exactly one
+    // string argument and no block or properties. Each of the four
+    // atomic predicates must accept that shape.
+    for predicate in [
+        "word-position \"initial\"",
+        "syllable-position \"onset\"",
+        "previous-phoneme \"a\"",
+        "next-phoneme \"p\"",
+    ] {
+        let src = format!(
+            "phonemes {{\n\
+                consonants {{ phoneme \"p\" {{\n\
+                    roman \"p\"\n\
+                    when {{ {predicate} }}\n\
+                }} }}\n\
+                vowels {{ phoneme \"a\" {{ roman \"a\" }} }}\n\
+            }}"
+        );
+        let doc = parse_ok(&src);
+        let ast = parse_block(
+            when_of_root(&doc),
+            &InventoryRefs::from_document(&doc),
+            &rep(),
+        )
+        .expect("an atomic predicate with one string argument must parse");
+        assert_eq!(ast.children().len(), 1, "predicate: {predicate}");
+    }
+}
+
+// ===========================================================================
 // Predicate validation (T1008..T1010)
 // ===========================================================================
 
@@ -586,6 +737,10 @@ fn truth_table_syllable_position() {
 
 #[test]
 fn truth_table_neighbours_across_syllable_boundary() {
+    // T1024: a neighbour match may cross a syllable boundary. The
+    // word is `a p a`; the middle phoneme sees `a` on both sides, so
+    // the `previous-phoneme`/`next-phoneme` predicates both hold even
+    // though the neighbours belong to the adjacent syllables.
     // Phase 8 owns the rejection and we never reach Phase 10's reference
     // resolver.
     let src = "phonemes {\n\
