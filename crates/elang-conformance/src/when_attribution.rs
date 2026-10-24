@@ -57,7 +57,7 @@
 #![allow(clippy::expect_used, reason = "tests are the spec")]
 
 use crate::meta_tests::{mask_non_code, walk_rs, workspace_root};
-use crate::requirement_coverage_data::{rows, CoverageKind};
+use crate::requirement_coverage_data::{rows, CoverageKind, CoverageRow};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
@@ -145,7 +145,14 @@ const WHEN_EVIDENCE: &[RequirementEvidence] = &[
     RequirementEvidence {
         requirement: "REQ-WHEN-008",
         allowed_diagnostics: &["WHEN_TOO_DEEP", "WHEN_TOO_MANY_PREDICATES"],
-        observables: &["predicate", "predicates", "nesting", "nested", "budget"],
+        observables: &[
+            "predicate",
+            "predicates",
+            "nesting",
+            "nested",
+            "budget",
+            "budgets",
+        ],
     },
     RequirementEvidence {
         requirement: "REQ-WHEN-009",
@@ -155,7 +162,7 @@ const WHEN_EVIDENCE: &[RequirementEvidence] = &[
     RequirementEvidence {
         requirement: "REQ-WHEN-010",
         allowed_diagnostics: &[],
-        observables: &["or", "group", "and_", "siblings"],
+        observables: &["or", "group", "and", "siblings"],
     },
     RequirementEvidence {
         requirement: "REQ-WHEN-011",
@@ -189,12 +196,12 @@ const WHEN_EVIDENCE: &[RequirementEvidence] = &[
     RequirementEvidence {
         requirement: "REQ-WHEN-014",
         allowed_diagnostics: &[],
-        observables: &["neighbour"],
+        observables: &["neighbour", "neighbours"],
     },
     RequirementEvidence {
         requirement: "REQ-WHEN-015",
         allowed_diagnostics: &[],
-        observables: &["eligib", "Eligibil", "priority", "realizations"],
+        observables: &["eligible", "Eligibility", "priority", "realizations"],
     },
 ];
 
@@ -494,6 +501,69 @@ fn evidence_for(requirement: &str) -> Option<&'static RequirementEvidence> {
     WHEN_EVIDENCE.iter().find(|e| e.requirement == requirement)
 }
 
+/// Whether `token` occurs as a whole word; underscores separate words.
+fn contains_word(text: &str, token: &str) -> bool {
+    text.match_indices(token).any(|(at, _)| {
+        let before_ok = text[..at]
+            .chars()
+            .next_back()
+            .is_none_or(|c| !c.is_alphanumeric());
+        let after_ok = text[at + token.len()..]
+            .chars()
+            .next()
+            .is_none_or(|c| !c.is_alphanumeric());
+        before_ok && after_ok
+    })
+}
+
+/// Check a row's observable vocabulary and diagnostic evidence.
+fn check_attribution(row: &CoverageRow, body: &str) -> Result<(), String> {
+    let evidence = evidence_for(row.requirement).ok_or("no evidence record")?;
+
+    // 1. The requirement's vocabulary must appear in the test's name or body.
+    let haystack = format!("{}\n{}", row.test, body);
+    if !evidence
+        .observables
+        .iter()
+        .any(|token| contains_word(&haystack, token))
+    {
+        return Err(format!(
+            "no vocabulary from the requirement appears in the \
+             test (expected one of {:?})",
+            evidence.observables
+        ));
+    }
+
+    // 2. Every asserted diagnostic must belong to this requirement, even
+    //    when the test also asserts an allowed diagnostic.
+    let asserted = diagnostics_in(body);
+    let allowed: BTreeSet<&str> = evidence.allowed_diagnostics.iter().copied().collect();
+    let foreign: Vec<&String> = asserted
+        .iter()
+        .filter(|code| !allowed.contains(code.as_str()))
+        .collect();
+    if !foreign.is_empty() {
+        return Err(format!(
+            "asserts diagnostic(s) {foreign:?} that belong to a \
+             different requirement (this requirement allows {:?})",
+            evidence.allowed_diagnostics
+        ));
+    }
+
+    // 3. Negative rows with a rejection path must assert a diagnostic.
+    if row.kind == CoverageKind::Negative
+        && !evidence.allowed_diagnostics.is_empty()
+        && asserted.is_empty()
+    {
+        return Err(format!(
+            "filed as a Negative row but asserts no diagnostic \
+             code (expected one of {:?})",
+            evidence.allowed_diagnostics
+        ));
+    }
+    Ok(())
+}
+
 /// The task ids owned by `requirement`.
 fn tasks_for(requirement: &str) -> Option<&'static [&'static str]> {
     WHEN_TASK_OWNER
@@ -541,25 +611,8 @@ fn every_when_requirement_has_an_evidence_record() {
 
 #[test]
 fn every_when_coverage_row_matches_its_evidence() {
-    // The core attribution check. Two properties per row:
-    //
-    //   1. the test mentions at least one token from the requirement's
-    //      own vocabulary (observable match), and
-    //   2. every diagnostic code the test asserts belongs to the
-    //      requirement's own rejection path (diagnostic-subset match).
-    //
-    // Property 2 is a subset check on purpose: a body that asserts a
-    // code belonging to a *different* requirement is mis-attributed
-    // even when it also asserts a legitimate one.
     let mut failures = Vec::new();
     for row in when_rows() {
-        let Some(evidence) = evidence_for(row.requirement) else {
-            failures.push(format!(
-                "{} :: {} — no evidence record",
-                row.requirement, row.test
-            ));
-            continue;
-        };
         let Some(body) = test_body_for(row.crate_name, row.test) else {
             failures.push(format!(
                 "{} :: {} — test body not found in crate `{}`",
@@ -567,51 +620,8 @@ fn every_when_coverage_row_matches_its_evidence() {
             ));
             continue;
         };
-
-        // 1. Observable match — the requirement's vocabulary must
-        //    appear in the test's name or body.
-        let haystack = format!("{}\n{}", row.test, body);
-        if !evidence
-            .observables
-            .iter()
-            .any(|token| haystack.contains(token))
-        {
-            failures.push(format!(
-                "{} :: {} — no vocabulary from the requirement appears in the \
-                 test (expected one of {:?})",
-                row.requirement, row.test, evidence.observables
-            ));
-            continue;
-        }
-
-        // 2. Diagnostic-subset match.
-        let asserted = diagnostics_in(&body);
-        let allowed: BTreeSet<&str> = evidence.allowed_diagnostics.iter().copied().collect();
-        let foreign: Vec<&String> = asserted
-            .iter()
-            .filter(|code| !allowed.contains(code.as_str()))
-            .collect();
-        if !foreign.is_empty() {
-            failures.push(format!(
-                "{} :: {} — asserts diagnostic(s) {foreign:?} that belong to a \
-                 different requirement (this requirement allows {:?})",
-                row.requirement, row.test, evidence.allowed_diagnostics
-            ));
-            continue;
-        }
-
-        // 3. A Negative row on a requirement that has a rejection path
-        //    must actually assert one of its codes — otherwise the row
-        //    claims a rejection the test never demonstrates.
-        if row.kind == CoverageKind::Negative
-            && !evidence.allowed_diagnostics.is_empty()
-            && asserted.is_empty()
-        {
-            failures.push(format!(
-                "{} :: {} — filed as a Negative row but asserts no diagnostic \
-                 code (expected one of {:?})",
-                row.requirement, row.test, evidence.allowed_diagnostics
-            ));
+        if let Err(reason) = check_attribution(row, &body) {
+            failures.push(format!("{} :: {} — {reason}", row.requirement, row.test));
         }
     }
     failures.sort_unstable();
@@ -676,39 +686,105 @@ fn every_when_task_tag_agrees_with_its_requirement() {
 
 #[test]
 fn the_attribution_guard_rejects_a_known_bad_attribution() {
-    // The guard is only worth having if it actually fails when the
-    // table is wrong. This pins that property with a synthetic row
-    // rather than relying on the historical table.
-    //
-    // The mis-attribution used here is the one that actually shipped:
-    // an atomic-arity rejection filed under the AST-shape requirement.
-    let body = "fn example() { assert_eq!(e.code(), \"WHEN_PREDICATE_ARITY\"); }";
-    let evidence = evidence_for("REQ-WHEN-001").expect("REQ-WHEN-001 has evidence");
-    let asserted = diagnostics_in(body);
-    let allowed: BTreeSet<&str> = evidence.allowed_diagnostics.iter().copied().collect();
-    let foreign: Vec<&String> = asserted
-        .iter()
-        .filter(|code| !allowed.contains(code.as_str()))
-        .collect();
-    assert!(
-        !foreign.is_empty(),
-        "an atomic-arity rejection must NOT be accepted as evidence for \
-         REQ-WHEN-001 (the AST-shape requirement)"
-    );
+    // Exercise the same decision as the real coverage rows. Each rejection
+    // isolates one rule, so another rule cannot hide a regression.
+    let cases = [
+        (
+            "REQ-WHEN-001",
+            "atomic_arity_as_ast_shape",
+            CoverageKind::Negative,
+            r#"let c = Condition::Predicate; assert_eq!(e.code(), "WHEN_PREDICATE_ARITY");"#,
+            Some("asserts diagnostic(s)"),
+        ),
+        (
+            "REQ-WHEN-003",
+            "format_error",
+            CoverageKind::Positive,
+            "for item in items { record(item); }",
+            Some("no vocabulary"),
+        ),
+        (
+            "REQ-WHEN-006",
+            "word_position_rejects_bad_value_and_depth",
+            CoverageKind::Negative,
+            r#"assert_eq!(e.code(), "WHEN_BAD_VALUE"); assert_eq!(other.code(), "WHEN_TOO_DEEP");"#,
+            Some("asserts diagnostic(s)"),
+        ),
+        (
+            "REQ-WHEN-006",
+            "word_position_without_diagnostic",
+            CoverageKind::Negative,
+            "assert!(result.is_err());",
+            Some("asserts no diagnostic"),
+        ),
+        (
+            "REQ-WHEN-006",
+            "word_position_rejects_bad_value",
+            CoverageKind::Negative,
+            r#"assert_eq!(e.code(), "WHEN_BAD_VALUE");"#,
+            None,
+        ),
+        (
+            "REQ-WHEN-010",
+            "and_evaluates_siblings",
+            CoverageKind::Positive,
+            "assert!(result);",
+            None,
+        ),
+        (
+            "REQ-WHEN-014",
+            "missing_neighbour_is_false",
+            CoverageKind::Negative,
+            "assert!(!result);",
+            None,
+        ),
+        (
+            "REQ-WHEN-015",
+            "no_eligible_returns_empty",
+            CoverageKind::Negative,
+            "assert!(result.is_empty());",
+            None,
+        ),
+    ];
+    for (requirement, test, kind, body, expected_error) in cases {
+        let row = CoverageRow {
+            requirement,
+            crate_name: "synthetic",
+            test,
+            kind,
+        };
+        let result = check_attribution(&row, body);
+        if let Some(expected) = expected_error {
+            let reason = result.expect_err(test);
+            assert!(reason.contains(expected), "{test}: {reason}");
+        } else {
+            assert_eq!(result, Ok(()), "{test}");
+        }
+    }
+}
 
-    // And the correct attribution is accepted.
-    let body = "fn example() { assert_eq!(e.code(), \"WHEN_BAD_VALUE\"); }";
-    let evidence = evidence_for("REQ-WHEN-006").expect("REQ-WHEN-006 has evidence");
-    let asserted = diagnostics_in(body);
-    let allowed: BTreeSet<&str> = evidence.allowed_diagnostics.iter().copied().collect();
-    let foreign: Vec<&String> = asserted
-        .iter()
-        .filter(|code| !allowed.contains(code.as_str()))
-        .collect();
-    assert!(
-        foreign.is_empty(),
-        "a word-position value rejection IS valid evidence for REQ-WHEN-006"
-    );
+#[test]
+fn observable_words_respect_boundaries() {
+    for (text, token, expected) in [
+        ("or", "or", true),
+        ("or_with_cross_category_alternatives", "or", true),
+        ("nested_or", "or", true),
+        ("for error format", "or", false),
+        ("format then or", "or", true),
+        ("or2 2or", "or", false),
+        ("éor oré", "or", false),
+        ("whenever", "when", false),
+        ("parse_when_block", "when", true),
+        ("finally", "final", false),
+        ("initial_and_final", "final", true),
+        ("(Condition::Group)", "Condition::Group", true),
+        ("Condition::Groups", "Condition::Group", false),
+        (r#"word-position "initial""#, "word-position", true),
+        ("word_position_is_initial", "word_position", true),
+        ("Eligibility::Empty", "Eligibility", true),
+    ] {
+        assert_eq!(contains_word(text, token), expected, "{text:?}: {token:?}");
+    }
 }
 
 #[test]
