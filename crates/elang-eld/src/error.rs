@@ -119,6 +119,7 @@ pub(crate) fn from_core(err: Error, span: SourceSpan) -> Error {
 #[cfg(test)]
 #[allow(
     clippy::unwrap_used,
+    clippy::expect_used,
     reason = "tests assert exact diagnostic codes/categories; a panic signals a regression"
 )]
 mod tests {
@@ -167,5 +168,32 @@ mod tests {
         let e = from_ipa(err, SourceSpan::INVALID);
         assert_eq!(e.code(), "UNICODE_NOT_NFC");
         assert_eq!(e.category(), Category::Unicode);
+    }
+
+    #[test]
+    fn from_kdl_translates_code_category_and_span() {
+        let span = SourceSpan {
+            start: Position {
+                byte: 4,
+                line: 2,
+                column: 3,
+            },
+            end: Position {
+                byte: 9,
+                line: 2,
+                column: 8,
+            },
+        };
+        let err = elang_kdl::ParseError::at(elang_kdl::ErrorCode::UnexpectedByte, span, "boom");
+        let e = from_kdl(err);
+        assert_eq!(e.code(), "KDL_UNEXPECTED_BYTE");
+        assert_eq!(
+            e.category(),
+            elang_kdl::ErrorCode::UnexpectedByte.category()
+        );
+        let attached = e.diagnostic.span.expect("span must be attached");
+        assert_eq!(attached.line, 2);
+        assert_eq!(attached.column, 3);
+        assert_eq!(attached.length, 5);
     }
 }

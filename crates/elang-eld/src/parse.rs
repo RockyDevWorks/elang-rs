@@ -89,24 +89,20 @@ fn validate_top_level(doc: &KdlDocument, repertoire: &Repertoire) -> Result<Vec<
     }
 
     // C-01: exactly one top-level node named "phonemes".
-    if nodes.len() != 1 {
-        let span = nodes.get(1).map_or(SourceSpan::INVALID, |n| n.span());
-        return Err(eld_err_at(
-            "ELD_TOPLEVEL_INVALID",
-            format!(
-                "expected exactly one top-level `phonemes` node, found {}",
-                nodes.len()
-            ),
-            span,
-        ));
-    }
-    // Safety: len == 1, so get(0) is Some.
-    let phonemes = nodes.first().ok_or_else(|| {
-        eld_err(
-            "ELD_TOPLEVEL_INVALID",
-            "internal: expected one top-level node",
-        )
-    })?;
+    let phonemes = match nodes {
+        [only] => only,
+        others => {
+            let span = others.get(1).map_or(SourceSpan::INVALID, |n| n.span());
+            return Err(eld_err_at(
+                "ELD_TOPLEVEL_INVALID",
+                format!(
+                    "expected exactly one top-level `phonemes` node, found {}",
+                    others.len()
+                ),
+                span,
+            ));
+        }
+    };
     if phonemes.name() != "phonemes" {
         return Err(eld_err_at(
             "ELD_TOPLEVEL_INVALID",
@@ -189,6 +185,19 @@ fn validate_top_level(doc: &KdlDocument, repertoire: &Repertoire) -> Result<Vec<
 
         let g_name = g_node.name().to_string();
 
+        // C-02/C-03: group must carry at least one root phoneme.
+        let roots: Vec<&KdlNode> = g_children
+            .iter()
+            .filter(|c| c.name() == "phoneme")
+            .collect();
+        if roots.is_empty() {
+            return Err(eld_err_at(
+                "ELD_GROUP_INVALID",
+                format!("group `{}` must have at least one `phoneme`", g_name),
+                g_node.span(),
+            ));
+        }
+
         // C-04/C-05: only direct `phoneme` children.
         if let Some(bad) = phoneme_first(b"phoneme", g_children) {
             return Err(eld_err_at(
@@ -199,20 +208,6 @@ fn validate_top_level(doc: &KdlDocument, repertoire: &Repertoire) -> Result<Vec<
                     bad.name()
                 ),
                 bad.span(),
-            ));
-        }
-
-        let roots: Vec<&KdlNode> = g_children
-            .iter()
-            .filter(|c| c.name() == "phoneme")
-            .collect();
-
-        // C-02/C-03: group must be nonempty.
-        if roots.is_empty() {
-            return Err(eld_err_at(
-                "ELD_GROUP_INVALID",
-                format!("group `{}` must have at least one `phoneme`", g_name),
-                g_node.span(),
             ));
         }
 
@@ -240,21 +235,10 @@ fn validate_top_level(doc: &KdlDocument, repertoire: &Repertoire) -> Result<Vec<
                 has_vowels = true;
                 EldGroupKind::Vowels
             }
+            // Reserved names cannot reach this arm: `consonants` and `vowels`
+            // are matched by the arms above, so a group with either name is
+            // reported as a duplicate mandatory group, never as a custom one.
             custom => {
-                if has_consonants && custom == "consonants" {
-                    return Err(eld_err_at(
-                        "ELD_GROUP_DUPLICATE",
-                        "reserved name `consonants` reused as custom group",
-                        g_node.span(),
-                    ));
-                }
-                if has_vowels && custom == "vowels" {
-                    return Err(eld_err_at(
-                        "ELD_GROUP_DUPLICATE",
-                        "reserved name `vowels` reused as custom group",
-                        g_node.span(),
-                    ));
-                }
                 if seen_group_names.contains(custom) {
                     return Err(eld_err_at(
                         "ELD_GROUP_DUPLICATE",
@@ -341,21 +325,23 @@ fn validate_top_level(doc: &KdlDocument, repertoire: &Repertoire) -> Result<Vec<
             }
 
             // C-07: exactly one `roman`.
-            if roman_nodes.is_empty() {
-                return Err(eld_err_at(
-                    "ELD_PHONEME_INVALID",
-                    "`phoneme` must have exactly one `roman` child",
-                    r_node.span(),
-                ));
-            }
-            if roman_nodes.len() > 1 {
-                let span = roman_nodes.get(1).map_or(SourceSpan::INVALID, |n| n.span());
-                return Err(eld_err_at(
-                    "ELD_PHONEME_INVALID",
-                    "`phoneme` must have exactly one `roman` child (found at least 2)",
-                    span,
-                ));
-            }
+            let roman_node = match roman_nodes.as_slice() {
+                [only] => *only,
+                [] => {
+                    return Err(eld_err_at(
+                        "ELD_PHONEME_INVALID",
+                        "`phoneme` must have exactly one `roman` child",
+                        r_node.span(),
+                    ));
+                }
+                [_, extra, ..] => {
+                    return Err(eld_err_at(
+                        "ELD_PHONEME_INVALID",
+                        "`phoneme` must have exactly one `roman` child (found at least 2)",
+                        extra.span(),
+                    ));
+                }
+            };
 
             // C-07: at most one `when`.
             if when_nodes.len() > 1 {
@@ -373,10 +359,6 @@ fn validate_top_level(doc: &KdlDocument, repertoire: &Repertoire) -> Result<Vec<
             let ipa_stored = IpaIdentifierText::from_validated(ipa_id.original.clone());
 
             // --- Romanization validation (C-13, C-14) ---
-            // Safety: we checked roman_nodes is non-empty and <= 1.
-            let roman_node = roman_nodes
-                .first()
-                .ok_or_else(|| eld_err("ELD_PHONEME_INVALID", "internal: roman node expected"))?;
             let roman = validate_roman_node(roman_node)?;
 
             // --- When block (carried verbatim for Phase 10) ---
@@ -502,14 +484,8 @@ fn validate_allophone(
     parent_roman: &Romanization,
     repertoire: &Repertoire,
 ) -> Result<(EldAllophone, String), Error> {
-    // C-10: type annotation on allophone.
-    if node.ty().is_some() {
-        return Err(eld_err_at(
-            "ELD_ALLOPHONE_INVALID",
-            "`allophone` must not have a type annotation",
-            node.span(),
-        ));
-    }
+    // A type annotation on the `allophone` node itself is rejected earlier, by
+    // the parent root's child scan, which reports `ELD_PHONEME_INVALID`.
 
     // C-10: exactly one argument, must be a string.
     let ipa_arg = require_single_string_arg(node, "ELD_ALLOPHONE_INVALID")?;
@@ -609,13 +585,9 @@ fn validate_allophone(
 // --------------------------------------------------------------------------
 
 fn validate_roman_node(node: &KdlNode) -> Result<Romanization, Error> {
-    if node.ty().is_some() {
-        return Err(roman_err_at(
-            "ROMAN_INVALID_NODE",
-            "`roman` must not have a type annotation",
-            node.span(),
-        ));
-    }
+    // A type annotation on a `roman` node is rejected by the caller's child
+    // scan before this function runs (the root scan reports
+    // `ELD_PHONEME_INVALID`, the allophone scan `ELD_ALLOPHONE_INVALID`).
 
     // C-13: exactly one string arg, no props, no block.
     let value = require_single_string_arg(node, "ROMAN_INVALID_NODE")?;
@@ -1491,6 +1463,48 @@ mod tests {
                 &r
             ).code(),
             "ELD_UNKNOWN_FIELD"
+        );
+    }
+
+    #[test]
+    fn duplicate_consonants_group() {
+        let r = rep();
+        assert_eq!(
+            parse_err(
+                "phonemes { consonants { phoneme \"p\" { roman \"p\" } }\n    consonants { phoneme \"b\" { roman \"b\" } }\n    vowels { phoneme \"a\" { roman \"a\" } } }",
+                &r
+            ).code(),
+            "ELD_GROUP_INVALID"
+        );
+    }
+
+    #[test]
+    fn group_without_any_phoneme_is_invalid() {
+        let r = rep();
+        assert_eq!(
+            parse_err(
+                "phonemes { consonants { phoneme \"p\" { roman \"p\" } }\n    other { roman \"o\" }\n    vowels { phoneme \"a\" { roman \"a\" } } }",
+                &r
+            ).code(),
+            "ELD_GROUP_INVALID"
+        );
+    }
+
+    #[test]
+    fn phonemes_without_a_block_is_invalid() {
+        let r = rep();
+        assert_eq!(parse_err("phonemes\n", &r).code(), "ELD_TOPLEVEL_INVALID");
+    }
+
+    #[test]
+    fn allophone_child_type_annotation_is_invalid() {
+        let r = rep();
+        assert_eq!(
+            parse_err(
+                "phonemes { consonants { phoneme \"p\" { roman \"p\"\n    allophone \"b\" { (t) roman \"b\" } } }\n    vowels { phoneme \"a\" { roman \"a\" } } }",
+                &r
+            ).code(),
+            "ELD_ALLOPHONE_INVALID"
         );
     }
 }

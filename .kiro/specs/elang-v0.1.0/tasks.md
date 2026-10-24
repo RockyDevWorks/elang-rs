@@ -245,7 +245,7 @@
 - [x] **T0901** Require exactly one top-level `phonemes` node with explicit block.
 _(Enforced by `validate_top_level` in `crates/elang-eld/src/parse.rs`: `nodes.len() != 1` check → `ELD_TOPLEVEL_INVALID`; `require_nonempty_block` for the block. Tests: `minimal_valid` (accepts), `two_top_level_nodes`, `top_level_not_phonemes` (rejects).)_
 - [x] **T0902** Reject empty/whitespace/comment-only ELD and extra top-level nodes.
-_(Empty/whitespace/comment-only: `nodes.is_empty()` → `ELD_EMPTY`. Extra node: `nodes.len() != 1` → `ELD_TOPLEVEL_INVALID`. Tests: `empty_file`, `whitespace_only`, `comment_only`, `two_top_level_nodes`.)_
+_(Empty/whitespace/comment-only: `nodes.is_empty()` → `ELD_EMPTY`. Extra node: the top-level nodes are matched as a slice, so more than one → `ELD_TOPLEVEL_INVALID` (the second node's span is reported). Tests: `empty_file`, `whitespace_only`, `comment_only`, `two_top_level_nodes`, `phonemes_without_a_block_is_invalid`.)_
 - [x] **T0903** Require exactly one nonempty `consonants` and `vowels` group.
 _(`validate_top_level` counts `has_consonants`/`has_vowels`; after loop, missing → `ELD_GROUP_INVALID`. Each group block must have ≥1 `phoneme` child (`roots.is_empty()` check). Tests: `missing_consonants`, `missing_vowels`, `duplicate_vowels`, `minimal_valid`.)_
 - [x] **T0904** Enforce <=16 total groups, <=14 custom groups.
@@ -253,17 +253,17 @@ _(`group_count > MAX_GROUPS` (16) → `ELD_GROUP_INVALID` at the 17th group. Cus
 - [x] **T0905** Validate custom group regex `[a-z]+(?:-[a-z]+)*`, <=32 ASCII characters.
 _(Delegated to `elang_core::ids::GroupName::new_custom`; failures map to `ELD_GROUP_INVALID`. Tests: `custom_group_uppercase`, `custom_group_underscore`, `custom_group_33_chars`, `custom_group_32_chars_accepted`.)_
 - [x] **T0906** Reject duplicate group names and reserved custom names.
-_(`seen_group_names` set in `validate_top_level` catches duplicates → `ELD_GROUP_DUPLICATE`. Reserved-name reuse (`consonants`/`vowels` as custom) → `ELD_GROUP_DUPLICATE` or `ELD_GROUP_INVALID`. Tests: `duplicate_group_name`, `custom_group_named_vowels`.)_
+_(`seen_group_names` set in `validate_top_level` catches duplicates → `ELD_GROUP_DUPLICATE`. The reserved names `consonants`/`vowels` are matched by their own arms, so a second occurrence is reported as a duplicate mandatory group → `ELD_GROUP_INVALID`. Tests: `duplicate_group_name`, `duplicate_consonants_group`, `custom_group_named_vowels`.)_
 - [x] **T0907** Require explicit nonempty group blocks, zero args/properties.
 _(`require_nonempty_block` for block presence and non-empty; `reject_entries` rejects args/props. All → `ELD_GROUP_INVALID` or `ELD_UNKNOWN_FIELD`. Tests: `empty_custom_group`, `group_with_property`, `group_with_non_phoneme_child`.)_
 - [x] **T0908** Require >=1 root phoneme in every group; reject empty custom group.
-_(`roots.is_empty()` after filtering `phoneme` children → `ELD_GROUP_INVALID`. Tests: `empty_custom_group`, `minimal_valid`.)_
+_(`roots.is_empty()` after filtering `phoneme` children → `ELD_GROUP_INVALID`; checked before the unknown-child scan, so a group with no `phoneme` child at all is reported as an invalid group rather than an unknown field. Tests: `empty_custom_group`, `group_without_any_phoneme_is_invalid`, `minimal_valid`.)_
 - [x] **T0909** Require `phoneme` exactly one IPA string arg, zero properties, explicit nonempty block.
 _(`require_single_string_arg` for string arg; `reject_props` for zero properties; `require_nonempty_block` for block. All → `ELD_PHONEME_INVALID`. Tests: `phoneme_no_arg`, `phoneme_two_args`, `phoneme_non_string_arg`, `phoneme_with_property`, `phoneme_empty_block`.)_
 - [x] **T0910** Enforce <=256 root phonemes globally.
 _(`global_root_count > MAX_ROOT_PHONEMES` (256) → `ELD_PHONEME_INVALID`. Checked inside the root loop in `validate_top_level`. Integration tests `two_hundred_fifty_six_roots_accepted` and `two_hundred_fifty_seven_roots_rejected` generate unique three-unit IPA identifiers from approved bases: 255 consonant roots plus one vowel are accepted; 256 consonant roots plus one vowel are rejected with `ELD_PHONEME_INVALID`.)_
 - [x] **T0911** Require exactly one root `roman`, optional <=1 root `when`.
-_(Child scan in `validate_top_level`: `roman_nodes.is_empty()` or `roman_nodes.len() > 1` → `ELD_PHONEME_INVALID`; `when_nodes.len() > 1` → `ELD_PHONEME_INVALID`. Tests: `root_no_roman`, `root_two_romans`, `root_two_whens`, `root_when_allophone_no_when_is_unconditional`.)_
+_(Child scan in `validate_top_level`: the `roman` children are matched as a slice, so zero (`ELD_PHONEME_INVALID`) or more than one (`ELD_PHONEME_INVALID`) is rejected; `when_nodes.len() > 1` → `ELD_PHONEME_INVALID`. Tests: `root_no_roman`, `root_two_romans`, `root_two_whens`, `root_when_allophone_no_when_is_unconditional`.)_
 - [x] **T0912** Enforce <=16 direct allophones per root.
 _(`allophone_nodes.len() > MAX_ALLOPHONES_PER_ROOT` (16) → `ELD_ALLOPHONE_INVALID`. Test: `root_seventeen_allophones`.)_
 - [x] **T0913** Require `allophone` exactly one IPA string arg, zero properties, only direct child of root.
@@ -277,7 +277,7 @@ _(Implied by T0914/T0915: when children exist the block must be nonempty, otherw
 - [x] **T0917** Enforce <=1 explicit allophone `roman`, <=1 allophone `when`.
 _(In `validate_allophone`: `roman_nodes.len() > 1` → `ELD_ALLOPHONE_INVALID`; `when_nodes.len() > 1` → `ELD_ALLOPHONE_INVALID`. Tests: `allophone_two_romans`, `allophone_two_whens`.)_
 - [x] **T0918** Reject nested allophones and unknown root/allophone children.
-_(Unknown child at any level → `ELD_UNKNOWN_FIELD`. Tests: `allophone_nested_allophone`, `root_with_description`, `root_with_distribution`, `unknown_root_child`, `group_with_non_phoneme_child`, `allophone_unknown_child`.)_
+_(Unknown child at any level → `ELD_UNKNOWN_FIELD`. A type annotation on a child is rejected by the same scan. Tests: `allophone_nested_allophone`, `root_with_description`, `root_with_distribution`, `unknown_root_child`, `group_with_non_phoneme_child`, `allophone_unknown_child`, `allophone_child_type_annotation_is_invalid`.)_
 - [x] **T0919** Validate explicit roman `[A-Za-z]{1,8}`.
 _(`validate_roman_node` calls `Romanization::new` (in `elang-core`) — rejects digits, non-letters, empty, >8 chars → `ROMAN_BAD_FORMAT`. Tests: `roman_bad_format`, `roman_too_long`.)_
 - [x] **T0920** Reject global case-insensitive duplicates of **explicit** romanizations.
@@ -304,7 +304,7 @@ _(Covered by the test matrix in `crates/elang-eld/src/parse.rs` and `crates/elan
 _(`allophone_empty_block`, `phoneme_empty_block`, `phonemes_empty_block`, `empty_custom_group`, `bare_allophone_accepted`, `allophone_nested_allophone`, `root_with_description`, `root_with_distribution`, `group_with_non_phoneme_child`.)_
 
 **Acceptance:** complete structural validator rejects every malformed declaration while accepting bare unconditional allophones.
-**Status:** ✅ **Complete (Issue #19).** All 30 tasks implemented and closed. `crates/elang-eld` defines the Phase 9 structural model (`EldDocument`, `EldGroup`, `EldGroupKind`, `EldRootPhoneme`, `EldAllophone`, `WhenBlock`) in `model.rs` and enforces grammar constraints C-01…C-16 via `parse`/`parse_document` in `parse.rs`. The validator verifies document shape (C-01), group structure and bounds (C-02…C-05), root/allophone IPA shape and cardinalities (C-06…C-12), romanization syntax and global uniqueness (C-13…C-15), inheritance (C-16), and global IPA uniqueness including tie-bar aliases (C-09). `when` blocks are retained **verbatim** as raw `KdlNode` inside `WhenBlock` — Phase 9 does **not** parse the condition language, evaluate eligibility, or construct `elang_core::model::when::WhenCondition`. `elang-core` is untouched. Diagnostics use stage‑12 codes (`ELD_*`, `ROMAN_*`, `IPA_*`, `UNICODE_*`) from the published registry. 66 unit tests + 17 integration tests cover every constraint, boundary, and rejection path. Downstream: Phase 10 (T1001–T1030) is unblocked.
+**Status:** ✅ **Complete (Issue #19).** All 30 tasks implemented and closed. `crates/elang-eld` defines the Phase 9 structural model (`EldDocument`, `EldGroup`, `EldGroupKind`, `EldRootPhoneme`, `EldAllophone`, `WhenBlock`) in `model.rs` and enforces grammar constraints C-01…C-16 via `parse`/`parse_document` in `parse.rs`. The validator verifies document shape (C-01), group structure and bounds (C-02…C-05), root/allophone IPA shape and cardinalities (C-06…C-12), romanization syntax and global uniqueness (C-13…C-15), inheritance (C-16), and global IPA uniqueness including tie-bar aliases (C-09). `when` blocks are retained **verbatim** as raw `KdlNode` inside `WhenBlock` — Phase 9 does **not** parse the condition language, evaluate eligibility, or construct `elang_core::model::when::WhenCondition`. `elang-core` is untouched. Diagnostics use stage‑12 codes (`ELD_*`, `ROMAN_*`, `IPA_*`, `UNICODE_*`) from the published registry. 71 unit tests + 21 integration tests cover every constraint, boundary, and rejection path, with 100% line coverage of every executable line in the crate's diff. Downstream: Phase 10 (T1001–T1030) is unblocked.
 
 ## Phase 10 — Condition parser, reference resolver and evaluator
 
