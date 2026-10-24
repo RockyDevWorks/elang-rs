@@ -25,6 +25,7 @@ use crate::error::BuildError;
 /// `canon::to_bytes`). The writer does not re-canonicalize extras; it only
 /// sorts them and writes them.
 #[derive(Debug, Clone)]
+/// A user-supplied resource to bundle into the archive.
 pub struct ExtraResource {
     /// Canonical path (NFC, relative, ≤ `MAX_RESOURCE_PATH_BYTES`).
     pub path: String,
@@ -44,6 +45,7 @@ pub struct ExtraResource {
 /// `profile` selects the Zstd compression profile; `format_version` is the
 /// pinned semver-shaped string written into `Header/format.version`.
 #[derive(Debug, Clone)]
+/// Inputs to `write_archive`: EPF + ELD + extras + profile.
 pub struct PackageConfig {
     /// The validated `package.epf` body. Already parsed and schema-checked.
     pub epf: EpfPackage,
@@ -129,7 +131,7 @@ mod tests {
     const EPF_BYTES: &[u8] =
         b"epf \"0.1.0\"\neld \"0.1.0\"\nlanguage-version \"1.0.0\"\nmetadata {\n    identifier \"urn:elang:language:rocky:test:1.0.0\"\n    name \"Writer Test\"\n}\nmanifest {\n    phonemes \"Linguistics/phonemes.eld\"\n}\n";
     const ELD_BYTES: &[u8] = b"phonemes {\n    consonants {\n        phoneme \"p\" {\n            roman \"p\"\n        }\n    }\n    vowels {\n        phoneme \"a\" {\n            roman \"a\"\n        }\n    }\n}\n";
-
+    /// Build a PackageConfig with the smallest valid payload.
     fn minimal_config(extras: Vec<ExtraResource>) -> PackageConfig {
         let epf = elang_epf::parse(EPF_BYTES).expect("canonical EPF parses");
         let rep = elang_repertoire::repertoire::load().expect("pinned IPA repertoire loads");
@@ -145,12 +147,14 @@ mod tests {
     }
 
     #[test]
+    /// No extras is a valid input.
     fn validate_paths_accepts_no_extras() {
         let cfg = minimal_config(Vec::new());
         assert!(cfg.validate_paths().is_ok());
     }
 
     #[test]
+    /// A list of unique, non-reserved extras passes.
     fn validate_paths_accepts_unique_non_reserved_extras() {
         let cfg = minimal_config(vec![
             ExtraResource {
@@ -166,6 +170,7 @@ mod tests {
     }
 
     #[test]
+    /// Every reserved path (header, manifest, integrity, epf) is rejected.
     fn validate_paths_rejects_every_reserved_path() {
         // The writer owns five mandatory names; none of them may appear in
         // `extra_resources`. Each one must surface as
@@ -196,6 +201,7 @@ mod tests {
     }
 
     #[test]
+    /// Duplicate extras are rejected (non-adjacent too).
     fn validate_paths_rejects_duplicate_extras() {
         let cfg = minimal_config(vec![
             ExtraResource {

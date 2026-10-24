@@ -31,7 +31,7 @@ const ELD_BYTES: &[u8] = b"phonemes {\n    consonants {\n        phoneme \"p\" {
 // ---------------------------------------------------------------------------
 // Fixture builders
 // ---------------------------------------------------------------------------
-
+/// `build minimal config`.
 fn build_minimal_config() -> PackageConfig {
     let epf = elang_epf::parse(EPF_BYTES).expect("canonical EPF parses");
     let rep = elang_repertoire::repertoire::load().expect("pinned IPA repertoire loads");
@@ -53,6 +53,7 @@ fn build_minimal_config() -> PackageConfig {
 /// A writer-produced archive must open cleanly through the reader's
 /// stages 1–7 (binary header, index, frame layout, per-frame inspect).
 #[test]
+/// `writer output opens via reader`.
 fn writer_output_opens_via_reader() {
     let config = build_minimal_config();
     let bytes = write_archive(&config).expect("writer succeeds on minimal config");
@@ -62,6 +63,7 @@ fn writer_output_opens_via_reader() {
 /// Stages 8–12 (bootstrap, integrity, EPF, resource integrity, ELD
 /// semantics) must also pass on a writer-produced archive.
 #[test]
+/// `writer output validates via reader full pipeline`.
 fn writer_output_validates_via_reader_full_pipeline() {
     let config = build_minimal_config();
     let bytes = write_archive(&config).expect("writer succeeds on minimal config");
@@ -69,8 +71,8 @@ fn writer_output_validates_via_reader_full_pipeline() {
     let _validated = pkg.validate().expect("stages 8–12");
 }
 
-/// Every supported compression profile must pass all 12 reader stages.
 #[test]
+/// `all compression profiles roundtrip`.
 fn all_compression_profiles_roundtrip() {
     for profile in [Profile::Fast, Profile::Compact, Profile::Canonical] {
         let mut config = build_minimal_config();
@@ -81,8 +83,8 @@ fn all_compression_profiles_roundtrip() {
     }
 }
 
-/// The patch may vary while the container's major/minor prefix stays fixed.
 #[test]
+/// `matching format version with different patch roundtrips`.
 fn matching_format_version_with_different_patch_roundtrips() {
     let mut config = build_minimal_config();
     config.format_version = "0.1.42".to_string();
@@ -95,6 +97,7 @@ fn matching_format_version_with_different_patch_roundtrips() {
 /// `ArchiveListing::parse` (stages 1–6) must succeed before any Zstd
 /// decode. Useful as a quick smoke test in CI.
 #[test]
+/// `writer output passes archive listing parse`.
 fn writer_output_passes_archive_listing_parse() {
     let config = build_minimal_config();
     let bytes = write_archive(&config).expect("writer succeeds");
@@ -118,6 +121,7 @@ fn writer_output_passes_archive_listing_parse() {
 /// integrity manifest hashes them, and the reader's full pipeline accepts
 /// them.
 #[test]
+/// `writer output with extra resource roundtrips`.
 fn writer_output_with_extra_resource_roundtrips() {
     let mut config = build_minimal_config();
     config.extra_resources = vec![ExtraResource {
@@ -144,8 +148,8 @@ fn writer_output_with_extra_resource_roundtrips() {
 // Diagnostic coverage (T1308, T1309): every BuildError variant is reachable
 // ---------------------------------------------------------------------------
 
-/// Two extras that share a canonical path → `WRITER_DUPLICATE_PATH`.
 #[test]
+/// `duplicate extra path rejected`.
 fn duplicate_extra_path_rejected() {
     let mut config = build_minimal_config();
     config.extra_resources = vec![
@@ -175,6 +179,7 @@ fn duplicate_extra_path_rejected() {
 /// A reserved path in `extra_resources` → `WRITER_INVALID_CONFIG` (writer
 /// owns the four mandatory names).
 #[test]
+/// `reserved path rejected`.
 fn reserved_path_rejected() {
     let mut config = build_minimal_config();
     config.extra_resources = vec![ExtraResource {
@@ -188,6 +193,7 @@ fn reserved_path_rejected() {
 /// A `format.version` that is not `{major.minor}.{patch}` with ASCII
 /// digits → `WRITER_INVALID_FORMAT_VERSION`.
 #[test]
+/// `bad format version rejected`.
 fn bad_format_version_rejected() {
     let mut config = build_minimal_config();
     config.format_version = "not-a-version".to_string();
@@ -195,8 +201,8 @@ fn bad_format_version_rejected() {
     assert_eq!(err.code(), "WRITER_INVALID_FORMAT_VERSION");
 }
 
-/// Major/minor must match the header text exactly, including no leading zeros.
 #[test]
+/// `mismatched format version prefix rejected`.
 fn mismatched_format_version_prefix_rejected() {
     for version in ["1.1.0", "0.2.0", "00.1.0", "0.01.0", "00.01.0"] {
         let mut config = build_minimal_config();
@@ -215,6 +221,7 @@ fn mismatched_format_version_prefix_rejected() {
 /// An empty `format.version` is rejected (the v0.1.0 container requires
 /// the prefix).
 #[test]
+/// `empty format version rejected`.
 fn empty_format_version_rejected() {
     let mut config = build_minimal_config();
     config.format_version = String::new();
@@ -235,6 +242,7 @@ fn empty_format_version_rejected() {
 /// `elang-reader/src/bootstrap.rs`; rejecting oversized versions here
 /// avoids producing archives the reader would refuse at stage 8).
 #[test]
+/// `format version over bootstrap ceiling rejected`.
 fn format_version_over_bootstrap_ceiling_rejected() {
     use elang_core::limits::MAX_BOOTSTRAP_RESOURCE_BYTES;
     #[allow(clippy::cast_possible_truncation)]
@@ -256,6 +264,7 @@ fn format_version_over_bootstrap_ceiling_rejected() {
 /// still accepted (the ceiling is inclusive). Pins the boundary so a
 /// future `>=` instead of `>` would fail this test by name.
 #[test]
+/// `format version at bootstrap ceiling accepted`.
 fn format_version_at_bootstrap_ceiling_accepted() {
     use elang_core::limits::MAX_BOOTSTRAP_RESOURCE_BYTES;
     #[allow(clippy::cast_possible_truncation)]
@@ -272,6 +281,7 @@ fn format_version_at_bootstrap_ceiling_accepted() {
 /// `format_version` that is not in Unicode NFC is rejected (the
 /// `!is_nfc(version)` branch — an NFD-decomposed string).
 #[test]
+/// `format version not in nfc rejected`.
 fn format_version_not_in_nfc_rejected() {
     let mut config = build_minimal_config();
     // '0' '1' '0' 'e' + U+0301 (combining acute) is NFD-decomposed,
@@ -293,6 +303,7 @@ fn format_version_not_in_nfc_rejected() {
 /// `format_version` with no `.` separator is rejected (the missing-minor
 /// branch — `parts.next()` returns `None` after the major).
 #[test]
+/// `format version missing minor rejected`.
 fn format_version_missing_minor_rejected() {
     let mut config = build_minimal_config();
     config.format_version = "0".to_string();
@@ -300,8 +311,8 @@ fn format_version_missing_minor_rejected() {
     assert_eq!(err.code(), "WRITER_INVALID_FORMAT_VERSION");
 }
 
-/// `format_version` with only one dot is rejected (the missing-patch branch).
 #[test]
+/// `format version missing patch rejected`.
 fn format_version_missing_patch_rejected() {
     let mut config = build_minimal_config();
     config.format_version = "0.1".to_string();
@@ -312,6 +323,7 @@ fn format_version_missing_patch_rejected() {
 /// `format_version` with more than three dot-separated components is
 /// rejected (the `parts.next().is_some()` branch).
 #[test]
+/// `format version with four components rejected`.
 fn format_version_with_four_components_rejected() {
     let mut config = build_minimal_config();
     config.format_version = "0.1.0.0".to_string();
@@ -324,6 +336,7 @@ fn format_version_with_four_components_rejected() {
 /// case; this one confirms the empty-component edge `0.1.` also falls
 /// through the same check).
 #[test]
+/// `format version with empty patch rejected`.
 fn format_version_with_empty_patch_rejected() {
     let mut config = build_minimal_config();
     config.format_version = "0.1.".to_string();
@@ -337,6 +350,7 @@ fn format_version_with_empty_patch_rejected() {
 /// exposes an explicit "components must not be empty" message rather than
 /// the previous generic "must be ASCII digits" surface.
 #[test]
+/// `format version with empty minor rejected`.
 fn format_version_with_empty_minor_rejected() {
     let mut config = build_minimal_config();
     config.format_version = "0..0".to_string();
@@ -347,6 +361,7 @@ fn format_version_with_empty_minor_rejected() {
 /// `format_version` whose major component is empty is rejected (the
 /// `..0` shape still parses as a 3-element slice with an empty major).
 #[test]
+/// `format version with empty major rejected`.
 fn format_version_with_empty_major_rejected() {
     let mut config = build_minimal_config();
     config.format_version = ".1.0".to_string();
@@ -361,6 +376,7 @@ fn format_version_with_empty_major_rejected() {
 /// covered `"not-a-version"` (which the slice match now routes through
 /// the missing-minor arm); this one pins the post-match digits branch.
 #[test]
+/// `format version with non digit component rejected`.
 fn format_version_with_non_digit_component_rejected() {
     let mut config = build_minimal_config();
     config.format_version = "0.1.x".to_string();
@@ -376,6 +392,7 @@ fn format_version_with_non_digit_component_rejected() {
 /// (absolute path) is rejected by the integrity-manifest build loop
 /// with a registered `PATH_*` code propagated as a `BuildError::Container`.
 #[test]
+/// `invalid extra path rejected via resource path`.
 fn invalid_extra_path_rejected_via_resource_path() {
     let mut config = build_minimal_config();
     config.extra_resources = vec![ExtraResource {
@@ -396,6 +413,7 @@ fn invalid_extra_path_rejected_via_resource_path() {
 /// to build: 24 996 small extras + the 5 mandatory resources = 25 001,
 /// one over `MAX_RESOURCES = 25_000`.
 #[test]
+/// `resource count over ceiling rejected`.
 fn resource_count_over_ceiling_rejected() {
     use elang_core::limits::MAX_RESOURCES;
     let mut config = build_minimal_config();
@@ -422,6 +440,7 @@ fn resource_count_over_ceiling_rejected() {
 /// pass, so this test now exercises the input-validation path directly
 /// rather than the (removed) post-sort dedup helper.
 #[test]
+/// `duplicate extra path rejected via validate paths`.
 fn duplicate_extra_path_rejected_via_validate_paths() {
     let mut config = build_minimal_config();
     // Three extras, two of which share `data/a.bin`. The duplicate is

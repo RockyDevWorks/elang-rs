@@ -270,7 +270,7 @@ fn validate_format_version(version: &str) -> Result<(), BuildError> {
     }
     Ok(())
 }
-
+/// True when `s` is non-empty and every byte is an ASCII digit.
 fn is_ascii_digits(s: &str) -> bool {
     !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit())
 }

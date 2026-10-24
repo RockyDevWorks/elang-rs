@@ -17,6 +17,7 @@ use elang_core::Error;
 /// `elang_core::limits` and gives the writer a stable handle to format a
 /// diagnostic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Which resource-size ceiling a `SizeCeiling` failure tripped.
 pub enum SizeKind {
     /// Per-resource uncompressed byte ceiling.
     ResourceBytes,
@@ -58,8 +59,8 @@ impl SizeKind {
     }
 }
 
-/// All failures the writer can produce.
 #[derive(Debug)]
+/// All reasons `write_archive` may fail.
 pub enum BuildError {
     /// Container-layer failure (header, index, footer, frame encoding).
     ///
@@ -109,6 +110,7 @@ impl BuildError {
     /// The registered error code for this failure, or `None` if no code is
     /// attached.
     #[must_use]
+    /// Diagnostic code registered in the v0.1.0 registry.
     pub fn code(&self) -> &'static str {
         match self {
             Self::Container(e) | Self::Canonical(e) | Self::Integrity(e) => e.code(),
@@ -119,6 +121,7 @@ impl BuildError {
 }
 
 impl std::fmt::Display for BuildError {
+    /// Format the variant for human-readable error output.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Container(e) => write!(f, "container-layer failure: {e}"),
@@ -140,6 +143,7 @@ impl std::fmt::Display for BuildError {
 }
 
 impl std::error::Error for BuildError {
+    /// Underlying error when this variant carries one.
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Container(e) | Self::Canonical(e) | Self::Integrity(e) => Some(e),
@@ -149,6 +153,7 @@ impl std::error::Error for BuildError {
 }
 
 impl From<Error> for BuildError {
+    /// Route core `Error` variants to the closest writer-side category.
     fn from(err: Error) -> Self {
         match err.category() {
             elang_core::Category::Integrity => Self::Integrity(err),
@@ -185,6 +190,7 @@ mod tests {
     // ---- SizeKind ----
 
     #[test]
+    /// Every SizeKind maps to its human label.
     fn size_kind_name_for_every_variant() {
         assert_eq!(SizeKind::ResourceBytes.name(), "resource bytes");
         assert_eq!(
@@ -197,6 +203,7 @@ mod tests {
     }
 
     #[test]
+    /// Every SizeKind maps to its diagnostic code.
     fn size_kind_ceiling_code_for_every_variant() {
         assert_eq!(
             SizeKind::ResourceBytes.ceiling_code(),
@@ -220,6 +227,7 @@ mod tests {
     // ---- BuildError::code() ----
 
     #[test]
+    /// Passthrough variants report their attached code.
     fn code_passes_through_for_container_canonical_integrity() {
         let e = BuildError::Container(Error::new("FOO", elang_core::Category::Container, "x"));
         assert_eq!(e.code(), "FOO");
@@ -230,6 +238,7 @@ mod tests {
     }
 
     #[test]
+    /// InvalidConfig surfaces its attached code.
     fn code_returns_the_attached_code_for_invalid_config() {
         let e = BuildError::InvalidConfig {
             code: "WRITER_DUPLICATE_PATH",
@@ -239,6 +248,7 @@ mod tests {
     }
 
     #[test]
+    /// SizeCeiling surfaces its diagnostic code.
     fn code_returns_the_ceiling_code_for_size_ceiling() {
         let e = BuildError::SizeCeiling {
             kind: SizeKind::ResourceBytes,
@@ -251,6 +261,7 @@ mod tests {
     // ---- BuildError::Display ----
 
     #[test]
+    /// Container failures are prefixed in Display.
     fn display_prefixes_container_failures() {
         // `FRAME_BAD_MAGIC` is a real registered code in `specs/registry/`,
         // so the conformance scanner accepts this fixture.
@@ -271,6 +282,7 @@ mod tests {
     }
 
     #[test]
+    /// Canonical failures are prefixed in Display.
     fn display_prefixes_canonical_failures() {
         // Test fixture, not a real code — keep it lowercase so the
         // registry-completeness scanner does not flag it as an
@@ -288,6 +300,7 @@ mod tests {
     }
 
     #[test]
+    /// Integrity failures are prefixed in Display.
     fn display_prefixes_integrity_failures() {
         // Test fixture, not a real code — keep it lowercase.
         let e = BuildError::Integrity(Error::new(
@@ -303,6 +316,7 @@ mod tests {
     }
 
     #[test]
+    /// InvalidConfig renders as `[code] message`.
     fn display_renders_invalid_config_as_code_message() {
         let e = BuildError::InvalidConfig {
             code: "WRITER_DUPLICATE_PATH",
@@ -315,6 +329,7 @@ mod tests {
     }
 
     #[test]
+    /// SizeCeiling shows requested vs ceiling bytes.
     fn display_renders_size_ceiling_with_requested_and_ceiling() {
         let e = BuildError::SizeCeiling {
             kind: SizeKind::UncompressedAggregate,
@@ -339,6 +354,7 @@ mod tests {
     // ---- BuildError::source() ----
 
     #[test]
+    /// Upstream carriers expose their inner error.
     fn source_returns_some_for_upstream_carriers() {
         // Use a lowercase fixture code so the registry-completeness scanner
         // does not flag this as an unregistered code emission.
@@ -360,6 +376,7 @@ mod tests {
     }
 
     #[test]
+    /// Writer-owned variants have no inner error.
     fn source_returns_none_for_writer_owned_variants() {
         let e = BuildError::InvalidConfig {
             code: "WRITER_INVALID_CONFIG",
@@ -378,6 +395,7 @@ mod tests {
     // ---- From<Error> for BuildError ----
 
     #[test]
+    /// Integrity category routes to Integrity variant.
     fn from_integrity_category_routes_to_integrity_variant() {
         let err = Error::new("X", elang_core::Category::Integrity, "y");
         let be: BuildError = err.into();
@@ -388,6 +406,7 @@ mod tests {
     }
 
     #[test]
+    /// EPF + ELD schema categories route to Canonical.
     fn from_epf_and_eld_schema_categories_route_to_canonical() {
         for cat in [
             elang_core::Category::EpfSchema,
@@ -403,6 +422,7 @@ mod tests {
     }
 
     #[test]
+    /// All other categories route to Container.
     fn from_other_categories_route_to_container() {
         // Sample one from each non-handled category to prove the default arm.
         for cat in [

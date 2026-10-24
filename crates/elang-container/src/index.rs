@@ -76,6 +76,7 @@ pub const ENTRY_FIXED_LEN: usize = 2 + 8 + 8 + 8 + 1;
 /// (with sorted/uniqueness checks), build a `ResourceIndex` from these via
 /// [`IndexEntry::into_resource_entry`] and `ResourceIndex::new`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Index Entry.
 pub struct IndexEntry {
     path: elang_core::ResourcePath,
     frame_offset: u64,
@@ -134,32 +135,32 @@ impl IndexEntry {
         })
     }
 
-    /// The validated, NFC-checked resource path.
     #[must_use]
+    /// `path`.
     pub fn path(&self) -> &elang_core::ResourcePath {
         &self.path
     }
 
-    /// Absolute byte offset of this resource's frame.
     #[must_use]
+    /// `frame offset`.
     pub fn frame_offset(&self) -> u64 {
         self.frame_offset
     }
 
-    /// Compressed (on-disk) frame size.
     #[must_use]
+    /// `compressed size`.
     pub fn compressed_size(&self) -> u64 {
         self.compressed_size
     }
 
-    /// Declared uncompressed size.
     #[must_use]
+    /// `uncompressed size`.
     pub fn uncompressed_size(&self) -> u64 {
         self.uncompressed_size
     }
 
-    /// Compression code (always [`COMPRESSION_ZSTD`] for a parsed entry).
     #[must_use]
+    /// `compression`.
     pub fn compression(&self) -> u8 {
         self.compression
     }
@@ -193,6 +194,7 @@ impl IndexEntry {
 /// Aggregate invariants (sorted order, uniqueness, count, size ceilings) are
 /// enforced when building a `ResourceIndex` or parsing an `ArchiveListing`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Index.
 pub struct Index {
     entries: Vec<IndexEntry>,
 }
@@ -296,20 +298,20 @@ impl Index {
         Ok(Self { entries })
     }
 
-    /// The parsed entries, in index order.
     #[must_use]
+    /// `entries`.
     pub fn entries(&self) -> &[IndexEntry] {
         &self.entries
     }
 
-    /// Number of parsed entries.
     #[must_use]
+    /// `len`.
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
-    /// Whether the index declares no resources.
     #[must_use]
+    /// `is empty`.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
@@ -551,6 +553,7 @@ mod tests {
     // ---- T0309 / T0310: header ----
 
     #[test]
+    /// `decodes the reference index header and entries`.
     fn decodes_the_reference_index_header_and_entries() {
         let idx = Index::decode(&reference_index()).unwrap();
         assert_eq!(idx.len(), 5);
@@ -573,6 +576,7 @@ mod tests {
     }
 
     #[test]
+    /// `rejects short index without panicking`.
     fn rejects_short_index_without_panicking() {
         for len in 0..INDEX_HEADER_LEN {
             let short = vec![0u8; len];
@@ -585,6 +589,7 @@ mod tests {
     }
 
     #[test]
+    /// `rejects bad index magic`.
     fn rejects_bad_index_magic() {
         let mut b = reference_index();
         b[0] = 0x00;
@@ -594,6 +599,7 @@ mod tests {
     }
 
     #[test]
+    /// `rejects bad index version or entry format`.
     fn rejects_bad_index_version_or_entry_format() {
         let mut ver = reference_index();
         ver[8] = 2; // index_version = 2
@@ -605,6 +611,7 @@ mod tests {
     }
 
     #[test]
+    /// `rejects count above the ceiling`.
     fn rejects_count_above_the_ceiling() {
         let mut b = reference_index();
         b[12..16].copy_from_slice(&(elang_core::limits::MAX_RESOURCES + 1).to_le_bytes());
@@ -615,6 +622,7 @@ mod tests {
     // ---- T0311 / T0312: entries ----
 
     #[test]
+    /// `accepts an empty index`.
     fn accepts_an_empty_index() {
         // A well-formed header declaring zero resources.
         let mut b = Vec::new();
@@ -628,6 +636,7 @@ mod tests {
     }
 
     #[test]
+    /// `rejects a truncated entry`.
     fn rejects_a_truncated_entry() {
         // Chop the last few bytes so the final entry runs off the end.
         let full = reference_index();
@@ -637,6 +646,7 @@ mod tests {
     }
 
     #[test]
+    /// `rejects trailing bytes after the last entry`.
     fn rejects_trailing_bytes_after_the_last_entry() {
         let mut bytes = reference_index();
         bytes.push(0);
@@ -647,6 +657,7 @@ mod tests {
     }
 
     #[test]
+    /// `no truncation of the index can panic or succeed`.
     fn no_truncation_of_the_index_can_panic_or_succeed() {
         // The single-truncation test above only proves one cut is caught. The
         // real property is stronger: every possible prefix of a valid index
@@ -675,6 +686,7 @@ mod tests {
     }
 
     #[test]
+    /// `every single byte corruption is rejected or changes the result`.
     fn every_single_byte_corruption_is_rejected_or_changes_the_result() {
         // Flip each byte of the reference index in turn. Some corruptions
         // (e.g. inside a path body that stays valid UTF-8) may still decode,
@@ -700,6 +712,7 @@ mod tests {
     }
 
     #[test]
+    /// `rejects an entry with a non zstd compression code`.
     fn rejects_an_entry_with_a_non_zstd_compression_code() {
         // The compression byte is the last byte of the first entry's tail.
         // Find it by locating the first entry's tail start.
@@ -714,6 +727,7 @@ mod tests {
     }
 
     #[test]
+    /// `rejects a huge path length without allocating`.
     fn rejects_a_huge_path_length_without_allocating() {
         // Claim a 65535-byte path on a 237-byte index: must fail, not allocate.
         let mut b = reference_index();
@@ -725,6 +739,7 @@ mod tests {
     // ---- T0313 / T0314: path validation ----
 
     #[test]
+    /// `rejects invalid utf8 path`.
     fn rejects_invalid_utf8_path() {
         // Build a single-entry index whose path contains an invalid UTF-8 byte.
         let mut b = index_header(1);
@@ -736,6 +751,7 @@ mod tests {
     }
 
     #[test]
+    /// `rejects absolute path`.
     fn rejects_absolute_path() {
         let mut b = index_header(1);
         append_entry(&mut b, b"/etc/passwd", 32, 10, 10, COMPRESSION_ZSTD);
@@ -744,6 +760,7 @@ mod tests {
     }
 
     #[test]
+    /// `rejects dot dot segment`.
     fn rejects_dot_dot_segment() {
         let mut b = index_header(1);
         append_entry(&mut b, b"a/../../etc/passwd", 32, 10, 10, COMPRESSION_ZSTD);
@@ -751,6 +768,7 @@ mod tests {
     }
 
     #[test]
+    /// `rejects nul and backslash in path`.
     fn rejects_nul_and_backslash_in_path() {
         let mut b = index_header(1);
         append_entry(&mut b, b"a\0b.eld", 32, 10, 10, COMPRESSION_ZSTD);
@@ -762,6 +780,7 @@ mod tests {
     }
 
     #[test]
+    /// `rejects over long path`.
     fn rejects_over_long_path() {
         let long = vec![b'a'; elang_core::limits::MAX_RESOURCE_PATH_BYTES + 1];
         let mut b = index_header(1);
@@ -773,6 +792,7 @@ mod tests {
     }
 
     #[test]
+    /// `rejects non nfc path`.
     fn rejects_non_nfc_path() {
         // 'é' as e + U+0301 (combining acute) is NOT NFC; NFC is U+00E9.
         let decomposed = "cafe\u{0301}.eld".as_bytes();
@@ -787,6 +807,7 @@ mod tests {
     }
 
     #[test]
+    /// `accepts nfc path`.
     fn accepts_nfc_path() {
         // The composed 'é' (U+00E9) IS NFC.
         let composed = "caf\u{00E9}.eld".as_bytes();
@@ -813,6 +834,7 @@ mod tests {
     }
 
     #[test]
+    /// `reference index satisfies the ordering invariants`.
     fn reference_index_satisfies_the_ordering_invariants() {
         let idx = Index::decode(&reference_index()).unwrap();
         // 573-byte archive; every frame fits.
@@ -820,6 +842,7 @@ mod tests {
     }
 
     #[test]
+    /// `rejects unsorted entries when built as a resource index`.
     fn rejects_unsorted_entries_when_built_as_a_resource_index() {
         // Two entries, deliberately out of order.
         let mut b = index_header(2);
@@ -831,6 +854,7 @@ mod tests {
     }
 
     #[test]
+    /// `rejects duplicate entries when built as a resource index`.
     fn rejects_duplicate_entries_when_built_as_a_resource_index() {
         let mut b = index_header(2);
         append_entry(&mut b, b"a.eld", 32, 10, 10, COMPRESSION_ZSTD);
@@ -841,7 +865,7 @@ mod tests {
     }
 
     // ---- helpers to build synthetic indexes ----
-
+    /// `index header`.
     fn index_header(count: u32) -> Vec<u8> {
         let mut b = Vec::new();
         b.extend_from_slice(&INDEX_MAGIC);
@@ -850,7 +874,7 @@ mod tests {
         b.extend_from_slice(&count.to_le_bytes());
         b
     }
-
+    /// `append entry`.
     fn append_entry(
         b: &mut Vec<u8>,
         path: &[u8],
@@ -871,6 +895,7 @@ mod tests {
     // ---- T0319/T0320: deterministic serializer ----
 
     #[test]
+    /// `encodes back to the golden index byte for byte`.
     fn encodes_back_to_the_golden_index_byte_for_byte() {
         // The reference index was itself produced by this format; re-encoding a
         // decoded copy must reproduce it exactly. This is the determinism
@@ -884,6 +909,7 @@ mod tests {
     }
 
     #[test]
+    /// `encoding is idempotent`.
     fn encoding_is_idempotent() {
         let golden = reference_index();
         let once = Index::decode(&golden).unwrap().encode().unwrap();
@@ -892,6 +918,7 @@ mod tests {
     }
 
     #[test]
+    /// `decode of encode round trips the parsed index`.
     fn decode_of_encode_round_trips_the_parsed_index() {
         let idx = Index::decode(&reference_index()).unwrap();
         let bytes = idx.encode().unwrap();
@@ -903,6 +930,7 @@ mod tests {
     }
 
     #[test]
+    /// `the computed hash matches the golden footer digest`.
     fn the_computed_hash_matches_the_golden_footer_digest() {
         // The footer in the fixture stores SHA-256 over the exact index bytes.
         // Computing it through encode() proves the serializer and the fixture
@@ -917,6 +945,7 @@ mod tests {
     }
 
     #[test]
+    /// `encodes an empty index as just its header`.
     fn encodes_an_empty_index_as_just_its_header() {
         let empty = Index::decode(&{
             let mut b = Vec::new();
@@ -933,6 +962,7 @@ mod tests {
     }
 
     #[test]
+    /// `every integer is serialized little endian`.
     fn every_integer_is_serialized_little_endian() {
         // Explicitly assert the byte order at each field position so a future
         // refactor to a native-endian write cannot pass on a little-endian CI
@@ -962,6 +992,7 @@ mod tests {
     }
 
     #[test]
+    /// `encoding is stable regardless of the u32 count encoding path`.
     fn encoding_is_stable_regardless_of_the_u32_count_encoding_path() {
         // resource_count is u32; a count above 255 must serialize with the same
         // rule as a small one. Build a 300-entry index and check the header.
@@ -991,6 +1022,7 @@ mod tests {
     // reference fixture ----
 
     #[test]
+    /// `encode and hash returns bytes matching encode`.
     fn encode_and_hash_returns_bytes_matching_encode() {
         let idx = Index::decode(&reference_index()).unwrap();
         let (bytes, digest) = idx.encode_and_hash().unwrap();
@@ -1000,6 +1032,7 @@ mod tests {
     }
 
     #[test]
+    /// `decode rejects a resource count that exceeds the ceiling`.
     fn decode_rejects_a_resource_count_that_exceeds_the_ceiling() {
         // count = 25_001 with no entry bytes: the ceiling check must fire
         // before the entry loop tries to read a missing first entry.
@@ -1013,6 +1046,7 @@ mod tests {
     }
 
     #[test]
+    /// `decode rejects an entry whose path length overruns the buffer`.
     fn decode_rejects_an_entry_whose_path_length_overruns_the_buffer() {
         // path_length = 65535 but the buffer ends after the length field.
         let mut b = Vec::new();
@@ -1026,6 +1060,7 @@ mod tests {
     }
 
     #[test]
+    /// `decode rejects a truncated compression byte`.
     fn decode_rejects_a_truncated_compression_byte() {
         // A well-formed path followed by an entry that stops one byte short
         // of its 25-byte tail: the compression byte read must fail.
@@ -1050,6 +1085,7 @@ mod tests {
     }
 
     #[test]
+    /// `a prefix of a valid index is never a valid index`.
     fn a_prefix_of_a_valid_index_is_never_a_valid_index() {
         // Guards the sweep test's own invariant: no prefix of the golden
         // index decodes successfully. If this ever fails, the sweep below is
@@ -1064,6 +1100,7 @@ mod tests {
     }
 
     #[test]
+    /// `every truncation is rejected with an index or path code`.
     fn every_truncation_is_rejected_with_an_index_or_path_code() {
         // Complements the sweep: pins the *category* of rejection so a future
         // change cannot start returning an unregistered code for a prefix.
@@ -1079,6 +1116,7 @@ mod tests {
     }
 
     #[test]
+    /// `a corrupted byte never yields an identical index`.
     fn a_corrupted_byte_never_yields_an_identical_index() {
         // The property the single-byte sweep relies on, asserted directly so
         // the sweep cannot silently degenerate into a no-op.
@@ -1102,6 +1140,7 @@ mod tests {
     }
 
     #[test]
+    /// `decode rejects an entry whose path slice runs past the buffer`.
     fn decode_rejects_an_entry_whose_path_slice_runs_past_the_buffer() {
         // A well-formed path length that fits u16, but the entry's tail is
         // present while the path bytes themselves are cut short. This is the
@@ -1124,6 +1163,7 @@ mod tests {
     }
 
     #[test]
+    /// `decode rejects an entry whose tail is absent after a valid path`.
     fn decode_rejects_an_entry_whose_tail_is_absent_after_a_valid_path() {
         // Path is fully present and within bounds, but the entry's 25-byte
         // tail is missing. The tail-bound check must fire before any read
@@ -1142,6 +1182,7 @@ mod tests {
     }
 
     #[test]
+    /// `into resource entry failure surfaces from the bulk conversion`.
     fn into_resource_entry_failure_surfaces_from_the_bulk_conversion() {
         // `to_resource_index` collects every entry through
         // `into_resource_entry`, which range-checks against the archive size.
@@ -1162,6 +1203,7 @@ mod tests {
     // ---- writer-side constructors (T1305/T1306) ----
 
     #[test]
+    /// `index entry new accepts a well formed entry`.
     fn index_entry_new_accepts_a_well_formed_entry() {
         let e = IndexEntry::new("a/b.eld", 32, 100, 200, COMPRESSION_ZSTD).unwrap();
         assert_eq!(e.path().as_str(), "a/b.eld");
@@ -1172,12 +1214,14 @@ mod tests {
     }
 
     #[test]
+    /// `index entry new rejects non zstd compression`.
     fn index_entry_new_rejects_non_zstd_compression() {
         let e = IndexEntry::new("a.eld", 32, 100, 200, 2).unwrap_err();
         assert_eq!(e.code(), "INDEX_BAD_VERSION");
     }
 
     #[test]
+    /// `index entry new rejects non nfc path`.
     fn index_entry_new_rejects_non_nfc_path() {
         // Decomposed 'é' (e + U+0301 combining acute) is not NFC.
         let decomposed = "cafe\u{0301}.eld";
@@ -1187,6 +1231,7 @@ mod tests {
     }
 
     #[test]
+    /// `index entry new rejects an over long path`.
     fn index_entry_new_rejects_an_over_long_path() {
         let long = "a".repeat(elang_core::limits::MAX_RESOURCE_PATH_BYTES + 1);
         let e = IndexEntry::new(&long, 32, 100, 200, COMPRESSION_ZSTD).unwrap_err();
@@ -1200,6 +1245,7 @@ mod tests {
     }
 
     #[test]
+    /// `index with entries accepts a sorted unique vector`.
     fn index_with_entries_accepts_a_sorted_unique_vector() {
         let e1 = IndexEntry::new("a.eld", 32, 10, 20, COMPRESSION_ZSTD).unwrap();
         let e2 = IndexEntry::new("b.eld", 52, 10, 20, COMPRESSION_ZSTD).unwrap();
@@ -1210,6 +1256,7 @@ mod tests {
     }
 
     #[test]
+    /// `index with entries rejects unsorted entries`.
     fn index_with_entries_rejects_unsorted_entries() {
         let e1 = IndexEntry::new("z.eld", 32, 10, 20, COMPRESSION_ZSTD).unwrap();
         let e2 = IndexEntry::new("a.eld", 52, 10, 20, COMPRESSION_ZSTD).unwrap();
@@ -1218,6 +1265,7 @@ mod tests {
     }
 
     #[test]
+    /// `index with entries rejects duplicate paths`.
     fn index_with_entries_rejects_duplicate_paths() {
         let e1 = IndexEntry::new("a.eld", 32, 10, 20, COMPRESSION_ZSTD).unwrap();
         let e2 = IndexEntry::new("a.eld", 52, 10, 20, COMPRESSION_ZSTD).unwrap();
@@ -1226,6 +1274,7 @@ mod tests {
     }
 
     #[test]
+    /// `writer construct round trips through encode decode`.
     fn writer_construct_round_trips_through_encode_decode() {
         // The end-to-end property the writer needs: building an Index via the
         // new constructors and encoding it produces bytes that decode back to

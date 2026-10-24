@@ -74,6 +74,7 @@ dependencies = [
  "elang-eld",
  "elang-epf",
  "elang-integrity",
+ "elang-reader",
  "elang-repertoire",
  "elang-writer",
  "pico-args",
