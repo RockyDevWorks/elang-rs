@@ -29,12 +29,14 @@
 //! constructor for any of the three result types, so a `Verified` cannot be
 //! obtained without actually running stages 8–11, etc.
 
+use elang_container::frame::inspect;
 use elang_container::ArchiveListing;
 use elang_core::error::{Category, Diagnostic, Error};
 use elang_core::{Stage, StageTracker};
 
 use crate::archive::ArchiveView;
 use crate::bootstrap;
+use crate::error::resource_err;
 use crate::inspected::Inspected;
 use crate::stages;
 use crate::validated::Validated;
@@ -68,16 +70,25 @@ impl Package {
     /// `INDEX` / `FRAME` / `LIMIT` category, stages 1–7). The error carries
     /// the stage number on its diagnostic.
     pub fn open(archive: &[u8]) -> Result<Self, Error> {
-        let listing = ArchiveListing::parse(archive).map_err(|mut e| {
-            if e.diagnostic.code == "HEADER_BAD_MAGIC" {
-                e.diagnostic = e.diagnostic.with_stage(1);
-            }
-            e
-        })?;
+        let listing = ArchiveListing::parse(archive).map_err(container_parse_err)?;
+        let view = build_view(&listing)?;
+        for (path, span) in view.iter() {
+            let frame = ArchiveView::read_span(span, archive).ok_or_else(|| {
+                resource_err(
+                    "FRAME_TRUNCATED",
+                    Category::Frame,
+                    "indexed frame falls outside the archive",
+                    path,
+                    7,
+                )
+            })?;
+            inspect(frame).map_err(|e| Error {
+                diagnostic: e.diagnostic.with_resource(path).with_stage(7),
+            })?;
+        }
         let mut tracker = StageTracker::new();
-        // Stages 1–7 are advanced in order. `ArchiveListing::parse` runs
-        // them in the right order; the tracker records that fact for the
-        // public SDK so callers see a single, consistent story.
+        // Parsing validates stages 1–6; inspecting every frame above completes
+        // stage 7 without decompressing any frame bodies.
         advance_range(&mut tracker, 1, 7);
         Ok(Self {
             archive: archive.to_vec(),
@@ -184,6 +195,24 @@ impl Package {
     pub fn listing(&self) -> &ArchiveListing {
         &self.listing
     }
+}
+
+/// Attach the registered stage to diagnostics from the index-only parser.
+fn container_parse_err(mut e: Error) -> Error {
+    let stage = match e.diagnostic.code {
+        "ARCHIVE_TOO_SMALL" | "ARCHIVE_SIZE_INCONSISTENT" | "HEADER_BAD_MAGIC" => 1,
+        "HEADER_BAD_VERSION" | "HEADER_NONZERO_FLAGS" | "HEADER_RESERVED_NONZERO" => 2,
+        "FOOTER_BAD_MAGIC" | "FOOTER_RESERVED_NONZERO" | "FOOTER_OFFSET_INCONSISTENT" => 3,
+        "FOOTER_INDEX_HASH_MISMATCH" => 4,
+        "FRAME_LAYOUT_GAP"
+        | "FRAME_LAYOUT_OVERLAP"
+        | "FRAME_LAYOUT_UNINDEXED_BYTES"
+        | "FRAME_LAYOUT_TRAILING_BYTES" => 6,
+        // Index parsing also validates paths and declared resource budgets.
+        _ => 5,
+    };
+    e.diagnostic = e.diagnostic.with_stage(stage);
+    e
 }
 
 /// Advance the tracker through a contiguous run of stages, both endpoints

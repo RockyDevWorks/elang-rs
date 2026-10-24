@@ -53,6 +53,162 @@ fn header_bad_magic_emits_header_bad_magic_at_stage_1() {
     assert_eq!(diag.category, Category::Container);
 }
 
+#[test]
+fn invalid_header_fields_report_stage_2() {
+    for (offset, code) in [
+        (8, "HEADER_BAD_VERSION"),
+        (12, "HEADER_NONZERO_FLAGS"),
+        (16, "HEADER_RESERVED_NONZERO"),
+    ] {
+        let mut archive = build_canonical();
+        *archive.bytes.get_mut(offset).unwrap() = 1;
+        let err = Package::open(&archive.bytes).expect_err("stage 2 fails");
+        assert_eq!(err.diagnostic.code, code);
+        assert_eq!(err.diagnostic.stage, Some(2));
+        assert_eq!(err.diagnostic.category, Category::Container);
+    }
+}
+
+/// Edit index bytes while keeping the footer hash valid, so later stages run.
+fn edit_index(archive: &mut [u8], edit: impl FnOnce(&mut [u8])) {
+    use elang_container::footer::{Footer, FOOTER_LEN};
+
+    let footer = Footer::decode(archive).unwrap();
+    let start = usize::try_from(footer.index_offset()).unwrap();
+    let end = start
+        .checked_add(usize::try_from(footer.index_size()).unwrap())
+        .unwrap();
+    let index = archive.get_mut(start..end).unwrap();
+    edit(index);
+    let digest = Sha256::digest(index).into();
+    let footer_start = archive.len().checked_sub(FOOTER_LEN).unwrap();
+    Footer::new(footer.index_offset(), footer.index_size(), digest)
+        .unwrap()
+        .encode(archive, footer_start)
+        .unwrap();
+}
+
+#[test]
+fn container_parse_failures_report_their_registered_stages() {
+    let canonical = build_canonical();
+    let footer_start = canonical.bytes.len().checked_sub(64).unwrap();
+    for (offset, code, stage, category) in [
+        (32, "ARCHIVE_TOO_SMALL", 1, Category::Container),
+        (footer_start, "FOOTER_BAD_MAGIC", 3, Category::Container),
+        (
+            footer_start.checked_add(24).unwrap(),
+            "FOOTER_INDEX_HASH_MISMATCH",
+            4,
+            Category::Index,
+        ),
+    ] {
+        let mut bytes = canonical.bytes.clone();
+        if code == "ARCHIVE_TOO_SMALL" {
+            bytes.truncate(offset);
+        } else {
+            *bytes.get_mut(offset).unwrap() ^= 1;
+        }
+        let err = Package::open(&bytes).unwrap_err();
+        assert_eq!(err.diagnostic.code, code);
+        assert_eq!(err.diagnostic.stage, Some(stage));
+        assert_eq!(err.diagnostic.category, category);
+    }
+
+    let mut bytes = canonical.bytes.clone();
+    edit_index(&mut bytes, |index| *index.first_mut().unwrap() ^= 1);
+    let err = Package::open(&bytes).unwrap_err();
+    assert_eq!(err.diagnostic.code, "INDEX_BAD_MAGIC");
+    assert_eq!(err.diagnostic.stage, Some(5));
+
+    let mut bytes = canonical.bytes.clone();
+    edit_index(&mut bytes, |index| {
+        // The first frame's offset follows its length-prefixed path.
+        let offset = 16usize
+            .checked_add(2)
+            .unwrap()
+            .checked_add("Header/format.version".len())
+            .unwrap();
+        index
+            .get_mut(offset..offset.checked_add(8).unwrap())
+            .unwrap()
+            .copy_from_slice(&33u64.to_le_bytes());
+    });
+    let err = Package::open(&bytes).unwrap_err();
+    assert_eq!(err.diagnostic.code, "FRAME_LAYOUT_GAP");
+    assert_eq!(err.diagnostic.stage, Some(6));
+}
+
+#[test]
+fn open_inspects_every_indexed_frame_at_stage_7_without_decompressing() {
+    let canonical = build_canonical();
+    let listing = elang_container::ArchiveListing::parse(&canonical.bytes).unwrap();
+    for entry in listing.index().entries() {
+        let path = entry.path().as_str();
+        let mut bytes = canonical.bytes.clone();
+        let start = usize::try_from(entry.frame_offset()).unwrap();
+        *bytes.get_mut(start).unwrap() ^= 1;
+        let err = Package::open(&bytes).unwrap_err();
+        assert_diagnostic(err, "FRAME_BAD_MAGIC", Category::Frame, 7, path);
+
+        // A bad content checksum requires decompression to detect. Opening
+        // must still complete inspection and defer that failure to decoding.
+        let mut bytes = canonical.bytes.clone();
+        let checksum_end = usize::try_from(
+            entry
+                .frame_offset()
+                .checked_add(entry.compressed_size())
+                .unwrap(),
+        )
+        .unwrap();
+        *bytes.get_mut(checksum_end.checked_sub(1).unwrap()).unwrap() ^= 1;
+        Package::open(&bytes).expect("inspection does not decompress");
+    }
+}
+
+#[test]
+fn decoded_size_must_match_each_index_entry_at_stage_11() {
+    use elang_container::index::{ENTRY_FIXED_LEN, INDEX_HEADER_LEN};
+
+    let canonical = build_canonical();
+    let listing = elang_container::ArchiveListing::parse(&canonical.bytes).unwrap();
+    let mut entry_start = INDEX_HEADER_LEN;
+    for entry in listing.index().entries() {
+        let size_offset = entry_start
+            .checked_add(2)
+            .unwrap()
+            .checked_add(entry.path().as_str().len())
+            .unwrap()
+            .checked_add(16)
+            .unwrap();
+        for size in [
+            entry.uncompressed_size().checked_sub(1).unwrap(),
+            entry.uncompressed_size().checked_add(1).unwrap(),
+        ] {
+            let mut bytes = canonical.bytes.clone();
+            edit_index(&mut bytes, |index| {
+                index
+                    .get_mut(size_offset..size_offset.checked_add(8).unwrap())
+                    .unwrap()
+                    .copy_from_slice(&size.to_le_bytes());
+            });
+            let pkg = Package::open(&bytes).expect("index size comparison is deferred to stage 11");
+            let err = pkg.verify().unwrap_err();
+            assert_diagnostic(
+                err,
+                "FRAME_CONTENT_SIZE_MISMATCH",
+                Category::Frame,
+                11,
+                entry.path().as_str(),
+            );
+        }
+        entry_start = entry_start
+            .checked_add(ENTRY_FIXED_LEN)
+            .unwrap()
+            .checked_add(entry.path().as_str().len())
+            .unwrap();
+    }
+}
+
 /// Stage 8 — `Header/format.version` claims a different major.minor than
 /// the binary header.
 #[test]

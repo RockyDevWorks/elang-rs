@@ -232,7 +232,21 @@ fn decode_one(
             11,
         )
     })?;
-    decode(frame, budget).map_err(|e| enrich_with_resource_and_stage(e, path, 11))
+    let bytes = decode(frame, budget).map_err(|e| enrich_with_resource_and_stage(e, path, 11))?;
+    if u64::try_from(bytes.len()).ok() != Some(span.uncompressed_size) {
+        return Err(resource_err(
+            "FRAME_CONTENT_SIZE_MISMATCH",
+            Category::Frame,
+            format!(
+                "decoded {} bytes, index declares {}",
+                bytes.len(),
+                span.uncompressed_size
+            ),
+            path,
+            11,
+        ));
+    }
+    Ok(bytes)
 }
 
 /// `RESOURCE_PATH` diagnostic for an integrity-manifest entry that is
