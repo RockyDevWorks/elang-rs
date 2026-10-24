@@ -29,13 +29,19 @@ independent Zstandard frame. A compliant v0.1.0 package contains:
 identity (a URN), human-readable metadata, and the manifest entry that points to
 the phoneme inventory. See the [EPF reference](format/epf.md).
 
-## ELD — the phoneme inventory
+## ELD — the Linguistic Definition extension
 
-`.eld` is a KDL 2.0 document describing the language's sounds. Its top-level
-`phonemes` node contains **groups** (`consonants`, `vowels`, and up to 14 custom
-groups), each holding **root phonemes**. A root has an IPA identifier, a
-romanization, optional conditional **allophones**, and optional `when`
-conditions. See the [ELD reference](format/eld.md).
+`.eld` is the **internal KDL 2.0 extension** ELANG uses for linguistic
+inventories. Each linguistic resource a language definition needs — phonemes
+in v0.1.0, and other linguistic types (the lexicon, morphology, phonotactics,
+syntax, prosody, etc.) in future versions — is carried as a distinct top-level
+node within an `.eld` document.
+
+v0.1.0 defines **only the `phonemes` module**. Within that module, an ELD
+document's top-level `phonemes` node contains **groups** (`consonants`,
+`vowels`, and up to 14 custom groups), each holding **root phonemes**. A root
+has an IPA identifier, a romanization, optional conditional **allophones**,
+and optional `when` conditions. See the [ELD reference](format/eld.md).
 
 ## Phoneme, allophone, romanization
 

@@ -75,9 +75,10 @@ against the SHA-256 recorded in `META-INF/integrity.kdl`.
 elang validate mylang.elang
 ```
 
-This runs the complete pipeline, including the phoneme-inventory (`.eld`)
-semantics: group and cardinality rules, IPA identifier validity, romanization
-uniqueness, and `when` condition structure.
+This runs the complete pipeline, including the `.eld` `phonemes` module
+semantics (the only linguistic module v0.1.0 defines): group and cardinality
+rules, IPA identifier validity, romanization uniqueness, and `when` condition
+structure.
 
 A non-zero exit code means validation failed. The CLI prints a stable error code
 and the stage and resource where the failure occurred, and can emit
@@ -111,6 +112,6 @@ traversal and symlink-escape attempts.
 ## Next steps
 
 - Learn the [concepts and vocabulary](concepts.md).
-- Read the [phoneme inventory (ELD) reference](format/eld.md) to author your own
+- Read the [ELD reference](format/eld.md) to author your own phoneme
   inventory.
 - Browse the full [CLI reference](cli.md).
