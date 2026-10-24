@@ -19,5 +19,12 @@ elang-eld.workspace = true
 elang-integrity.workspace = true
 elang-kdl.workspace = true
 elang-repertoire.workspace = true
+# Phase 14 conformance corpus (T1402, T1417, T1418) builds real `.elang`
+# archives via the writer and roundtrips them through the reader. The
+# corpus deliberately depends on the production reader/writer APIs so
+# conformance drift cannot pass locally.
+elang-reader.workspace = true
+elang-unicode.workspace = true
+elang-writer.workspace = true
 sha2.workspace = true
 serde_json.workspace = true

@@ -90,7 +90,10 @@ dependencies = [
  "elang-epf",
  "elang-integrity",
  "elang-kdl",
+ "elang-reader",
  "elang-repertoire",
+ "elang-unicode",
+ "elang-writer",
  "serde_json",
  "sha2",
 ]
