@@ -69,7 +69,7 @@ tag — not any missing artifact.
 | Requirement group | Owner crate | Tasks | Status |
 |---|---|---|---|
 | REQ-CORE-VERSION-001/002 | `elang-core::version` (`SemVer` + per-domain newtypes, `Version` trait, `CanonicalProfile`) | `version::tests::*` (strict parse, no leading zeros, u64 overflow, domain independence, profile exact-match, trait round-trip) | Done |
-| REQ-CORE-VERSION-003/004 | elang-container | T1204, T0301 | Planned (Phase 3) |
+| REQ-CORE-VERSION-004 | elang-container | T0301 | Planned (Phase 3) |
 | REQ-CORE-MODEL-001 | `elang-core::ids::ResourcePath` (validated path), **`elang-core::index::ResourceEntry` + `ResourceIndex`** (validated index entry + index, with `checked_add` for offset+size, per-resource `MAX_*` ceilings, aggregate `MAX_RESOURCES` / `MAX_UNCOMPRESSED_AGGREGATE_BYTES` enforcement, unique paths in ascending raw UTF-8 byte order, `reserve()` debits the aggregate before allocating) | `ids::tests::resource_path_*`, `index::tests::*` (in-bounds, overflow, zero-length-at-end, ceiling overruns, exact-ceiling acceptance, empty indexes, duplicate/unsorted path rejection, UTF-8 byte ordering, distinct-path lookup, no-double-debit on reserve failure) | Done — index entry type was missing pre-session; Phase 3 and 4 can consume a `ResourceIndex` directly |
 | REQ-CORE-MODEL-002 | `elang-core::ids` (`GroupName`, `Romanization`, `IpaIdentifierText`) | `ids::tests::*` | Done |
 | REQ-CORE-MODEL-004 | `elang-core::limits` | `limits::tests::*` | Done |
@@ -128,11 +128,26 @@ tag — not any missing artifact.
 | REQ-ELD-001..017 | elang-eld | T0901–T0930 | **Done** (Issue #19, Phase 9). `elang-eld/src/parse.rs` enforces C-01..C-16 via `parse`/`parse_document`; `model.rs` defines the Phase 9 structural model (EldDocument, EldGroup, EldRootPhoneme, EldAllophone, WhenBlock) with romanization inheritance (C-16) and `when` independence (REQ-ELD-017); `error.rs` provides stage-12 diagnostics with correct `Category` routing. WhenBlock carries the `when` node verbatim for Phase 10 parsing. Unit and integration tests cover structural constraints, rejection at 17 groups and 17 allophones, acceptance at 256 roots and rejection at 257 roots (`eld_conformance::{two_hundred_fifty_six_roots_accepted, two_hundred_fifty_seven_roots_rejected}`), IPA/romanization uniqueness (C-09, C-15), tie-bar equivalence, all empty-block/bare-leaf variants, type annotations, unknown fields, and repertoire-gated IPA validation. `from_ipa` propagates Phase 8 codes (`IPA_*` / `UNICODE_*`) with the correct category. |
 | REQ-WHEN-001..015 | elang-eld | T1001–T1030 | **Done** (Issue #20, Phase 10). `elang-eld/src/when.rs` adds a two-pass walker: Phase 9 builds the structural `EldDocument` with raw `WhenBlock`s, then `when::parse_all` validates every block, enforcing C-20..C-27 (REQ-WHEN-001..015). Public API: `parse_block`, `parse_all`, `evaluate`, `eligibility_for_root`, `InventoryRefs`, `Realization`, `EvalContext`, `Eligibility`, `max_nesting_depth`, plus the budget constants `MAX_NESTING_DEPTH=8` and `MAX_PREDICATES_PER_WHEN=16`. Eight diagnostic codes surface under `Category::When`: `WHEN_BAD_ARITY`, `WHEN_PREDICATE_ARITY`, `WHEN_BAD_VALUE`, `WHEN_TOO_MANY_PREDICATES`, `WHEN_TOO_DEEP`, `WHEN_UNKNOWN_NODE`, `WHEN_EMPTY`, `WHEN_REFERENCE_UNRESOLVED`. Authored IPA is preserved verbatim on the AST (REQ-CANON-006); comparison keys NFC + tie-normalized for matching (C-09). `Realization` decouples the evaluator from `EldDocument`. `condition_conformance.rs` exercises 37 integration cases (parsing, budgets, value domains, reference resolution, evaluator truth-table, boundary introspection). All five local gates green: `cargo fmt`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --workspace` (1028 pass), `RUSTDOCFLAGS=-D warnings cargo doc --workspace --no-deps`, `cargo +1.90.0 build`. |
 | REQ-CANON-001..009 | elang-eld | T1101–T1121 | **Done** (Issue #21, Phase 11). `elang-eld/src/canon.rs` is the canonical ELD writer and `elang-eld/src/canon/key.rs` implements the frozen Canonical Condition Sorting Key v1 (`atomic_key = rank:u8 ‖ len:u16BE ‖ value`, `composite_key = rank:u8 ‖ count:u16BE ‖ (len:u32BE ‖ child)*`, ranks `word-position`=0 … `or`=5). `elang-eld/src/inventory.rs` joins the Phase 9 structural document and the Phase 10 condition AST into the validated core `PhonemeInventory`; it re-implements no validation rule, so `elang-core` stays the inventory authority. Public API: `elang_eld::canon::to_string` / `to_bytes` (also re-exported as `canonical_string` / `canonical_bytes`). Ordering is by exact authored NFC IPA UTF-8 bytes; ADR 0009 E-1 tie-bar folding is uniqueness-only and never used for ordering or emission. Tests: `elang-eld/src/canon/key.rs` unit tests, `elang-eld/src/inventory.rs` unit tests, `elang-eld/tests/canonical_conformance.rs` (30 integration cases), `elang-conformance/tests/canonical_goldens.rs` (9 cases over the published OA-14 corpus). Published artifacts: `fixtures/valid/canonical/<case>/` (13 cases, byte-exact goldens + `.sha256` sidecars + `expected.json`) and `specs/registry/eld-canonical-vectors.json`, both generated by `cargo run -p elang-conformance --bin gen_canonical_goldens` — no digest is hand-written. |
-| REQ-WRITER-001..005 | elang-container | T1301–T1309 | Planned |
-| REQ-CLI-001..003 | elang-cli | T1310–T1320 | Planned |
 | REQ-ERR-003 (registry artifact) | `specs/registry/error-codes.{md,json}` | present | Done (see Phase 1/2 rows above) |
 | REQ-CONF-001..005 | elang-conformance / ci | T1401–T1420 | Planned |
 | REQ-SEC-001 | all | T1501–T1520 | Planned |
+
+## elang-writer
+
+| Requirement | Code | Test / evidence | Status |
+|---|---|---|---|
+| REQ-CORE-VERSION-003 (writer scope) | `elang-writer/src/build.rs::validate_format_version` | `writer_integration::{mismatched_format_version_prefix_rejected, matching_format_version_with_different_patch_roundtrips}` (exact header prefix, leading-zero rejection, patch acceptance) | Done |
+| REQ-WRITER-005 | `elang-writer::write_archive` | `writer_integration::all_compression_profiles_roundtrip` (Fast/Compact/Canonical through all 12 reader stages) | Done |
+| REQ-WRITER-001..004 | elang-container | T1301–T1308 | Planned |
+
+## elang-cli
+
+| Requirement | Code | Test / evidence | Status |
+|---|---|---|---|
+| REQ-CLI-001/002 (subcommand help, canonicalize-eld operand validation and canonical stdout) | `elang-cli/src/main.rs` | `scaffold::{elang_subcommand_help_exits_zero_before_validating_arguments, elang_canonicalize_eld_requires_exactly_one_operand, elang_canonicalize_eld_accepts_one_operand}` (help exits 0; invalid operand counts exit 2 with usage on stderr; valid input emits canonical bytes on stdout) | Done (tested scope only; requirements remain Partial overall) |
+| REQ-CLI-001 (remaining command coverage) | elang-cli | T1310–T1316; pack is implemented but the listed scaffold tests cover only its help; inspect, verify, validate, unpack and repertoire info are deferred | Partial |
+| REQ-CLI-002 (stable human-readable and JSON diagnostics, validation-failure exits, documented exit codes) | elang-cli | T1317, T1318; usage-error evidence above does not establish full diagnostic coverage | Planned (remaining scope) |
+| REQ-CLI-003 | elang-cli | T1319 | Planned |
 
 ## Phase 13 regression coverage
 
