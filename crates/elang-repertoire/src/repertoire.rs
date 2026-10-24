@@ -561,10 +561,11 @@ mod tests {
             "combining_diacritics": [],
             "spacing_modifiers": []
         }"#;
-        match load_from(src).unwrap_err() {
-            RepertoireError::Metadata(msg) => assert!(msg.contains("repertoire_version")),
-            other => panic!("expected Metadata, got {other:?}"),
-        }
+        let err = load_from(src).unwrap_err();
+        assert!(
+            matches!(&err, RepertoireError::Metadata(msg) if msg.contains("repertoire_version")),
+            "expected Metadata error mentioning repertoire_version, got {err:?}"
+        );
     }
 
     #[test]
@@ -577,10 +578,11 @@ mod tests {
             "combining_diacritics": [],
             "spacing_modifiers": []
         }"#;
-        match load_from(src).unwrap_err() {
-            RepertoireError::Metadata(msg) => assert!(msg.contains("unicode_version")),
-            other => panic!("expected Metadata, got {other:?}"),
-        }
+        let err = load_from(src).unwrap_err();
+        assert!(
+            matches!(&err, RepertoireError::Metadata(msg) if msg.contains("unicode_version")),
+            "expected Metadata error mentioning unicode_version, got {err:?}"
+        );
     }
 
     #[test]
@@ -593,10 +595,11 @@ mod tests {
             "combining_diacritics": [],
             "spacing_modifiers": []
         }"#;
-        match load_from(src).unwrap_err() {
-            RepertoireError::Metadata(msg) => assert!(msg.contains("ipa_chart")),
-            other => panic!("expected Metadata, got {other:?}"),
-        }
+        let err = load_from(src).unwrap_err();
+        assert!(
+            matches!(&err, RepertoireError::Metadata(msg) if msg.contains("ipa_chart")),
+            "expected Metadata error mentioning ipa_chart, got {err:?}"
+        );
     }
 
     #[test]

@@ -1125,15 +1125,14 @@ mod tests {
     #[test]
     fn token_to_value_returns_none_for_non_value_tokens() {
         // token_to_value should return None for newline, brace, paren, etc.
+        // Every token kind produced by this input must map to None.
         let toks = lex_all(" ;\n{ } ( ) = / /-").unwrap();
-        for t in &toks {
-            assert!(
-                Lexer::token_to_value(t).is_none(),
-                "expected None for {:?} ({})",
-                t.kind(),
-                t.kind()
-            );
-        }
+        assert!(!toks.is_empty(), "expected at least one token");
+        let any_value = toks.iter().map(Lexer::token_to_value).any(|v| v.is_some());
+        assert!(
+            !any_value,
+            "expected no token to have a value, but at least one did"
+        );
     }
 
     #[test]
