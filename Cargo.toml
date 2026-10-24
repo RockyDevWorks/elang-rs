@@ -12,6 +12,7 @@ members = [
     "crates/elang-reader",
     "crates/elang-cli",
     "crates/elang-unicode",
+    "crates/elang-writer",
 ]
 
 # Centralized package metadata inherited by every crate via `package.workspace = true`.
@@ -37,6 +38,7 @@ elang-integrity = { path = "crates/elang-integrity", version = "0.1.0" }
 elang-conformance = { path = "crates/elang-conformance", version = "0.1.0" }
 elang-reader = { path = "crates/elang-reader", version = "0.1.0" }
 elang-unicode = { path = "crates/elang-unicode", version = "0.1.0" }
+elang-writer = { path = "crates/elang-writer", version = "0.1.0" }
 
 # External crates (pinned). These are introduced only as the phases that need
 # them land; declaring the pinned version here keeps it reviewable in one place.
@@ -58,6 +60,10 @@ serde_json = "=1.0.154"
 zstd = "=0.14.3"
 zstd-safe = "=8.2.0"
 zstd-sys = "=2.1.2"
+# Argument parsing for the elang CLI (Phase 13, T1311). Zero transitive
+# dependencies; aligns with the `cargo-deny` ban on wildcards and the
+# minimal-deps policy from ADR 0001.
+pico-args = "=0.5.0"
 
 # Workspace-wide lint policy (T0215). Untrusted-input safety is enforced by
 # denying panic-prone constructs. These are inherited via `[lints] workspace = true`.
