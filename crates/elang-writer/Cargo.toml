@@ -19,3 +19,7 @@ elang-eld.workspace = true
 elang-integrity.workspace = true
 elang-unicode.workspace = true
 sha2.workspace = true
+
+[dev-dependencies]
+elang-reader.workspace = true
+elang-repertoire.workspace = true

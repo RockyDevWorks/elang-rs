@@ -53,6 +53,9 @@ primary stage(s) at which it can fire.
 | `FORMAT_VERSION_INVALID` | 8 | `Header/format.version` not UTF-8 `0.1.0`. |
 | `CONTAINER_BAD_VERSION` | 8 | Binary container version string not strict `MAJOR.MINOR.PATCH`. |
 | `MIMETYPE_INVALID` | 8 | `mimetype` ≠ exact `application/vnd.elang`. |
+| `WRITER_INVALID_CONFIG` | 13 | Writer-side pre-flight rejected the `PackageConfig` (reserved path, duplicate extra path, etc.). |
+| `WRITER_INVALID_FORMAT_VERSION` | 13 | Pinned `format.version` is empty, not NFC, or not `{major.minor}.{patch}` with ASCII digits. |
+| `WRITER_DUPLICATE_PATH` | 13 | Two resources in `PackageConfig` share a canonical path after sorting. |
 
 ### INDEX (stages 4–6, 9)
 
@@ -214,6 +217,9 @@ primary stage(s) at which it can fire.
 | `LIMIT_INTEGRITY_BYTES` | `META-INF/integrity.kdl` input > 16 MiB uncompressed. |
 | `LIMIT_STRING_BYTES` | Decoded string > 1 MiB (or per-resource/archive cap). |
 | `LIMIT_NAME_BYTES` | Node/property name > 256 bytes. |
+| `LIMIT_RESOURCE_BYTES` | Per-resource uncompressed ceiling exceeded (writer-side, phase 13). |
+| `LIMIT_UNCOMPRESSED_AGGREGATE` | Sum of uncompressed resource bytes > 8 GiB (writer-side, phase 13). |
+| `LIMIT_ARCHIVE_BYTES` | Compressed archive > 6 GiB (writer-side, phase 13). |
 | `LIMIT_ARGS` | > 256 args per node. |
 | `LIMIT_PROPS` | > 256 properties per node. |
 | `LIMIT_NODES_RESOURCE` | > 2,000,000 nodes/resource. |

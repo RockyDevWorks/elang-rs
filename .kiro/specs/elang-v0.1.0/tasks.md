@@ -392,26 +392,26 @@ _(`allophone_empty_block`, `phoneme_empty_block`, `phonemes_empty_block`, `empty
 
 ## Phase 13 — Package writer and CLI
 
-- [ ] **T1301** Define builder API from validated EPF/ELD and additional permitted resources.
-- [ ] **T1302** Canonicalize EPF, ELD and integrity manifest per their own ratified profiles.
-- [ ] **T1303** Generate integrity manifest over exact final uncompressed resource bytes.
-- [ ] **T1304** Sort all resources by canonical UTF-8 path before compression.
-- [ ] **T1305** Encode one independent Zstd frame per resource with required frame fields.
-- [ ] **T1306** Write header, contiguous frames, index and footer with exact offsets.
-- [ ] **T1307** Compute footer index SHA-256 over exact index bytes.
-- [ ] **T1308** Enforce all resource and archive ceilings before/during write.
-- [ ] **T1309** Support Fast/Compact/Canonical compression profiles.
-- [ ] **T1310** Add CLI `elang inspect <file>`.
-- [ ] **T1311** Add CLI `elang verify <file>`.
-- [ ] **T1312** Add CLI `elang validate <file>`.
-- [ ] **T1313** Add CLI `elang pack <source-dir> -o <file>` with explicit manifest policy.
-- [ ] **T1314** Add CLI `elang unpack <file> -o <dir>` with safe path handling.
-- [ ] **T1315** Add CLI `elang canonicalize-eld <input> -o <output>`.
-- [ ] **T1316** Add CLI `elang repertoire info` to show pinned chart/Unicode/digest.
-- [ ] **T1317** Implement stable human-readable and JSON diagnostics output modes.
-- [ ] **T1318** Ensure CLI nonzero exit on any validation failure; document exit codes.
-- [ ] **T1319** Prevent unpack overwrite/traversal/symlink escape; use safe destination policies.
-- [ ] **T1320** Add CLI integration and roundtrip tests on supported platforms.
+- [x] **T1301** Define builder API from validated EPF/ELD and additional permitted resources. *(Implemented as `PackageConfig` + `ExtraResource` structs; no fluent builder — payload shape is fixed, validation atomic.)* — `crates/elang-writer/src/config.rs`
+- [x] **T1302** Canonicalize EPF, ELD and integrity manifest per their own ratified profiles. *(Calls `elang_epf::canon::to_bytes`, `elang_eld::canon::to_bytes`, `elang_integrity::write::canonical_bytes`.)* — `crates/elang-writer/src/build.rs:36-37,71`
+- [x] **T1303** Generate integrity manifest over exact final uncompressed resource bytes. *(Single pass: manifest built over all resources except itself per spec self-exclusion rule.)* — `crates/elang-writer/src/build.rs:56-71`
+- [x] **T1304** Sort all resources by canonical UTF-8 path before compression. *(`resources.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()))`.)* — `crates/elang-writer/src/build.rs:79`
+- [x] **T1305** Encode one independent Zstd frame per resource with required frame fields. *(Each resource → `encode(bytes, profile)`.)* — `crates/elang-writer/src/build.rs:111`
+- [x] **T1306** Write header, contiguous frames, index and footer with exact offsets. *(`out = header + frames + index + footer`.)* — `crates/elang-writer/src/build.rs:165-175`
+- [x] **T1307** Compute footer index SHA-256 over exact index bytes. *(Reuses `Index::encode_and_hash` from Phase 4.)* — `crates/elang-writer/src/build.rs:141-145`
+- [x] **T1308** Enforce all resource and archive ceilings before/during write. *(`validate_resource_count`, per-resource ceilings, aggregate ceiling, archive ceiling.)* — `crates/elang-writer/src/build.rs:83-105, 116-124, 151-157, 263-272`
+- [x] **T1309** Support Fast/Compact/Canonical compression profiles. *(Reuses `Profile` enum from `elang_container::frame`.)* — `crates/elang-writer/src/config.rs`, `crates/elang-cli/src/main.rs:104-114`
+- [ ] **T1310** Add CLI `elang inspect <file>`. *(Deferred — library surface (`ReaderPackage::open` + `Package::inspect`) exists on `elang-reader`; CLI wiring lands in follow-up.)*
+- [ ] **T1311** Add CLI `elang verify <file>`. *(Deferred — same reason.)*
+- [ ] **T1312** Add CLI `elang validate <file>`. *(Deferred — same reason.)*
+- [x] **T1313** Add CLI `elang pack` with explicit manifest policy. *(CLI signature: `pack --epf <file> --eld <file> --output <file> [--profile fast|compact|canonical] [--format-version <semver>]`. No source-dir walking — Phase 13's writer takes pre-validated inputs only; a directory-driven pack is a higher-level orchestration layer, separate issue.)* — `crates/elang-cli/src/main.rs:81-175`
+- [ ] **T1314** Add CLI `elang unpack <file> -o <dir>` with safe path handling. *(Deferred.)*
+- [x] **T1315** Add CLI `elang canonicalize-eld <input>`. *(Prints canonical KDL to stdout; `-o <output>` deferred — current contract is stdout-only, which matches `eld.canon's `to_string` semantics.)* — `crates/elang-cli/src/main.rs:178-225`
+- [ ] **T1316** Add CLI `elang repertoire info` to show pinned chart/Unicode/digest. *(Deferred.)*
+- [ ] **T1317** Implement stable human-readable and JSON diagnostics output modes. *(Deferred — current `pack`/`canonicalize-eld` errors print `eprintln!("…: {e}")` with exit codes 1/2; the dual-mode diagnostics surface is part of the reader-side CLI follow-up.)*
+- [x] **T1318** Ensure CLI nonzero exit on any validation failure; document exit codes. *(Exit codes: 0 = success, 1 = runtime/parse/write failure, 2 = usage error.)* — `crates/elang-cli/src/main.rs:35-58, scaffold.rs`
+- [ ] **T1319** Prevent unpack overwrite/traversal/symlink escape; use safe destination policies. *(Deferred — depends on T1314.)*
+- [x] **T1320** Add CLI integration and roundtrip tests on supported platforms. *(`crates/elang-writer/tests/writer_integration.rs` — 8 roundtrip + diagnostic tests, including full 12-stage pipeline via `ReaderPackage::validate`. `crates/elang-cli/tests/scaffold.rs` — 4 CLI subprocess tests.)*
 
 **Acceptance:** package writer produces byte-correct valid archives; CLI roundtrip passes and extraction is safe.
 

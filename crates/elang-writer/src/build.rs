@@ -13,12 +13,11 @@
 use elang_container::footer::{FOOTER_LEN, MAX_INDEX_SIZE};
 use elang_container::frame::encode;
 use elang_container::header::HEADER_LEN;
-use elang_container::index::{COMPRESSION_ZSTD, Index, IndexEntry};
+use elang_container::index::{Index, IndexEntry, COMPRESSION_ZSTD};
 use elang_container::{Footer, Header};
 use elang_core::limits::{
     MAX_COMPRESSED_ARCHIVE_BYTES, MAX_ELD_BYTES, MAX_EPF_BYTES, MAX_GENERIC_RESOURCE_BYTES,
-    MAX_INTEGRITY_BYTES, MAX_RESOURCES, MAX_RESOURCE_PATH_BYTES,
-    MAX_UNCOMPRESSED_AGGREGATE_BYTES,
+    MAX_INTEGRITY_BYTES, MAX_RESOURCES, MAX_RESOURCE_PATH_BYTES, MAX_UNCOMPRESSED_AGGREGATE_BYTES,
 };
 use elang_integrity::manifest::{Algorithm, IntegrityEntry, IntegrityManifest};
 use sha2::{Digest, Sha256};
@@ -28,10 +27,7 @@ use crate::error::{BuildError, SizeKind};
 
 /// Assemble a `.elang` archive from a [`PackageConfig`].
 pub(crate) fn write_archive(config: &PackageConfig) -> Result<Vec<u8>, BuildError> {
-    config.validate_paths().map_err(|m| BuildError::InvalidConfig {
-        code: "WRITER_INVALID_CONFIG",
-        message: m.to_string(),
-    })?;
+    config.validate_paths()?;
     validate_resource_count(config)?;
     validate_format_version(&config.format_version)?;
 
@@ -41,7 +37,12 @@ pub(crate) fn write_archive(config: &PackageConfig) -> Result<Vec<u8>, BuildErro
 
     // 2. Lay out the resources. The integrity manifest is built last so
     //    its bytes can join the resource list before sorting.
-    let mut resources: Vec<(String, Vec<u8>)> = Vec::with_capacity(4 + config.extra_resources.len());
+    let mut resources: Vec<(String, Vec<u8>)> =
+        Vec::with_capacity(config.extra_resources.len().saturating_add(5));
+    resources.push((
+        "Header/mimetype".to_string(),
+        b"application/vnd.elang".to_vec(),
+    ));
     resources.push((
         "Header/format.version".to_string(),
         config.format_version.as_bytes().to_vec(),
@@ -95,9 +96,9 @@ pub(crate) fn write_archive(config: &PackageConfig) -> Result<Vec<u8>, BuildErro
     }
 
     // 6. Aggregate uncompressed ceiling.
-    let total_uncompressed: u64 = resources.iter().fold(0u64, |acc, (_, b)| {
-        acc.saturating_add(b.len() as u64)
-    });
+    let total_uncompressed: u64 = resources
+        .iter()
+        .fold(0u64, |acc, (_, b)| acc.saturating_add(b.len() as u64));
     if total_uncompressed > MAX_UNCOMPRESSED_AGGREGATE_BYTES {
         return Err(BuildError::SizeCeiling {
             kind: SizeKind::UncompressedAggregate,
@@ -115,9 +116,7 @@ pub(crate) fn write_archive(config: &PackageConfig) -> Result<Vec<u8>, BuildErro
         compressed_total = compressed_total.saturating_add(compressed_len);
         frames.push((path.clone(), compressed, uncompressed.len() as u64));
     }
-    if compressed_total.saturating_add(MAX_INDEX_SIZE)
-        > MAX_COMPRESSED_ARCHIVE_BYTES
-    {
+    if compressed_total.saturating_add(MAX_INDEX_SIZE) > MAX_COMPRESSED_ARCHIVE_BYTES {
         return Err(BuildError::SizeCeiling {
             kind: SizeKind::ArchiveBytes,
             requested: compressed_total.saturating_add(MAX_INDEX_SIZE),
@@ -158,7 +157,12 @@ pub(crate) fn write_archive(config: &PackageConfig) -> Result<Vec<u8>, BuildErro
         });
     }
 
-    let mut out: Vec<u8> = Vec::with_capacity(total_size as usize);
+    let capacity = usize::try_from(total_size).map_err(|_| BuildError::SizeCeiling {
+        kind: SizeKind::ArchiveBytes,
+        requested: total_size,
+        ceiling: MAX_COMPRESSED_ARCHIVE_BYTES,
+    })?;
+    let mut out: Vec<u8> = Vec::with_capacity(capacity);
     let header = Header::current();
     let mut header_buf = [0u8; HEADER_LEN];
     header.encode(&mut header_buf, 0)?;
@@ -244,11 +248,13 @@ fn is_ascii_digits(s: &str) -> bool {
 /// via `Index::with_entries`.
 fn dedup_paths(resources: &[(String, Vec<u8>)]) -> Result<(), BuildError> {
     for pair in resources.windows(2) {
-        if pair[0].0 == pair[1].0 {
-            return Err(BuildError::InvalidConfig {
-                code: "WRITER_DUPLICATE_PATH",
-                message: format!("two resources share the path {:?}", pair[0].0),
-            });
+        if let [prev, next] = pair {
+            if prev.0 == next.0 {
+                return Err(BuildError::InvalidConfig {
+                    code: "WRITER_DUPLICATE_PATH",
+                    message: format!("two resources share the path {:?}", prev.0),
+                });
+            }
         }
     }
     Ok(())
@@ -256,7 +262,7 @@ fn dedup_paths(resources: &[(String, Vec<u8>)]) -> Result<(), BuildError> {
 
 /// Reject a resource count that would exceed `MAX_RESOURCES`.
 fn validate_resource_count(config: &PackageConfig) -> Result<(), BuildError> {
-    let total = config.extra_resources.len() + 4;
+    let total = config.extra_resources.len().saturating_add(5);
     if u32::try_from(total).map_or(true, |n| n > MAX_RESOURCES) {
         return Err(BuildError::SizeCeiling {
             kind: SizeKind::ResourceCount,

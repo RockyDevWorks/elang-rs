@@ -11,6 +11,8 @@ use elang_container::frame::Profile;
 use elang_core::model::eld::PhonemeInventory;
 use elang_epf::model::EpfPackage;
 
+use crate::error::BuildError;
+
 /// One additional permitted resource (ADR 0006,
 /// `specs/registry/resource-policy-v0.1.0.md`).
 ///
@@ -68,8 +70,10 @@ impl PackageConfig {
     /// `Linguistics/phonemes.eld`, `META-INF/integrity.kdl`) and cannot
     /// collide with caller-supplied paths because those four names are
     /// reserved.
-    pub(crate) fn validate_paths(&self) -> Result<(), &'static str> {
+    pub(crate) fn validate_paths(&self) -> Result<(), BuildError> {
+        use crate::error::BuildError as E;
         const RESERVED: &[&str] = &[
+            "Header/mimetype",
             "Header/format.version",
             "Linguistics/phonemes.eld",
             "META-INF/integrity.kdl",
@@ -77,12 +81,23 @@ impl PackageConfig {
         ];
         for extra in &self.extra_resources {
             if RESERVED.contains(&extra.path.as_str()) {
-                return Err("extra_resource uses a path reserved by the writer");
+                return Err(E::InvalidConfig {
+                    code: "WRITER_INVALID_CONFIG",
+                    message: format!(
+                        "extra_resource path {:?} is reserved by the writer",
+                        extra.path
+                    ),
+                });
             }
         }
         for pair in self.extra_resources.windows(2) {
-            if pair[0].path == pair[1].path {
-                return Err("two extra_resources share the same path");
+            if let [prev, next] = pair {
+                if prev.path == next.path {
+                    return Err(E::InvalidConfig {
+                        code: "WRITER_DUPLICATE_PATH",
+                        message: format!("two extra_resources share the path {:?}", prev.path),
+                    });
+                }
             }
         }
         Ok(())

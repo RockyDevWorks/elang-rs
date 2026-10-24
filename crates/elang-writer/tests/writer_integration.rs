@@ -1,0 +1,184 @@
+//! Integration tests for the elang-writer crate (Phase 13, Issue #23).
+//!
+//! These tests roundtrip writer output through elang-reader's 12-stage
+//! pipeline (T1315) and exercise every `BuildError` variant published by
+//! the writer (T1308, T1309).
+//!
+//! The canonical EPF / ELD bodies below are byte-identical to the inputs
+//! the reader's own `__test_support::build_canonical_archive()` uses, so a
+//! successful roundtrip is a strict equivalence proof between the two
+//! crates' canonical serializers.
+
+//! Test code path: `.expect()` / `.expect_err()` / panics signal fixture
+//! regressions, not untrusted-input failure. The workspace lint policy
+//! denies these on production code; tests live under this allow.
+#![allow(clippy::expect_used, clippy::panic)]
+
+use elang_container::ArchiveListing;
+use elang_reader::Package as ReaderPackage;
+use elang_writer::{write_archive, BuildError, ExtraResource, PackageConfig, Profile};
+
+// ---------------------------------------------------------------------------
+// Canonical inputs (mirrored from elang-reader::__test_support)
+// ---------------------------------------------------------------------------
+
+const FORMAT_VERSION: &str = "0.1.0";
+
+const EPF_BYTES: &[u8] = b"epf \"0.1.0\"\neld \"0.1.0\"\nlanguage-version \"1.0.0\"\nmetadata {\n    identifier \"urn:elang:language:rocky:test:1.0.0\"\n    name \"Writer Test\"\n}\nmanifest {\n    phonemes \"Linguistics/phonemes.eld\"\n}\n";
+
+const ELD_BYTES: &[u8] = b"phonemes {\n    consonants {\n        phoneme \"p\" {\n            roman \"p\"\n        }\n    }\n    vowels {\n        phoneme \"a\" {\n            roman \"a\"\n        }\n    }\n}\n";
+
+// ---------------------------------------------------------------------------
+// Fixture builders
+// ---------------------------------------------------------------------------
+
+fn build_minimal_config() -> PackageConfig {
+    let epf = elang_epf::parse(EPF_BYTES).expect("canonical EPF parses");
+    let rep = elang_repertoire::repertoire::load().expect("pinned IPA repertoire loads");
+    let doc = elang_eld::parse(ELD_BYTES, &rep).expect("canonical ELD parses");
+    let eld = elang_eld::inventory::from_document(&doc, &rep).expect("ELD → inventory");
+    PackageConfig {
+        epf,
+        eld,
+        extra_resources: Vec::new(),
+        profile: Profile::Fast,
+        format_version: FORMAT_VERSION.to_string(),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Happy path: full 12-stage roundtrip through elang-reader (T1315)
+// ---------------------------------------------------------------------------
+
+/// A writer-produced archive must open cleanly through the reader's
+/// stages 1–7 (binary header, index, frame layout, per-frame inspect).
+#[test]
+fn writer_output_opens_via_reader() {
+    let config = build_minimal_config();
+    let bytes = write_archive(&config).expect("writer succeeds on minimal config");
+    ReaderPackage::open(&bytes).expect("reader stages 1–7 accept the writer output");
+}
+
+/// Stages 8–12 (bootstrap, integrity, EPF, resource integrity, ELD
+/// semantics) must also pass on a writer-produced archive.
+#[test]
+fn writer_output_validates_via_reader_full_pipeline() {
+    let config = build_minimal_config();
+    let bytes = write_archive(&config).expect("writer succeeds on minimal config");
+    let pkg = ReaderPackage::open(&bytes).expect("stages 1–7");
+    let _validated = pkg.validate().expect("stages 8–12");
+}
+
+/// Writer output is a structurally valid binary container — the cheap
+/// `ArchiveListing::parse` (stages 1–6) must succeed before any Zstd
+/// decode. Useful as a quick smoke test in CI.
+#[test]
+fn writer_output_passes_archive_listing_parse() {
+    let config = build_minimal_config();
+    let bytes = write_archive(&config).expect("writer succeeds");
+    let listing = ArchiveListing::parse(&bytes).expect("ArchiveListing::parse succeeds");
+    let paths: Vec<&str> = listing
+        .index()
+        .entries()
+        .iter()
+        .map(|e| e.path().as_str())
+        .collect();
+    // Five indexed resources: mimetype, format.version, integrity.kdl,
+    // package.epf, phonemes.eld.
+    assert_eq!(paths.len(), 5, "indexed resource count");
+    assert!(paths.contains(&"Header/format.version"));
+    assert!(paths.contains(&"package.epf"));
+    assert!(paths.contains(&"Linguistics/phonemes.eld"));
+    assert!(paths.contains(&"META-INF/integrity.kdl"));
+}
+
+/// Extra resources (ADR 0006) must roundtrip: the index carries them, the
+/// integrity manifest hashes them, and the reader's full pipeline accepts
+/// them.
+#[test]
+fn writer_output_with_extra_resource_roundtrips() {
+    let mut config = build_minimal_config();
+    config.extra_resources = vec![ExtraResource {
+        path: "data/license.txt".to_string(),
+        canonical_bytes: b"MIT License\n".to_vec(),
+    }];
+    let bytes = write_archive(&config).expect("writer succeeds with extras");
+    let pkg = ReaderPackage::open(&bytes).expect("stages 1–7");
+    let listing = pkg.listing();
+    let paths: Vec<&str> = listing
+        .index()
+        .entries()
+        .iter()
+        .map(|e| e.path().as_str())
+        .collect();
+    assert!(
+        paths.contains(&"data/license.txt"),
+        "extra resource must be indexed: {paths:?}"
+    );
+    let _validated = pkg.validate().expect("stages 8–12 accept the extra");
+}
+
+// ---------------------------------------------------------------------------
+// Diagnostic coverage (T1308, T1309): every BuildError variant is reachable
+// ---------------------------------------------------------------------------
+
+/// Two extras that share a canonical path → `WRITER_DUPLICATE_PATH`.
+#[test]
+fn duplicate_extra_path_rejected() {
+    let mut config = build_minimal_config();
+    config.extra_resources = vec![
+        ExtraResource {
+            path: "data/dup.bin".to_string(),
+            canonical_bytes: b"a".to_vec(),
+        },
+        ExtraResource {
+            path: "data/dup.bin".to_string(),
+            canonical_bytes: b"b".to_vec(),
+        },
+    ];
+    let err = write_archive(&config).expect_err("duplicate path must fail");
+    assert_eq!(err.code(), "WRITER_DUPLICATE_PATH");
+    match err {
+        BuildError::InvalidConfig { code, message } => {
+            assert_eq!(code, "WRITER_DUPLICATE_PATH");
+            assert!(
+                message.contains("data/dup.bin"),
+                "message names the offending path: {message}"
+            );
+        }
+        other => panic!("expected InvalidConfig, got {other:?}"),
+    }
+}
+
+/// A reserved path in `extra_resources` → `WRITER_INVALID_CONFIG` (writer
+/// owns the four mandatory names).
+#[test]
+fn reserved_path_rejected() {
+    let mut config = build_minimal_config();
+    config.extra_resources = vec![ExtraResource {
+        path: "package.epf".to_string(),
+        canonical_bytes: b"x".to_vec(),
+    }];
+    let err = write_archive(&config).expect_err("reserved path must fail");
+    assert_eq!(err.code(), "WRITER_INVALID_CONFIG");
+}
+
+/// A `format.version` that is not `{major.minor}.{patch}` with ASCII
+/// digits → `WRITER_INVALID_FORMAT_VERSION`.
+#[test]
+fn bad_format_version_rejected() {
+    let mut config = build_minimal_config();
+    config.format_version = "not-a-version".to_string();
+    let err = write_archive(&config).expect_err("bad format_version must fail");
+    assert_eq!(err.code(), "WRITER_INVALID_FORMAT_VERSION");
+}
+
+/// An empty `format.version` is rejected (the v0.1.0 container requires
+/// the prefix).
+#[test]
+fn empty_format_version_rejected() {
+    let mut config = build_minimal_config();
+    config.format_version = String::new();
+    let err = write_archive(&config).expect_err("empty format_version must fail");
+    assert_eq!(err.code(), "WRITER_INVALID_FORMAT_VERSION");
+}

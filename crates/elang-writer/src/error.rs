@@ -2,13 +2,12 @@
 //!
 //! Every variant carries a registered error code from
 //! `specs/registry/error-codes.md`. Container-layer failures
-//! ([`BuildError::Container`], [`BuildError::Frame`], [`BuildError::Index`])
-//! propagate the upstream `elang_core::Error` unchanged so a writer and a
-//! reader surface the same diagnostic for the same underlying failure.
-//! Writer-side pre-flight checks ([`BuildError::InvalidConfig`] and
-//! [`BuildError::SizeCeiling`]) reuse the `LIMIT_*` family of codes that the
-//! parser stages already use, so a single code family covers both read and
-//! write paths for the same ceiling.
+//! ([`BuildError::Container`]) propagate the upstream `elang_core::Error`
+//! unchanged so a writer and a reader surface the same diagnostic for the
+//! same underlying failure. Writer-side pre-flight checks
+//! ([`BuildError::InvalidConfig`] and [`BuildError::SizeCeiling`]) reuse the
+//! `LIMIT_*` family of codes that the parser stages already use, so a single
+//! code family covers both read and write paths for the same ceiling.
 
 use elang_core::Error;
 

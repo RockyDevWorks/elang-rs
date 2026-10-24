@@ -4,13 +4,12 @@
 //!
 //! This crate builds a `.elang` archive from already-validated inputs:
 //!
-//! - a parsed [`EpfPackage`](elang_epf::model::EpfPackage),
-//! - a parsed [`PhonemeInventory`](elang_eld::PhonemeInventory),
+//! - a parsed `EpfPackage`,
+//! - a parsed [`PhonemeInventory`],
 //! - an optional list of additional permitted resources (paths plus their
 //!   canonical bytes — see ADR 0006 / `specs/registry/resource-policy-v0.1.0.md`),
-//! - a pinned [`format.version`] string (semver-shaped; e.g. `"0.1.0\n"`).
-//!
-//! [`format.version`]: ../struct.PackageConfig.html#structfield.format_version
+//! - a pinned [`format_version`](PackageConfig::format_version) string
+//!   (semver-shaped; e.g. `"0.1.0"`).
 //!
 //! The writer is intentionally thin: it does not re-validate the EPF or ELD,
 //! does not parse KDL, and does not run the 12-stage reader. Every input is
@@ -32,13 +31,13 @@
 //! ## Diagnostic model
 //!
 //! Every failure carries a registered error code from
-//! `specs/registry/error-codes.md` and the [`Category`] the registry assigns.
-//! Container-layer failures (`Category::Container`, `Category::Index`,
-//! `Category::Frame`, `Category::ResourcePath`) propagate from
-//! `elang-container` unchanged; canonical serialization and integrity failures
-//! carry the upstream crate's category. The writer adds one new category
-//! [`Category::Builder`] for its own pre-flight checks (resource-count ceiling,
-//! size ceilings, profile/format-version sanity).
+//! `specs/registry/error-codes.md` and the [`Category`](elang_core::Category)
+//! the registry assigns. Container-layer failures (CONTAINER, INDEX, FRAME,
+//! RESOURCE_PATH categories) propagate from `elang-container` unchanged;
+//! canonical serialization and integrity failures carry the upstream crate's
+//! category. The writer's own pre-flight checks reuse the LIMIT category
+//! (size ceilings) and add three new WRITER_* codes for input validation
+//! failures (reserved path, duplicate path, invalid format_version).
 
 #![deny(unsafe_code)]
 #![warn(missing_docs)]
