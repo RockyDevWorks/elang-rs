@@ -134,6 +134,14 @@ tag — not any missing artifact.
 | REQ-CONF-001..005 | elang-conformance / ci | T1401–T1420 | Planned |
 | REQ-SEC-001 | all | T1501–T1520 | Planned |
 
+## Phase 13 regression coverage
+
+| Requirement | Code | Tests |
+|---|---|---|
+| REQ-CORE-VERSION-003 | `elang-writer/src/build.rs::validate_format_version` | `writer_integration::{mismatched_format_version_prefix_rejected, matching_format_version_with_different_patch_roundtrips}` (exact header prefix, leading-zero rejection, patch acceptance) |
+| REQ-WRITER-005 | `elang-writer::write_archive` | `writer_integration::all_compression_profiles_roundtrip` (Fast/Compact/Canonical through all 12 reader stages) |
+| REQ-CLI-001/002 (implemented commands) | `elang-cli/src/main.rs` | `scaffold::{elang_subcommand_help_exits_zero_before_validating_arguments, elang_canonicalize_eld_requires_exactly_one_operand, elang_canonicalize_eld_accepts_one_operand}` (help, usage errors, canonical stdout) |
+
 ## How to update
 
 When a task lands:

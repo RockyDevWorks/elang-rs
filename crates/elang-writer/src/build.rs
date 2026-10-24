@@ -180,7 +180,8 @@ pub(crate) fn write_archive(config: &PackageConfig) -> Result<Vec<u8>, BuildErro
 }
 
 /// Validate the pinned format-version string. Must be NFC, must encode
-/// `{major.minor}.{patch}` with ASCII digits and a non-empty patch.
+/// `{major.minor}.{patch}` with ASCII digits and a non-empty patch, and
+/// major/minor must textually match the current container header.
 fn validate_format_version(version: &str) -> Result<(), BuildError> {
     if version.is_empty() {
         return Err(BuildError::InvalidConfig {
@@ -229,6 +230,17 @@ fn validate_format_version(version: &str) -> Result<(), BuildError> {
         return Err(BuildError::InvalidConfig {
             code: "WRITER_INVALID_FORMAT_VERSION",
             message: format!("format_version components must be ASCII digits ({version:?})"),
+        });
+    }
+    let header = Header::current();
+    if major != header.major().to_string() || minor != header.minor().to_string() {
+        return Err(BuildError::InvalidConfig {
+            code: "WRITER_INVALID_FORMAT_VERSION",
+            message: format!(
+                "format_version major/minor must match the binary header {}.{} ({version:?})",
+                header.major(),
+                header.minor()
+            ),
         });
     }
     if patch.is_empty() {

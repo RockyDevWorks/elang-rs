@@ -34,6 +34,13 @@ Subcommands:
 Run 'elang <subcommand> --help' for subcommand-specific options.
 ";
 
+const PACK_USAGE: &str = "\
+usage: elang pack --epf <file> --eld <file> --output <file>
+                 [--profile fast|compact|canonical] [--format-version <version>]
+";
+
+const CANONICALIZE_ELD_USAGE: &str = "usage: elang canonicalize-eld <ELD-file>\n";
+
 fn main() -> ExitCode {
     let mut args = Arguments::from_env();
     let sub = match args.subcommand() {
@@ -83,6 +90,11 @@ where
 }
 
 fn run_pack(args: &mut Arguments) -> ExitCode {
+    if args.contains(["-h", "--help"]) {
+        print!("{PACK_USAGE}");
+        return ExitCode::SUCCESS;
+    }
+
     let mut err: Option<ExitCode> = None;
 
     let epf_path: PathBuf = match required_opt::<PathBuf>(args, "--epf", &mut err) {
@@ -201,10 +213,16 @@ fn run_pack(args: &mut Arguments) -> ExitCode {
 }
 
 fn run_canonicalize_eld(args: &mut Arguments) -> ExitCode {
-    let input: PathBuf = match args.clone().finish().into_iter().next() {
-        Some(s) => PathBuf::from(s),
-        None => {
-            eprintln!("usage: elang canonicalize-eld <ELD-file>");
+    if args.contains(["-h", "--help"]) {
+        print!("{CANONICALIZE_ELD_USAGE}");
+        return ExitCode::SUCCESS;
+    }
+
+    let operands = args.clone().finish();
+    let input: PathBuf = match operands.as_slice() {
+        [input] => PathBuf::from(input),
+        _ => {
+            eprint!("{CANONICALIZE_ELD_USAGE}");
             return ExitCode::from(2);
         }
     };

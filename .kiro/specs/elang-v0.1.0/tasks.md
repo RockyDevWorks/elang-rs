@@ -406,7 +406,7 @@ _(`allophone_empty_block`, `phoneme_empty_block`, `phonemes_empty_block`, `empty
 - [ ] **T1312** Add CLI `elang validate <file>`. *(Deferred — same reason.)*
 - [x] **T1313** Add CLI `elang pack` with explicit manifest policy. *(CLI signature: `pack --epf <file> --eld <file> --output <file> [--profile fast|compact|canonical] [--format-version <semver>]`. No source-dir walking — Phase 13's writer takes pre-validated inputs only; a directory-driven pack is a higher-level orchestration layer, separate issue.)* — `crates/elang-cli/src/main.rs:81-175`
 - [ ] **T1314** Add CLI `elang unpack <file> -o <dir>` with safe path handling. *(Deferred.)*
-- [x] **T1315** Add CLI `elang canonicalize-eld <input>`. *(Prints canonical KDL to stdout; `-o <output>` deferred — current contract is stdout-only, which matches `eld.canon's `to_string` semantics.)* — `crates/elang-cli/src/main.rs:178-225`
+- [x] **T1315** Add CLI `elang canonicalize-eld <input>`. *(Prints canonical KDL to stdout; `-o <output>` deferred — current contract is stdout-only, which matches `elang_eld::canon::to_string` semantics.)* — `crates/elang-cli/src/main.rs:178-225`
 - [ ] **T1316** Add CLI `elang repertoire info` to show pinned chart/Unicode/digest. *(Deferred.)*
 - [ ] **T1317** Implement stable human-readable and JSON diagnostics output modes. *(Deferred — current `pack`/`canonicalize-eld` errors print `eprintln!("…: {e}")` with exit codes 1/2; the dual-mode diagnostics surface is part of the reader-side CLI follow-up.)*
 - [x] **T1318** Ensure CLI nonzero exit on any validation failure; document exit codes. *(Exit codes: 0 = success, 1 = runtime/parse/write failure, 2 = usage error.)* — `crates/elang-cli/src/main.rs:35-58, scaffold.rs`

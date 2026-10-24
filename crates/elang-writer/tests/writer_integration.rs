@@ -69,6 +69,28 @@ fn writer_output_validates_via_reader_full_pipeline() {
     let _validated = pkg.validate().expect("stages 8–12");
 }
 
+/// Every supported compression profile must pass all 12 reader stages.
+#[test]
+fn all_compression_profiles_roundtrip() {
+    for profile in [Profile::Fast, Profile::Compact, Profile::Canonical] {
+        let mut config = build_minimal_config();
+        config.profile = profile;
+        let bytes = write_archive(&config).expect("writer succeeds for each profile");
+        let pkg = ReaderPackage::open(&bytes).expect("stages 1–7");
+        let _validated = pkg.validate().expect("stages 8–12");
+    }
+}
+
+/// The patch may vary while the container's major/minor prefix stays fixed.
+#[test]
+fn matching_format_version_with_different_patch_roundtrips() {
+    let mut config = build_minimal_config();
+    config.format_version = "0.1.42".to_string();
+    let bytes = write_archive(&config).expect("matching major/minor succeeds");
+    let pkg = ReaderPackage::open(&bytes).expect("stages 1–7");
+    let _validated = pkg.validate().expect("stages 8–12");
+}
+
 /// Writer output is a structurally valid binary container — the cheap
 /// `ArchiveListing::parse` (stages 1–6) must succeed before any Zstd
 /// decode. Useful as a quick smoke test in CI.
@@ -171,6 +193,23 @@ fn bad_format_version_rejected() {
     config.format_version = "not-a-version".to_string();
     let err = write_archive(&config).expect_err("bad format_version must fail");
     assert_eq!(err.code(), "WRITER_INVALID_FORMAT_VERSION");
+}
+
+/// Major/minor must match the header text exactly, including no leading zeros.
+#[test]
+fn mismatched_format_version_prefix_rejected() {
+    for version in ["1.1.0", "0.2.0", "00.1.0", "0.01.0", "00.01.0"] {
+        let mut config = build_minimal_config();
+        config.format_version = version.to_string();
+        let err = write_archive(&config).expect_err("mismatched prefix must fail");
+        assert!(matches!(
+            err,
+            BuildError::InvalidConfig {
+                code: "WRITER_INVALID_FORMAT_VERSION",
+                ..
+            }
+        ));
+    }
 }
 
 /// An empty `format.version` is rejected (the v0.1.0 container requires

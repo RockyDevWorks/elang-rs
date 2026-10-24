@@ -218,7 +218,7 @@ primary stage(s) at which it can fire.
 | `LIMIT_STRING_BYTES` | Decoded string > 1 MiB (or per-resource/archive cap). |
 | `LIMIT_NAME_BYTES` | Node/property name > 256 bytes. |
 | `LIMIT_RESOURCE_BYTES` | Per-resource uncompressed ceiling exceeded (writer-side, phase 13). |
-| `LIMIT_UNCOMPRESSED_AGGREGATE` | Sum of uncompressed resource bytes > 8 GiB (writer-side, phase 13). |
+| `LIMIT_UNCOMPRESSED_AGGREGATE` | Aggregate uncompressed resource bytes > 8 GiB (reader checks declared sizes; writer checks actual sizes in phase 13). |
 | `LIMIT_ARCHIVE_BYTES` | Compressed archive > 6 GiB (writer-side, phase 13). |
 | `LIMIT_ARGS` | > 256 args per node. |
 | `LIMIT_PROPS` | > 256 properties per node. |
@@ -228,7 +228,6 @@ primary stage(s) at which it can fire.
 | `LIMIT_REFERENCES` | > 10,000,000 semantic references/archive. |
 | `LIMIT_TRAVERSAL_DEPTH` | Semantic traversal depth > 128. |
 | `LIMIT_RESOURCES_ARCHIVE` | > 25,000 resources in one archive. |
-| `LIMIT_UNCOMPRESSED_AGGREGATE` | Aggregate declared uncompressed bytes > 8 GiB. |
 
 ### CANONICAL (writer/roundtrip)
 
