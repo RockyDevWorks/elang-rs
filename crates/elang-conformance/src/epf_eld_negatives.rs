@@ -131,7 +131,7 @@ pub fn eld_structure_fixtures() -> Vec<DocumentFixture> {
         fixtures.push(DocumentFixture {
             id: "eld/accept-extra-group",
             description: "A custom group alongside the mandatory ones parses cleanly",
-            requirements: &["REQ-ELD-002", "REQ-ELD-004"],
+            requirements: &["REQ-ELD-004"],
             schema: Schema::Eld,
             source: src.into_bytes(),
             expectation: DocumentExpectation::Accept,
