@@ -122,9 +122,54 @@ fn explicit_roman_collision_root_to_allophone() {
          }",
     );
     assert_eq!(e.code(), "ROMAN_DUPLICATE");
-    // Note: ROMAN_DUPLICATE category is ELD_SCHEMA because the uniqueness
-    // check runs in the top-level validator; category routing for this
-    // code may be refined in a later phase.
+    assert_eq!(e.category(), Category::Roman);
+}
+
+#[test]
+fn ipa_duplicate_points_at_allophone() {
+    // Cover collisions with the root and a preceding allophone's tie-bar alias.
+    for (first, duplicate) in [("d", "t"), ("t͡ʃ", "t͜ʃ")] {
+        let src = format!(
+            r#"phonemes {{
+    consonants {{
+        phoneme "t" {{
+            roman "t"
+            allophone "{first}"
+            allophone "{duplicate}"
+        }}
+    }}
+    vowels {{ phoneme "a" {{ roman "a" }} }}
+}}"#
+        );
+        let e = parse_err(&src);
+        assert_eq!(e.code(), "ELD_IPA_DUPLICATE");
+        let span = e.diagnostic.span.expect("duplicate must have a span");
+        assert_eq!((span.line, span.column), (6, 13));
+    }
+}
+
+#[test]
+fn roman_duplicate_points_at_allophone() {
+    // Cover collisions with the root and a preceding explicit allophone roman.
+    for duplicate in ["T", "D"] {
+        let src = format!(
+            r#"phonemes {{
+    consonants {{
+        phoneme "t" {{
+            roman "t"
+            allophone "d" {{ roman "d" }}
+            allophone "b" {{ roman "{duplicate}" }}
+        }}
+    }}
+    vowels {{ phoneme "a" {{ roman "a" }} }}
+}}"#
+        );
+        let e = parse_err(&src);
+        assert_eq!(e.code(), "ROMAN_DUPLICATE");
+        assert_eq!(e.category(), Category::Roman);
+        let span = e.diagnostic.span.expect("duplicate must have a span");
+        assert_eq!((span.line, span.column), (6, 13));
+    }
 }
 
 // ---- Allophone `when` independence test (REQ-ELD-017) --------------------
@@ -222,11 +267,40 @@ fn roman_inheritance_preserves_root_case() {
     assert_eq!(root.allophones()[0].effective_roman().as_str(), "Th");
 }
 
-// ---- 257 roots boundary --------------------------------------------------
-// Uses identifiers like c0, v200 which are NOT valid IPA — the test is
-// skipped because IPA validation would reject them before the count check.
-// Phase 9's root count check (C-08) is tested with valid IPA in the
-// unit test suite instead.
+// ---- 256/257 roots boundary ----------------------------------------------
+
+fn inventory_with_consonant_roots(count: usize) -> String {
+    // Eight approved IPA bases give 512 unique three-unit identifiers.
+    // They also serve as unique, valid ASCII romanizations.
+    let bases = ['p', 'b', 't', 'd', 'k', 's', 'm', 'n'];
+    let identifiers = bases.into_iter().flat_map(|a| {
+        bases
+            .into_iter()
+            .flat_map(move |b| bases.into_iter().map(move |c| format!("{a}{b}{c}")))
+    });
+    let mut src = String::from("phonemes {\n    consonants {\n");
+    for ipa in identifiers.take(count) {
+        src.push_str(&format!(
+            "        phoneme \"{ipa}\" {{ roman \"{ipa}\" }}\n"
+        ));
+    }
+    src.push_str("    }\n    vowels { phoneme \"a\" { roman \"a\" } }\n}\n");
+    src
+}
+
+#[test]
+fn two_hundred_fifty_six_roots_accepted() {
+    let doc = parse_ok(&inventory_with_consonant_roots(255));
+    assert_eq!(doc.groups()[0].roots().len(), 255);
+    assert_eq!(doc.groups()[1].roots().len(), 1);
+}
+
+#[test]
+fn two_hundred_fifty_seven_roots_rejected() {
+    let e = parse_err(&inventory_with_consonant_roots(256));
+    assert_eq!(e.code(), "ELD_PHONEME_INVALID");
+    assert!(e.diagnostic.message.contains("too many root phonemes"));
+}
 
 // ---- 17 groups boundary --------------------------------------------------
 

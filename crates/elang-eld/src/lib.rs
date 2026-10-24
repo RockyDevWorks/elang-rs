@@ -31,18 +31,14 @@
 //!
 //! ## KDL input constraint
 //!
-//! The `elang-kdl` parser (Phase 5) implements a KDL-1.0-shaped node grammar
-//! in which a node is terminated by a newline, `}` or EOF. A bare identifier
-//! that follows a node on the same line is **not** recognised as a sibling
-//! node: the parser consumes it as a string argument of the preceding node, so
-//! `roman "ph" when { … }` parses as a single `roman` node carrying the
-//! arguments `"ph"` and `"when"`. Every ELD document must therefore place at
-//! most one node per line, matching the canonical ELD serialisation profile
-//! (steering §9, Phase 11). This is a Phase 5 conformance gap, not a Phase 9
-//! defect; it may be lifted when the KDL parser is updated to KDL 2.0. The
-//! absorbed argument is not silently accepted — the ELD validator rejects the
-//! node's argument count — but the diagnostic names the shape error rather
-//! than the misplaced sibling.
+//! KDL 2.0 permits bare identifiers as string arguments. Without a node
+//! terminator, a bare identifier on the same line is an argument of the
+//! preceding node, so `roman "ph" when { … }` parses as a single `roman`
+//! node carrying the arguments `"ph"` and `"when"`. This is valid KDL 2.0
+//! syntax. Every ELD document must place at most one node per line, matching
+//! the canonical ELD serialisation profile (steering §9, Phase 11). The ELD
+//! validator rejects the resulting argument count with a shape-error
+//! diagnostic rather than identifying a misplaced sibling.
 //!
 //! Implemented in Phase 9 (Issue #19).
 

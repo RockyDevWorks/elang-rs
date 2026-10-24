@@ -385,7 +385,7 @@ fn validate_top_level(doc: &KdlDocument, repertoire: &Repertoire) -> Result<Vec<
                 .map(|w_node| WhenBlock::new((*w_node).clone()));
 
             // --- Process allophones ---
-            let mut allos: Vec<EldAllophone> = Vec::with_capacity(allophone_nodes.len());
+            let mut allos: Vec<(EldAllophone, String)> = Vec::with_capacity(allophone_nodes.len());
             for a_node in &allophone_nodes {
                 let allo = validate_allophone(a_node, &roman, repertoire)?;
                 allos.push(allo);
@@ -403,10 +403,8 @@ fn validate_top_level(doc: &KdlDocument, repertoire: &Repertoire) -> Result<Vec<
             ipa_keys.insert(ipa_key.clone(), ipa_text.to_string());
 
             // Check IPA uniqueness for allophones.
-            for allo in &allos {
-                let allo_validated = validate_ipa(allo.ipa().as_str(), r_node.span(), repertoire)?;
-                let allo_ipa_key = allo_validated.comparison_key();
-                if let Some(existing_name) = ipa_keys.get(&allo_ipa_key) {
+            for ((allo, allo_ipa_key), a_node) in allos.iter().zip(&allophone_nodes) {
+                if let Some(existing_name) = ipa_keys.get(allo_ipa_key) {
                     return Err(eld_err_at(
                         "ELD_IPA_DUPLICATE",
                         format!(
@@ -414,10 +412,10 @@ fn validate_top_level(doc: &KdlDocument, repertoire: &Repertoire) -> Result<Vec<
                             allo.ipa().as_str(),
                             existing_name
                         ),
-                        r_node.span(),
+                        a_node.span(),
                     ));
                 }
-                ipa_keys.insert(allo_ipa_key, allo.ipa().as_str().to_string());
+                ipa_keys.insert(allo_ipa_key.clone(), allo.ipa().as_str().to_string());
             }
 
             // Check explicit roman uniqueness (C-15).
@@ -436,7 +434,7 @@ fn validate_top_level(doc: &KdlDocument, repertoire: &Repertoire) -> Result<Vec<
             roman_folds.insert(roman_fold.clone(), roman.as_str().to_string());
 
             // Check explicit roman uniqueness for allophones too.
-            for allo in &allos {
+            for ((allo, _), a_node) in allos.iter().zip(&allophone_nodes) {
                 if let Some(explicit_r) = allo.explicit_roman() {
                     let er_fold = explicit_r.fold_key();
                     if let Some(existing_val) = roman_folds.get(&er_fold) {
@@ -447,7 +445,7 @@ fn validate_top_level(doc: &KdlDocument, repertoire: &Repertoire) -> Result<Vec<
                                 explicit_r.as_str(),
                                 existing_val
                             ),
-                            r_node.span(),
+                            a_node.span(),
                         ));
                     }
                     roman_folds.insert(er_fold, explicit_r.as_str().to_string());
@@ -467,7 +465,12 @@ fn validate_top_level(doc: &KdlDocument, repertoire: &Repertoire) -> Result<Vec<
                 ));
             }
 
-            group_roots.push(EldRootPhoneme::new(ipa_stored, roman, when, allos));
+            group_roots.push(EldRootPhoneme::new(
+                ipa_stored,
+                roman,
+                when,
+                allos.into_iter().map(|(allo, _)| allo).collect(),
+            ));
         }
 
         groups.push(EldGroup::new(kind, group_roots));
@@ -498,7 +501,7 @@ fn validate_allophone(
     node: &KdlNode,
     parent_roman: &Romanization,
     repertoire: &Repertoire,
-) -> Result<EldAllophone, Error> {
+) -> Result<(EldAllophone, String), Error> {
     // C-10: type annotation on allophone.
     if node.ty().is_some() {
         return Err(eld_err_at(
@@ -535,6 +538,7 @@ fn validate_allophone(
 
     // IPA validation.
     let ipa_id = validate_ipa(ipa_text, node.span(), repertoire)?;
+    let ipa_key = ipa_id.comparison_key();
     let ipa_stored = IpaIdentifierText::from_validated(ipa_id.original.clone());
 
     // Scan children for `roman` and `when`.
@@ -594,11 +598,9 @@ fn validate_allophone(
     // When block (verbatim for Phase 10).
     let when = when_nodes.first().map(|wn| WhenBlock::new((*wn).clone()));
 
-    Ok(EldAllophone::new(
-        ipa_stored,
-        explicit_roman,
-        parent_roman,
-        when,
+    Ok((
+        EldAllophone::new(ipa_stored, explicit_roman, parent_roman, when),
+        ipa_key,
     ))
 }
 
@@ -625,7 +627,13 @@ fn validate_roman_node(node: &KdlNode) -> Result<Romanization, Error> {
         )
     })?;
 
-    reject_props(node, "ROMAN_INVALID_NODE")?;
+    if node.props().next().is_some() {
+        return Err(roman_err_at(
+            "ROMAN_INVALID_NODE",
+            "node `roman` must not have properties",
+            node.span(),
+        ));
+    }
 
     if node.children().is_some() {
         return Err(roman_err_at(
@@ -1148,7 +1156,7 @@ mod tests {
         let r = rep();
         assert_eq!(
             parse_err(
-                "phonemes { consonants { phoneme \"p\" { } }\n    vowels { phoneme \"a\" { roman \"a\" } } }",
+                "phonemes { consonants { phoneme \"p\" { allophone \"b\" } }\n    vowels { phoneme \"a\" { roman \"a\" } } }",
                 &r
             ).code(),
             "ELD_PHONEME_INVALID"
@@ -1358,25 +1366,23 @@ mod tests {
     #[test]
     fn roman_non_string_arg() {
         let r = rep();
-        assert_eq!(
-            parse_err(
-                "phonemes { consonants { phoneme \"p\" { roman 42 } }\n    vowels { phoneme \"a\" { roman \"a\" } } }",
-                &r
-            ).code(),
-            "ROMAN_INVALID_NODE"
+        let e = parse_err(
+            "phonemes { consonants { phoneme \"p\" { roman 42 } }\n    vowels { phoneme \"a\" { roman \"a\" } } }",
+            &r,
         );
+        assert_eq!(e.code(), "ROMAN_INVALID_NODE");
+        assert_eq!(e.category(), Category::Roman);
     }
 
     #[test]
     fn roman_with_property() {
         let r = rep();
-        assert_eq!(
-            parse_err(
-                "phonemes { consonants { phoneme \"p\" { roman \"p\" key=\"v\" } }\n    vowels { phoneme \"a\" { roman \"a\" } } }",
-                &r
-            ).code(),
-            "ROMAN_INVALID_NODE"
+        let e = parse_err(
+            "phonemes { consonants { phoneme \"p\" { roman \"p\" key=\"v\" } }\n    vowels { phoneme \"a\" { roman \"a\" } } }",
+            &r,
         );
+        assert_eq!(e.code(), "ROMAN_INVALID_NODE");
+        assert_eq!(e.category(), Category::Roman);
     }
 
     #[test]

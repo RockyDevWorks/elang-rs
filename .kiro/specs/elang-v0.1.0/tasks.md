@@ -261,7 +261,7 @@ _(`roots.is_empty()` after filtering `phoneme` children → `ELD_GROUP_INVALID`.
 - [x] **T0909** Require `phoneme` exactly one IPA string arg, zero properties, explicit nonempty block.
 _(`require_single_string_arg` for string arg; `reject_props` for zero properties; `require_nonempty_block` for block. All → `ELD_PHONEME_INVALID`. Tests: `phoneme_no_arg`, `phoneme_two_args`, `phoneme_non_string_arg`, `phoneme_with_property`, `phoneme_empty_block`.)_
 - [x] **T0910** Enforce <=256 root phonemes globally.
-_(`global_root_count > MAX_ROOT_PHONEMES` (256) → `ELD_PHONEME_INVALID`. Checked inside the root loop in `validate_top_level`. The 256-root boundary is **not** directly exercised by a test — the Phase 8 IPA allowlist has only 107 base symbols — so the counter is the sole enforcement; `seventeen_groups` and `steering_section_6_example` cover the surrounding document-shape rules, not the 256 limit.)_
+_(`global_root_count > MAX_ROOT_PHONEMES` (256) → `ELD_PHONEME_INVALID`. Checked inside the root loop in `validate_top_level`. Integration tests `two_hundred_fifty_six_roots_accepted` and `two_hundred_fifty_seven_roots_rejected` generate unique three-unit IPA identifiers from approved bases: 255 consonant roots plus one vowel are accepted; 256 consonant roots plus one vowel are rejected with `ELD_PHONEME_INVALID`.)_
 - [x] **T0911** Require exactly one root `roman`, optional <=1 root `when`.
 _(Child scan in `validate_top_level`: `roman_nodes.is_empty()` or `roman_nodes.len() > 1` → `ELD_PHONEME_INVALID`; `when_nodes.len() > 1` → `ELD_PHONEME_INVALID`. Tests: `root_no_roman`, `root_two_romans`, `root_two_whens`, `root_when_allophone_no_when_is_unconditional`.)_
 - [x] **T0912** Enforce <=16 direct allophones per root.
