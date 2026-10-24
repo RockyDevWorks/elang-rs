@@ -286,7 +286,7 @@ behaviour — a container test for `REQ-BIN-013`, a KDL test for
 it. The corpus therefore keeps a second, explicit table:
 
 `crates/elang-conformance/src/requirement_coverage_data.rs` — one row per
-`(requirement, crate, test_name, kind)`. It currently holds **388 rows
+`(requirement, crate, test_name, kind)`. It currently holds **432 rows
 covering all 169** normative `MUST` / `MUST NOT` requirements in
 `.kiro/specs/elang-v0.1.0/requirements.md`.
 
