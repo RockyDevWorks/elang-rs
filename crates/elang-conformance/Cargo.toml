@@ -28,3 +28,11 @@ elang-unicode.workspace = true
 elang-writer.workspace = true
 sha2.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+# Phase 15 property tests (T1509–T1511). Property-based testing gives the
+# conformance corpus a `proptest!`-style shrinkage + replay loop, so a
+# regression in canonicalisation, roundtrip or bytewise ordering surfaces
+# with the smallest failing input rather than the full corpus case that
+# happened to fail.
+proptest.workspace = true

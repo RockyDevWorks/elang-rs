@@ -24,6 +24,10 @@ clippy_*.log
 /fuzz/corpus
 /fuzz/artifacts
 
+# proptest regression files: auto-created when a property test fails and
+# auto-replayed on the next run. Never part of the build artifact.
+/crates/*/proptest-regressions
+
 # Kiro spec execution metadata (local session/execution IDs + timestamps, not
 # project content).
 .kiro/specs/**/tasks.meta.json
