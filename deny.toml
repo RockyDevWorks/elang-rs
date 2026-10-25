@@ -17,6 +17,15 @@ allow = [
     "Unicode-3.0",
     "ISC",
     "Zlib",
+    # NCSA (University of Illinois/NCSA Open Source License) — permissive,
+    # MIT-compatible, and the license of the LLVM/libFuzzer toolchain that
+    # `libfuzzer-sys` (the `cargo-fuzz` harness runtime, Phase 15 T1501+)
+    # links against. `libfuzzer-sys` is licensed `(MIT OR Apache-2.0) AND
+    # NCSA`; the NCSA term covers the vendored libFuzzer C++ sources. The
+    # fuzz crate is excluded from the workspace, so this rule does not
+    # currently apply to it — it is listed so the policy stays correct if
+    # the fuzz crate is ever folded into the workspace graph.
+    "NCSA",
 ]
 confidence-threshold = 0.9
 
