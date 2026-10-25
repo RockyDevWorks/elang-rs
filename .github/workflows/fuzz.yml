@@ -60,6 +60,8 @@ jobs:
         with:
           components: rustfmt
       - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-fuzz
+        run: cargo +nightly install cargo-fuzz --locked
       - name: Build fuzz target
         run: cargo +nightly fuzz build ${{ matrix.target }}
       - name: Prepare seed corpus
@@ -111,6 +113,8 @@ jobs:
         with:
           components: rustfmt
       - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-fuzz
+        run: cargo +nightly install cargo-fuzz --locked
       - name: Build fuzz target
         run: cargo +nightly fuzz build ${{ matrix.target }}
       - name: Run fuzz campaign

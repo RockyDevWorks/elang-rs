@@ -98,12 +98,17 @@ conformance corpus (T1408, binary form) are candidates for the
 # One-time: nightly toolchain (cargo-fuzz requires it).
 rustup toolchain install nightly --profile minimal \
     --component rustfmt --component clippy
+cargo +nightly install cargo-fuzz --locked
 
 # Build every target (used by CI smoke job).
 cargo +nightly fuzz build
 
-# Run a target for a fixed time budget, seeded from fuzz/seeds/<target>/.
-cargo +nightly fuzz run container_structure \
+# Copy committed seeds into the writable, git-ignored corpus.
+mkdir -p fuzz/corpus/container_structure
+cp -r fuzz/seeds/container_structure/. fuzz/corpus/container_structure/
+
+# Run a target for a fixed time budget using that corpus.
+cargo +nightly fuzz run container_structure fuzz/corpus/container_structure \
     -- -max_total_time=300 -max_len=4096
 ```
 

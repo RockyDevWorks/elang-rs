@@ -62,5 +62,7 @@ testing strategy — including the `cargo-fuzz` (libFuzzer) harnesses, the
 proptest property tests, the per-target smoke budgets and the nightly
 campaign schedule — is documented in
 [`docs/security-testing.md`](docs/security-testing.md). Recorded fuzz
-campaigns, regression fixtures and triage history live alongside the
-implementation; they are the evidence that backs the claims above.
+campaign results, fuzz-derived regression fixtures and triage history are
+not yet committed. Current committed infrastructure consists of the
+[fuzz harnesses](fuzz/fuzz_targets/), [initial seeds](fuzz/seeds/) and
+[smoke and nightly campaign workflow](.github/workflows/fuzz.yml).
