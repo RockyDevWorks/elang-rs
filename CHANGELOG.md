@@ -18,10 +18,11 @@ and this project uses independent version domains (see
   `codecov.yml`'s ignore list applied — the same artefact
   `.github/workflows/ci.yml` uploads to Codecov. On llvm-cov's own summary
   "Lines" metric (which counts partially-covered lines as missed) the
-  workspace moves from 96.11% to 97.86%; the gap between the two metrics is
-  a fixed set of ~249 lines that llvm-cov's line table counts but that
-  execute on every run. The new tests are test-only: they add `#[cfg(test)]`
-  modules and integration-test files and change no production behaviour, and
+  workspace moves from 96.08% to 97.85%; the gap between the two metrics is
+  a roughly constant set of about 457 lines that llvm-cov's line table
+  counts but that Codecov's per-line `DA:` records do not. The new tests
+  are test-only: they add `#[cfg(test)]` modules and integration-test files
+  and change no production behaviour, and
   no existing test was weakened, deleted or ignored. The 176 remaining
   uncovered lines are defensive arms that earlier validation stages already
   make unreachable (multi-gigabyte archive ceilings, `panic!` arms inside
