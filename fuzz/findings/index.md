@@ -27,21 +27,40 @@ row here.
 |---|---|---|---|---|---|---|
 | local 2026-10-25T05:46:33Z | `container_structure` | 121 | 4,260,857 | 1346 | 261 | 0 |
 | local 2026-10-25T05:46:33Z | `resource_path` | 121 | 2,448,072 | 1673 | 483 | 0 |
-| **Total** | | 242 | **6,708,929** | **3019** | — | **0** |
+| **Total (T1519 closure)** | | **242** | **6,708,929** | **3019** | — | **0** |
 
 Campaign log: `/opt/data/fuzz-20261025T054633.log` (workspace
 scratch; will be removed after T1519 lands).
 
-## PR #58 will extend the surface
+### Full surface post-PR-#58 (re-verified 2026-10-25)
 
-PR #58 (`feat/25-phase15-fuzz-t1503-t1508`, target branch) adds six
-additional fuzz targets: `zstd_frame`, `kdl_parser`, `epf_schema`,
-`eld_schema`, `ipa_tokenizer`, `phon_condition`. Once #58 lands the
-nightly fuzz campaigns will exercise the full 8-target surface and
-the index above will grow as findings surface from those targets.
-The triage procedure is target-agnostic — every finding, regardless
-of which target surfaced it, follows the same template and the same
-test wiring.
+PR #58 (`feat/25-phase15-fuzz-t1503-t1508`) merged after the
+original T1519 closure, expanding the surface from 2 to 8 fuzz
+targets. The audit trail below re-runs every target with a uniform
+60-second budget so the comparison is apples-to-apples. **0 findings
+across the full surface** — the parser held under 14M additional
+adversarial executions spanning IPA tokenization, KDL parsing,
+ELD/EPF schema validation, allophone condition evaluation, and Zstd
+frame decoding.
+
+| Campaign | Target | Budget (s) | Executions | New units | Peak RSS (MiB) | Crashes |
+|---|---|---|---|---|---|---|
+| local 2026-10-25T06:30Z | `container_structure` | 60 | 1,612,290 | 88 | 261 | 0 |
+| local 2026-10-25T06:30Z | `resource_path` | 60 | 1,242,200 | 311 | 459 | 0 |
+| local 2026-10-25T06:30Z | `zstd_frame` | 60 | 4,415,079 | 9 | 298 | 0 |
+| local 2026-10-25T06:30Z | `kdl_parser` | 60 | 888,679 | 4225 | 486 | 0 |
+| local 2026-10-25T06:30Z | `eld_schema` | 60 | 1,127,453 | 5007 | 490 | 0 |
+| local 2026-10-25T06:30Z | `epf_schema` | 60 | 1,074,799 | 4629 | 492 | 0 |
+| local 2026-10-25T06:30Z | `ipa_tokenizer` | 60 | 2,697,572 | 668 | 477 | 0 |
+| local 2026-10-25T06:30Z | `phon_condition` | 60 | 972,429 | 4860 | 509 | 0 |
+| **Total (post-PR-#58 re-verification)** | | **480** | **14,030,501** | **19,797** | — | **0** |
+
+Combined T1519 audit trail (T1519 closure + post-#58 re-verify):
+**20,739,430 adversarial executions, 0 findings, 0 panics, 0
+out-of-bounds reads.** The regression-test harness
+(`crates/elang-conformance/tests/fuzz_regressions.rs`) wires all
+8 targets through `KNOWN_TARGETS` so any future finding gets a
+regression test immediately.
 
 ## Future audits
 

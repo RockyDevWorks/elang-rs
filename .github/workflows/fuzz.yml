@@ -223,8 +223,9 @@ jobs:
       - name: Persist campaign stats
         # Capture the final libFuzzer stats line into the step summary
         # so the audit trail (workflow run page) records what each
-        # nightly campaign did. libFuzzer emits stat:: lines at
-        # end-of-run; retain SUMMARY: diagnostics as well.
+        # nightly campaign did. We grep the SUMMARY: line, which
+        # libFuzzer emits at end-of-run with the final coverage /
+        # corpus / exec counters.
         if: always()
         run: |
           if [ -f fuzz/artifacts/${{ matrix.target }}/campaign.log ]; then

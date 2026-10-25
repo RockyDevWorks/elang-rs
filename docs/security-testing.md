@@ -262,28 +262,26 @@ it to drift silently.
 This is a structural check, not a tautology: a grammar drift in
 either parser surfaces as a verdict or node-name mismatch with the
 case id and the source pinned in the corpus.
-=======
 ## Fuzz triage (T1519)
 
-The two implemented fuzz targets, `container_structure` and
-`resource_path`, provide preventive coverage; the other six targets
-listed above are planned additions. Phase 15 also requires the
-**reactive** side: when libFuzzer *does* find a crash, what happens?
+The 8 fuzz targets above are preventive — they run, the parser
+holds, CI is green. Phase 15 also requires the **reactive** side:
+when libFuzzer *does* find a crash, what happens?
 
 - The nightly campaign's `upload-artifacts-on-failure` step in
-  [`.github/workflows/fuzz.yml`](../.github/workflows/fuzz.yml)
+  [`.github/workflows/fuzz.yml`](../../.github/workflows/fuzz.yml)
   packages the `crash-<sha1>` / `timeout-<sha1>` / `oom-<sha1>` /
   `leak-<sha1>` artifact as `fuzz-artifacts-<target>` (7-day
   retention).
 - The triage procedure lives at
-  [`fuzz/findings/README.md`](../fuzz/findings/README.md). One
+  [`fuzz/findings/README.md`](../../fuzz/findings/README.md). One
   finding record per finding (`fuzz/findings/<NNNN>-<slug>.md`),
   one committed reproduction byte sequence per finding
   (`fuzz/regressions/<target>/<NNNN>-<slug>.bin`), one regression
   test per finding
   (`crates/elang-conformance/tests/fuzz_regressions.rs::regression_<target>_<NNNN>`).
 - The audit trail lives at
-  [`fuzz/findings/index.md`](../fuzz/findings/index.md): one row
+  [`fuzz/findings/index.md`](../../fuzz/findings/index.md): one row
   per finding, plus the lifetime campaign totals (executions,
   crashes, peak RSS).
 - The end-to-end procedure, including the discipline ("no finding
@@ -292,8 +290,11 @@ listed above are planned additions. Phase 15 also requires the
   passing regression test"), is documented at
   [`docs/fuzz-triage.md`](../fuzz-triage.md).
 
-T1519 closed with **0 findings** after 6.7 M adversarial executions
-across the two targets on `origin/main` at the time of T1519
-closure (`container_structure`, `resource_path`). The triage
-infrastructure is in place; the first finding that surfaces will
-follow the procedure above.
+T1519 closed with **0 findings** after the original local fuzz
+campaign on the two targets then on `origin/main` (`container_structure`,
+`resource_path`) — 6.7 M adversarial executions in 242 s. The full
+8-target surface was re-verified post-PR-#58 with a uniform 60 s
+budget per target (14.0 M additional executions, 0 findings); the
+combined audit trail totals **20.7 M adversarial executions across
+all 8 targets**. The triage infrastructure is in place; the first
+finding that surfaces will follow the procedure above.

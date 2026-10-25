@@ -165,12 +165,21 @@ fn regression_fixtures_directory_is_well_formed() {
 /// makes the omission loud.
 #[test]
 fn known_fuzz_targets_are_acknowledged() {
-    // The two targets currently on `origin/main`. PR #58 (T1503-T1508)
-    // will add six more once it lands; this list is the source of
-    // truth for which targets have regression-test wiring.
+    // All eight fuzz targets that exist on `origin/main` after
+    // PR #58 (T1503-T1508) merged. This list is the source of
+    // truth for which targets have regression-test wiring; if a
+    // target is added under `fuzz/fuzz_targets/` but is missing
+    // here, the assertion below (which parses `fuzz/Cargo.toml`)
+    // fails loudly.
     const KNOWN_TARGETS: &[&str] = &[
         "container_structure", // T1501
         "resource_path",       // T1502
+        "ipa_tokenizer",       // T1503
+        "kdl_parser",          // T1504
+        "phon_condition",      // T1505/T1507/T1508
+        "eld_schema",          // T1506
+        "epf_schema",          // T1506
+        "zstd_frame",          // T1507
     ];
     // Read the explicitly declared binaries without adding a TOML dependency.
     let manifest = include_str!("../../../fuzz/Cargo.toml");
@@ -232,6 +241,12 @@ fn every_known_target_is_currently_clean() {
     const KNOWN_TARGETS: &[&str] = &[
         "container_structure", // T1501
         "resource_path",       // T1502
+        "ipa_tokenizer",       // T1503
+        "kdl_parser",          // T1504
+        "phon_condition",      // T1505/T1507/T1508
+        "eld_schema",          // T1506
+        "epf_schema",          // T1506
+        "zstd_frame",          // T1507
     ];
 
     for target in KNOWN_TARGETS {
