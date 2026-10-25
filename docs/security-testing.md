@@ -213,10 +213,12 @@ warnings` in CI:
   `cast_sign_loss` / `cast_possible_wrap` — every unchecked integer
   math or cast on untrusted data fails the build before merge.
 
-Combined with the 8 fuzz targets (T1501–T1508, see
-[## Fuzz targets](#fuzz-targets)), which run on every PR smoke and
-nightly campaign, the panic/OOB surface is structurally enforced and
-fuzz-checked.
+The implemented fuzz targets, `container_structure` (T1501) and
+`resource_path` (T1502), complement these lint checks with panic/OOB
+coverage. [The fuzz workflow](../.github/workflows/fuzz.yml) runs smoke
+checks on PRs matching its path filters (60 s and 30 s, respectively)
+and longer nightly campaigns at 04:00 UTC (600 s and 300 s,
+respectively). The remaining T1503–T1508 targets are planned.
 
 ### T1518 — differential tests against an independent parser
 
@@ -228,19 +230,18 @@ on a corpus of KDL 2.0 spec inputs:
    accept for spec shapes both implement, and on reject for KDL 1.0
    shapes and KDL 2.0 syntax errors.
 2. **Top-level node name agreement** — for inputs both accept, the
-   sequence of top-level node names must match (after `kdl-rs`'s
-   quote stripping).
+   sequence of decoded top-level node names must match directly.
 3. **Spec-surface coverage** — the corpus covers every documented
    KDL 2.0 surface (value forms, escape sequences, raw strings,
    slashdash, comments, version pragma, type annotations,
    unicode identifiers) and at least one reject + one elang-only
    accept case.
 
-Cases where the reference parser has *dropped* a spec surface (e.g.
-`/kdl-version "2.0"` in `kdl-rs` v6 — the v6 series no longer
-parses the version pragma) are flagged as `elang_only_accept`, not
-disagreements. The harness asserts the asymmetry rather than
-allowing it to drift silently.
+The KDL 2.0 version marker `/- kdl-version 2` is a shared-accept case.
+The separately labeled ELANG-specific directive `/kdl-version "2.0"`
+is flagged as `elang_only_accept` because the reference parser rejects
+it. The harness asserts this expected asymmetry rather than allowing
+it to drift silently.
 
 This is a structural check, not a tautology: a grammar drift in
 either parser surfaces as a verdict or node-name mismatch with the

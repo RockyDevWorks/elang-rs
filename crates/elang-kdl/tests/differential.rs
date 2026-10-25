@@ -51,24 +51,23 @@ use std::str::FromStr;
 /// A KDL 2.0 input fixture paired with its expected accept/reject verdict.
 ///
 /// `both_accept = true` → both parsers must accept and produce the same
-/// top-level node sequence (after `kdl-rs`'s quote stripping).
+/// decoded top-level node sequence.
 ///
 /// `both_accept = false, elang_only_accept = true` → elang-kdl accepts
-/// (the KDL 2.0 spec is followed) but the reference parser rejects
-/// (because the reference parser doesn't implement that surface, e.g.
-/// `/kdl-version "2.0"` in `kdl-rs` v6). The verdict is *not* a
-/// disagreement — it is documented expected behaviour.
+/// an ELANG-specific directive that the reference parser rejects
+/// (e.g. `/kdl-version "2.0"`). The verdict is documented expected
+/// behaviour.
 ///
 /// `both_accept = false, elang_only_accept = false` → both parsers must
 /// reject (KDL 1.0 construct, KDL 2.0 syntax error, etc.).
 struct DifferentialCase {
     /// Human-readable case id (used in failure messages).
     id: &'static str,
-    /// KDL 2.0 source text.
+    /// KDL 2.0 source text or an ELANG-specific directive.
     source: &'static str,
     /// `true` iff both parsers must accept the input.
     both_accept: bool,
-    /// `true` iff the input is a spec-conformant KDL 2.0 input that
+    /// `true` iff the input uses an ELANG-specific directive that
     /// elang-kdl accepts but the reference parser does not. Implies
     /// `both_accept == false`.
     elang_only_accept: bool,
@@ -79,6 +78,12 @@ const DIFFERENTIAL_CASES: &[DifferentialCase] = &[
     DifferentialCase {
         id: "bare-node",
         source: "node",
+        both_accept: true,
+        elang_only_accept: false,
+    },
+    DifferentialCase {
+        id: "quoted-escaped-node-name",
+        source: r#""\"quoted\u{20}node\"" 1"#,
         both_accept: true,
         elang_only_accept: false,
     },
@@ -244,12 +249,14 @@ const DIFFERENTIAL_CASES: &[DifferentialCase] = &[
     },
     DifferentialCase {
         id: "version-pragma-2",
-        // KDL 2.0 version pragma: slash + `kdl-version "2.0"`.
-        // elang-kdl accepts it and exposes `version()` of "2.0";
-        // the reference `kdl-rs` v6.5.0 parser rejects the same
-        // shape (the v6 series dropped pragma handling — see
-        // https://github.com/kdl-org/kdl-rs). The corpus therefore
-        // flags this as an elang-only accept, not a disagreement.
+        // KDL 2.0 version marker: a slashdashed `kdl-version 2` node.
+        source: "/- kdl-version 2\nnode 1",
+        both_accept: true,
+        elang_only_accept: false,
+    },
+    DifferentialCase {
+        id: "elang-specific-version-directive-2",
+        // ELANG-specific directive, distinct from the KDL 2.0 marker.
         source: "/kdl-version \"2.0\"\nnode 1",
         both_accept: false,
         elang_only_accept: true,
@@ -294,7 +301,11 @@ fn elang_top_level_names(source: &str) -> Vec<String> {
 /// Top-level node names as observed by the reference `kdl` parser.
 fn reference_top_level_names(source: &str) -> Result<Vec<String>, String> {
     match kdl::KdlDocument::from_str(source) {
-        Ok(doc) => Ok(doc.nodes().iter().map(|n| n.name().to_string()).collect()),
+        Ok(doc) => Ok(doc
+            .nodes()
+            .iter()
+            .map(|n| n.name().value().to_string())
+            .collect()),
         Err(e) => Err(format!("{e:?}")),
     }
 }
@@ -363,24 +374,14 @@ fn differential_node_names_match_reference_parser() {
         let reference_names = reference_top_level_names(case.source)
             .unwrap_or_else(|e| panic!("case `{}`: reference parser failed: {e}", case.id));
 
-        // Both parsers may quote node names; the reference parser
-        // preserves the quoting when the source quoted the name,
-        // while elang-kdl normalises to the bare form. Strip
-        // surrounding double quotes from the reference output so
-        // we compare on the canonical (unquoted) name.
-        let reference_normalised: Vec<String> = reference_names
-            .iter()
-            .map(|n| n.trim_matches('"').to_string())
-            .collect();
-
         assert_eq!(
             elang_names,
-            reference_normalised,
+            reference_names,
             "case `{}`: top-level node names disagree (source: `{}`)\n  elang-kdl:   {:?}\n  reference:   {:?}",
             case.id,
             case.source,
             elang_names,
-            reference_normalised,
+            reference_names,
         );
     }
 }
@@ -424,7 +425,7 @@ fn differential_corpus_covers_spec_surfaces() {
         if case.id.starts_with("version-pragma") {
             saw_version_pragma = true;
         }
-        if !case.both_accept {
+        if !case.both_accept && !case.elang_only_accept {
             saw_reject = true;
         }
         if case.elang_only_accept {
