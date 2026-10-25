@@ -627,4 +627,301 @@ mod tests {
         assert_eq!(duplicate_ids(&corpus), vec!["a"]);
         assert!(duplicate_ids(&[mk("a"), mk("b")]).is_empty());
     }
+
+    // ----- Coverage-gap tests for the runner's failure paths ---------
+    //
+    // The runner's success paths are covered by the published corpus.
+    // These tests drive the *divergence* paths — the arms that report
+    // what the corpus expected versus what the reader or the parser
+    // actually produced — so a runner that silently accepted a
+    // mismatch cannot pass unnoticed.
+
+    /// A valid ELD document: one consonant, one vowel.
+    fn valid_eld_source() -> Vec<u8> {
+        b"phonemes {\n    consonants {\n        phoneme \"p\" {\n            roman \"p\"\n        }\n    }\n    vowels {\n        phoneme \"a\" {\n            roman \"a\"\n        }\n    }\n}\n"
+            .to_vec()
+    }
+
+    /// An ELD document whose phoneme carries an IPA symbol outside the
+    /// v1 allowlist, so the ELD parser rejects it with
+    /// `IPA_NOT_IN_REPERTOIRE`.
+    fn non_allowlisted_ipa_source() -> Vec<u8> {
+        b"phonemes {\n    consonants {\n        phoneme \"g\" {\n            roman \"q\"\n        }\n    }\n    vowels {\n        phoneme \"a\" {\n            roman \"a\"\n        }\n    }\n}\n"
+            .to_vec()
+    }
+
+    #[test]
+    fn coverage_gap_expectation_accessors_report_the_declared_level() {
+        assert_eq!(Expectation::Accept(Level::Verify).level(), Level::Verify);
+        assert_eq!(
+            Expectation::Reject {
+                level: Level::Inspect,
+                code: "HEADER_BAD_MAGIC",
+                category: Category::Container,
+            }
+            .level(),
+            Level::Inspect
+        );
+        assert!(Expectation::Accept(Level::Inspect).is_accept());
+        assert!(!Expectation::Reject {
+            level: Level::Inspect,
+            code: "HEADER_BAD_MAGIC",
+            category: Category::Container,
+        }
+        .is_accept());
+    }
+
+    #[test]
+    fn coverage_gap_document_fixture_reports_an_unexpected_rejection() {
+        let fixture = DocumentFixture {
+            id: "test/accept-but-rejected",
+            description: "an ELD with a non-allowlisted IPA must not be accepted",
+            requirements: &["REQ-ELD-001"],
+            schema: Schema::Eld,
+            source: non_allowlisted_ipa_source(),
+            expectation: DocumentExpectation::Accept,
+        };
+        let failure = run_document_fixture(&fixture)
+            .expect_err("a document with a non-allowlisted IPA must not be accepted");
+        assert!(
+            failure.detail.contains("expected acceptance"),
+            "unexpected detail: {}",
+            failure.detail
+        );
+    }
+
+    #[test]
+    fn coverage_gap_document_fixture_reports_a_code_mismatch() {
+        let fixture = DocumentFixture {
+            id: "test/code-mismatch",
+            description: "the declared diagnostic code differs from the observed one",
+            requirements: &["REQ-IPA-002"],
+            schema: Schema::Eld,
+            source: non_allowlisted_ipa_source(),
+            expectation: DocumentExpectation::Reject {
+                code: "SomeOtherCode",
+                category: Category::Ipa,
+            },
+        };
+        let failure = run_document_fixture(&fixture)
+            .expect_err("the observed code differs from the declared one");
+        assert!(
+            failure.detail.contains("expected code SomeOtherCode"),
+            "unexpected detail: {}",
+            failure.detail
+        );
+    }
+
+    #[test]
+    fn coverage_gap_document_fixture_reports_a_category_mismatch() {
+        let fixture = DocumentFixture {
+            id: "test/category-mismatch",
+            description: "the declared category differs from the observed one",
+            requirements: &["REQ-IPA-002"],
+            schema: Schema::Eld,
+            source: non_allowlisted_ipa_source(),
+            expectation: DocumentExpectation::Reject {
+                code: "IPA_NOT_IN_REPERTOIRE",
+                category: Category::EldSchema,
+            },
+        };
+        let failure = run_document_fixture(&fixture)
+            .expect_err("the observed category differs from the declared one");
+        assert!(
+            failure.detail.contains("expected category"),
+            "unexpected detail: {}",
+            failure.detail
+        );
+    }
+
+    #[test]
+    fn coverage_gap_document_fixture_reports_an_unexpected_acceptance() {
+        let fixture = DocumentFixture {
+            id: "test/reject-but-accepted",
+            description: "a valid ELD must not be reported as a rejection",
+            requirements: &["REQ-IPA-002"],
+            schema: Schema::Eld,
+            source: valid_eld_source(),
+            expectation: DocumentExpectation::Reject {
+                code: "IPA_NOT_IN_REPERTOIRE",
+                category: Category::Ipa,
+            },
+        };
+        let failure = run_document_fixture(&fixture)
+            .expect_err("a valid document must not satisfy a rejection expectation");
+        assert!(
+            failure.detail.contains("parsed cleanly"),
+            "unexpected detail: {}",
+            failure.detail
+        );
+    }
+
+    #[test]
+    fn coverage_gap_vector_fixture_reports_a_mismatch() {
+        let fixture = VectorFixture {
+            id: "test/vector-mismatch".to_string(),
+            description: "the observed bytes differ from the pinned bytes",
+            requirements: &["REQ-BIN-001"],
+            actual: vec![0x01],
+            expected: vec![0x02],
+        };
+        assert_eq!(fixture.expected_label(), "02");
+        assert_eq!(fixture.actual_label(), "01");
+        let failure = run_vector_fixture(&fixture).expect_err("a byte mismatch must fail");
+        assert!(
+            failure.detail.contains("expected 02 got 01"),
+            "unexpected detail: {}",
+            failure.detail
+        );
+    }
+
+    #[test]
+    fn coverage_gap_hex_lower_encodes_bytes() {
+        assert_eq!(hex_lower(&[]), "");
+        assert_eq!(hex_lower(&[0x00, 0x0f, 0xff]), "000fff");
+    }
+
+    #[test]
+    fn coverage_gap_failure_display_names_the_fixture_and_the_requirement() {
+        let failure = Failure {
+            fixture: "test/display".to_string(),
+            requirement: "REQ-PKG-001".to_string(),
+            detail: "a detail".to_string(),
+        };
+        let rendered = failure.to_string();
+        assert!(rendered.contains("conformance failure"), "{rendered}");
+        assert!(rendered.contains("test/display"), "{rendered}");
+        assert!(rendered.contains("REQ-PKG-001"), "{rendered}");
+        assert!(rendered.contains("a detail"), "{rendered}");
+    }
+
+    #[test]
+    fn coverage_gap_observe_fixture_refuses_an_accept_fixture() {
+        let fixture = Fixture {
+            id: "test/accept-observed",
+            description: "observe_fixture only handles negative fixtures",
+            requirements: &["REQ-PKG-001"],
+            expectation: Expectation::Accept(Level::Inspect),
+            archive: garbage(),
+        };
+        let failure =
+            observe_fixture(&fixture).expect_err("observe_fixture must refuse an Accept fixture");
+        assert!(
+            failure
+                .detail
+                .contains("observe_fixture called on an Accept fixture"),
+            "unexpected detail: {}",
+            failure.detail
+        );
+    }
+
+    #[test]
+    fn coverage_gap_observe_fixture_rejects_an_early_rejection() {
+        let fixture = Fixture {
+            id: "test/early-rejection",
+            description: "garbage is rejected below the declared level",
+            requirements: &["REQ-PKG-001"],
+            expectation: Expectation::Reject {
+                level: Level::Validate,
+                code: "HEADER_BAD_MAGIC",
+                category: Category::Container,
+            },
+            archive: garbage(),
+        };
+        let failure = observe_fixture(&fixture)
+            .expect_err("a rejection below the declared level must fail the observation");
+        assert!(
+            failure
+                .detail
+                .contains("already rejected at the lower level"),
+            "unexpected detail: {}",
+            failure.detail
+        );
+    }
+
+    #[test]
+    fn coverage_gap_observe_fixture_reports_an_accepted_archive() {
+        let archive = crate::golden_packages::minimal()
+            .expect("minimal package builds")
+            .archive;
+        let fixture = Fixture {
+            id: "test/accepted",
+            description: "a valid golden package is accepted, not rejected",
+            requirements: &["REQ-PKG-001"],
+            expectation: Expectation::Reject {
+                level: Level::Validate,
+                code: "AnyCode",
+                category: Category::Container,
+            },
+            archive,
+        };
+        let failure = observe_fixture(&fixture)
+            .expect_err("a valid archive must not satisfy a rejection expectation");
+        assert!(
+            failure.detail.contains("but the archive was accepted"),
+            "unexpected detail: {}",
+            failure.detail
+        );
+    }
+
+    #[test]
+    fn coverage_gap_observe_fixture_reports_a_code_mismatch() {
+        let fixture = Fixture {
+            id: "test/observe-code-mismatch",
+            description: "the declared code differs from the observed one",
+            requirements: &["REQ-PKG-001"],
+            expectation: Expectation::Reject {
+                level: Level::Inspect,
+                code: "NotTheCode",
+                category: Category::Container,
+            },
+            archive: garbage(),
+        };
+        let failure =
+            observe_fixture(&fixture).expect_err("the observed code differs from the declared one");
+        assert!(
+            failure.detail.contains("expected code NotTheCode"),
+            "unexpected detail: {}",
+            failure.detail
+        );
+    }
+
+    #[test]
+    fn coverage_gap_observe_fixture_reports_a_category_mismatch() {
+        let fixture = Fixture {
+            id: "test/observe-category-mismatch",
+            description: "the declared category differs from the observed one",
+            requirements: &["REQ-PKG-001"],
+            expectation: Expectation::Reject {
+                level: Level::Inspect,
+                code: "HEADER_BAD_MAGIC",
+                category: Category::Ipa,
+            },
+            archive: garbage(),
+        };
+        let failure = observe_fixture(&fixture)
+            .expect_err("the observed category differs from the declared one");
+        assert!(
+            failure.detail.contains("expected category"),
+            "unexpected detail: {}",
+            failure.detail
+        );
+    }
+
+    #[test]
+    fn coverage_gap_run_fixture_reports_a_rejected_archive() {
+        let fixture = Fixture {
+            id: "test/rejected-accept",
+            description: "garbage is not an acceptable archive",
+            requirements: &["REQ-PKG-001"],
+            expectation: Expectation::Accept(Level::Inspect),
+            archive: garbage(),
+        };
+        let failure = run_fixture(&fixture).expect_err("garbage must not be accepted");
+        assert!(
+            failure.detail.contains("expected acceptance at level"),
+            "unexpected detail: {}",
+            failure.detail
+        );
+    }
 }

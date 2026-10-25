@@ -41,7 +41,7 @@ happens on a separate commit, gated by independent review.
 
 | Task | Why |
 |---|---|
-| **T1617** `v0.1.0` tag + signed release artifacts | User handles the tag entirely; this branch must not create it. |
+| **T1617** `v0.1.0` tag + signed release artifacts | User handles the tag entirely; this branch must not create it. The artifact *build* step is automated and CI-verified (`scripts/build-release-artifacts.sh`); only the tag, the signature and the publication remain. |
 | **T1620** Final v0.1.0 release declaration | Depends on T1616 + the tag + every gate; not part of this workstream. |
 
 ## Measured outputs vs. reproducible outputs
@@ -93,6 +93,7 @@ The v0.1.0 release deliberately ships **without** a publisher
 authenticity claim. The branch does not:
 
 * sign release artifacts,
+* create the `v0.1.0` tag or publish anything to a registry,
 * request or claim a registered media type (`application/vnd.elang.v0.1+zip`),
 * claim ownership of any URN namespace beyond what the published
   conformance corpus and example packages demonstrate through their
@@ -137,6 +138,12 @@ cargo run -p elang-conformance --bin gen_peak_memory -- --shape
 
 # Archival checksum metadata.
 cargo run -p elang-conformance --bin gen_release_archive
+
+# The distributable source artifact and its SHA-256 sidecar. Deterministic:
+# two builds of the same tree produce the same bytes. Creates no tag,
+# publishes nothing and makes no network call. Requires GNU tar, so run it
+# on Linux — the release platform.
+scripts/build-release-artifacts.sh --verify
 ```
 
 Every generator that emits a **deterministic artifact** is

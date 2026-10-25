@@ -10,6 +10,56 @@ and this project uses independent version domains (see
 
 ### Added
 
+- **Test-coverage expansion to 99%.** 98 new tests (1,516 passing, 0
+  failing, 1 pre-existing ignored) raise the Codecov-equivalent line
+  coverage of the workspace from **97.31% to 99.09%** (missed lines 508 → 176
+  of 19,356). The measurement is the one the project's own CI produces: `cargo llvm-cov --workspace --all-features
+  --lcov --output-path lcov.info`, then the LCOV `DA:` per-line records with
+  `codecov.yml`'s ignore list applied — the same artefact
+  `.github/workflows/ci.yml` uploads to Codecov. On llvm-cov's own summary
+  "Lines" metric (which counts partially-covered lines as missed) the
+  workspace moves from 96.08% to 97.85%; the gap between the two metrics is
+  a roughly constant set of about 457 lines that llvm-cov's line table
+  counts but that Codecov's per-line `DA:` records do not. The new tests
+  are test-only: they add `#[cfg(test)]` modules and integration-test files
+  and change no production behaviour, and
+  no existing test was weakened, deleted or ignored. The 176 remaining
+  uncovered lines are defensive arms that earlier validation stages already
+  make unreachable (multi-gigabyte archive ceilings, `panic!` arms inside
+  the crates' own tests, proptest failure closures), so closing them would
+  require changing production behaviour rather than adding tests.
+
+- **Release-artifact packaging (T1617 preparation).**
+  `scripts/build-release-artifacts.sh` assembles the distributable source
+  artifact (`elang-v0.1.0.tar.gz`) plus a SHA-256 sidecar. The artifact's
+  bytes depend on file *contents* only — entries sorted by path, ownership
+  forced to `0:0`, every timestamp forced to the Unix epoch, and a gzip
+  header carrying neither filename nor timestamp — so two builds of the
+  same tree produce the same digest. The script refuses to report success
+  unless the archive holds exactly the files it was asked to pack — the
+  archive's member names are compared with the file list, not just their
+  count — and it refuses an `--out-dir` inside the repository unless that
+  path is git-ignored, so the artifact can never be packed into itself.
+  It **creates no tag, publishes nothing, signs nothing and makes no network
+  call**; the tag, the signature and the publication remain the human
+  release step. `crates/elang-conformance/tests/release_packaging.rs`
+  asserts the same property in CI. The script requires GNU `tar` and
+  therefore builds the release on Linux; it refuses an `--out-dir` inside
+  the repository unless the output *directory* is git-ignored (a
+  `*.tar.gz` glob would ignore the archive but not its `.sha256` sidecar),
+  and `--verify` compares the digest of the artifact it actually delivers
+  against the two scratch builds it proved reproducible. A path whose name
+  contains a newline is refused by name: the member comparison cannot
+  compare such a path correctly, so the build fails with a clear message
+  instead of a misleading mismatch.
+
+- **Portable coverage tests.** The new CLI error-path tests are gated per
+  platform: the non-UTF-8 argument tests and the POSIX symlink and
+  permission tests run on Unix, and the file-size-limit test runs on Linux
+  only, because exceeding `ulimit -f` raises `SIGXFSZ` there and kills the
+  process on macOS. The Windows and macOS CI jobs therefore compile and run
+  the same suite instead of failing on a Unix-only API.
+
 - Phase 0 scaffold: Cargo workspace with nine crates
   (`elang-core`, `elang-container`, `elang-kdl`, `elang-epf`, `elang-eld`,
   `elang-repertoire`, `elang-integrity`, `elang-conformance`, `elang-cli`).
@@ -64,6 +114,16 @@ and this project uses independent version domains (see
   by the real pipeline via
   `cargo run -p elang-conformance --bin gen_canonical_goldens`; regeneration
   is byte-identical and no digest is hand-written.
+
+### Fixed
+
+- **Crate `repository` metadata pointed at a repository that does not
+  exist.** All twelve crates inherit `repository` from
+  `[workspace.package]`, which read
+  `https://github.com/elang-lang/elang-rs` — a URL that returns 404. Every
+  published crate would have carried a dead repository link, and crates.io
+  derives the *Documentation* link from it. Corrected to
+  `https://github.com/RockyDevWorks/elang-rs`.
 
 ### Notes
 

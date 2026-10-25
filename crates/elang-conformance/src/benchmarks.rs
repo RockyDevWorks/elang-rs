@@ -282,3 +282,34 @@ pub fn run_suite() -> Result<Vec<BenchmarkResult>, String> {
 pub fn input_digest(archive: &[u8]) -> String {
     hex(&sha256(archive))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    /// A synthetic benchmark result with known durations, so the
+    /// unit-conversion accessors can be checked exactly.
+    fn sample() -> BenchmarkResult {
+        BenchmarkResult {
+            id: "test/sample",
+            description: "a synthetic benchmark result",
+            iterations: 4,
+            median: Duration::from_micros(1_500),
+            min: Duration::from_micros(1_000),
+            max: Duration::from_micros(2_000),
+            total: Duration::from_micros(6_000),
+        }
+    }
+
+    /// The reporting accessors must report the measured durations in
+    /// the documented units.
+    #[test]
+    fn coverage_gap_benchmark_accessors_report_the_measured_durations() {
+        let result = sample();
+        assert_eq!(result.median_nanos(), 1_500_000);
+        assert_eq!(result.median_micros(), 1_500.0);
+        assert_eq!(result.min_nanos(), 1_000_000);
+        assert_eq!(result.max_nanos(), 2_000_000);
+    }
+}

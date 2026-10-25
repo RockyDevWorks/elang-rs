@@ -182,4 +182,56 @@ mod tests {
         assert_eq!(sample.vmrss_kib(), 80);
         assert_eq!(sample.vmpeak_kib(), 9000);
     }
+
+    /// The MiB converters divide the KiB readings by 1024, and a
+    /// sample taken from `/proc/self/status` is a real measurement.
+    #[test]
+    fn coverage_gap_mib_converters_divide_by_1024() {
+        let body = "VmPeak:    2048 kB\n\
+                    VmRSS:      1024 kB\n\
+                    VmHWM:      3072 kB\n";
+        let sample = parse_proc_self_status(body).expect("parse");
+        assert_eq!(sample.vmhwm_mib(), 3.0);
+        assert_eq!(sample.vmrss_mib(), 1.0);
+        assert_eq!(sample.vmpeak_mib(), 2.0);
+        assert!(sample.is_measured());
+    }
+
+    /// A field whose value is all digits but does not fit in a `u64` is
+    /// skipped, not fatal: the parse continues and the missing field
+    /// leaves the sample absent.
+    ///
+    /// The other two fields are present and valid, so the overflow of
+    /// `VmHWM` is the only reason the sample can be absent. Without them
+    /// the parse would also fail on the missing fields, and the test
+    /// would pass even if the overflowing value were accepted.
+    #[test]
+    fn coverage_gap_a_value_that_does_not_fit_u64_is_skipped() {
+        let body = "VmHWM: 999999999999999999999999 kB\n\
+                    VmRSS: 1024 kB\n\
+                    VmPeak: 2048 kB\n";
+        assert!(parse_proc_self_status(body).is_none());
+    }
+
+    /// On Linux the CI and release platforms always provide
+    /// `/proc/self/status`, so the sample must be present *and*
+    /// measured. Accepting `None` there would let `current()` break
+    /// without the test noticing — a regression in the reader would
+    /// ship a silently unmeasured peak-memory report.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn coverage_gap_current_returns_a_measurement_on_linux() {
+        let sample = current().expect("Linux provides /proc/self/status");
+        assert!(sample.is_measured());
+    }
+
+    /// Every other platform has no `/proc/self/status`, so `None` is
+    /// the correct answer there; a sample that *is* returned must still
+    /// be a real measurement.
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn coverage_gap_current_returns_a_measurement_when_proc_is_available() {
+        let sample = current();
+        assert!(sample.is_none_or(|s| s.is_measured()));
+    }
 }

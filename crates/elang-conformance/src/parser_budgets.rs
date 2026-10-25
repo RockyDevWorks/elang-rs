@@ -805,4 +805,19 @@ mod tests {
             );
         }
     }
+
+    /// The node search must look into child blocks and must report
+    /// absence rather than stopping at the first child it visits.
+    #[test]
+    fn coverage_gap_find_named_searches_children_and_reports_absence() {
+        let kdl =
+            elang_kdl::parse(b"phonemes {\n    consonants {\n        phoneme \"p\"\n    }\n}\n")
+                .expect("KDL parses");
+        // The name is present in a nested child block.
+        let found = find_named(kdl.nodes(), "phoneme").expect("nested node found");
+        assert_eq!(found.name(), "phoneme");
+        // The name is present nowhere: the search must walk every child
+        // block and still report absence.
+        assert!(find_named(kdl.nodes(), "when").is_none());
+    }
 }

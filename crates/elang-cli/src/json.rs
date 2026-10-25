@@ -169,3 +169,88 @@ fn json_string(s: &str) -> String {
     out.push('"');
     out
 }
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    reason = "JSON envelope tests assert exact buffer contents"
+)]
+mod tests {
+    use super::*;
+
+    /// Reset the process-wide JSON state so the next test starts clean.
+    fn reset_json_state() {
+        set_json_mode(false);
+        *BUFFER.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        *ERROR_CODE.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    }
+
+    /// The buffered diagnostic text, if any.
+    fn buffered() -> String {
+        BUFFER
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+            .unwrap_or_default()
+    }
+
+    #[test]
+    /// `json mode buffers diagnostics and joins them with newlines`.
+    ///
+    /// The JSON-mode globals are process-wide, so every assertion about the
+    /// buffer lives in this one test.
+    fn json_mode_buffers_diagnostics_and_joins_them_with_newlines() {
+        reset_json_state();
+        set_json_mode(true);
+
+        diagnostic("first line");
+        diagnostic("second line");
+
+        assert_eq!(
+            buffered(),
+            "first line\nsecond line",
+            "repeated diagnostics must be newline-separated"
+        );
+
+        // The first stable code wins; later codes do not replace it.
+        diagnostic_with_code("FIRST_CODE", "third line");
+        diagnostic_with_code("SECOND_CODE", "fourth line");
+        let code = ERROR_CODE
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+            .unwrap_or_default();
+        assert_eq!(code, "FIRST_CODE", "the first stable code must win");
+        assert_eq!(
+            buffered(),
+            "first line\nsecond line\nthird line\nfourth line"
+        );
+
+        // The envelope takes the buffer, so a diagnostic that arrives after
+        // it has nowhere to go and is dropped instead of being buffered.
+        emit_envelope("test", 0);
+        diagnostic("after the envelope");
+        assert!(
+            buffered().is_empty(),
+            "a diagnostic after the envelope must not be buffered"
+        );
+
+        reset_json_state();
+    }
+
+    #[test]
+    /// `json string escapes quotes backslashes and control characters`.
+    fn json_string_escapes_quotes_backslashes_and_control_characters() {
+        assert_eq!(json_string("a\"b"), "\"a\\\"b\"");
+        assert_eq!(json_string("a\\b"), "\"a\\\\b\"");
+        assert_eq!(json_string("a\rb"), "\"a\\rb\"");
+        assert_eq!(json_string("a\tb"), "\"a\\tb\"");
+        assert_eq!(json_string("a\nb"), "\"a\\nb\"");
+        assert_eq!(json_string("a\u{1}b"), "\"a\\u0001b\"");
+        assert_eq!(json_string("plain"), "\"plain\"");
+    }
+}
