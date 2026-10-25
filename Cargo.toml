@@ -76,6 +76,14 @@ pico-args = "=0.5.0"
 # `[dev-dependencies]`; the rest of the workspace stays proptest-free.
 proptest = "=1.12.0"
 
+# Differential-testing harness for T1518. Pulls in the official `kdl`
+# parser crate (Apache-2.0, in `deny.toml`'s allow list) so the surface
+# parser can be cross-checked against an independent implementation.
+# Dev-only — `elang-kdl`'s `[dev-dependencies]` is the only consumer;
+# the production binary never links `kdl`. ADR 0010's "hand-rolled"
+# rationale stands; this is a cross-check, not a replacement.
+kdl = "=6.5.0"
+
 # Workspace-wide lint policy (T0215). Untrusted-input safety is enforced by
 # denying panic-prone constructs. These are inherited via `[lints] workspace = true`.
 [workspace.lints.rust]

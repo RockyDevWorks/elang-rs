@@ -13,3 +13,11 @@ workspace = true
 
 [dependencies]
 elang-core.workspace = true
+
+[dev-dependencies]
+# Phase 15 T1518: cross-parser KDL 2.0 differential test. The `kdl` crate
+# is the official reference KDL parser; we use it to verify that
+# `elang-kdl` agrees with the reference on accept/reject decisions and
+# node-name extraction for a corpus of KDL 2.0 spec inputs. Dev-only —
+# production code never depends on `kdl` (see ADR 0010).
+kdl.workspace = true
