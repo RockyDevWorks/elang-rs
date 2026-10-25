@@ -58,13 +58,20 @@ concurrency:
 jobs:
   release:
     name: Cut ${{ github.ref_name }} release
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
       CARGO_TERM_COLOR: never
       CARGO_INCREMENTAL: "0"
       RUST_BACKTRACE: "0"
       RUSTUP_TOOLCHAIN: stable
+      # The resolved release version, computed from the tag in the
+      # `Compute version from tag` step. All downstream steps reference
+      # `$RELEASE_VERSION` instead of interpolating `${{ steps.version.outputs.version }}`
+      # directly — the env-var indirection means shell metacharacters in
+      # a maliciously-shaped tag cannot reach the script interpreter
+      # through command-substitution expansion (zizmor `template-injection`).
+      RELEASE_VERSION: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -74,6 +81,13 @@ jobs:
           # enumerates every tracked file. Both need the full history to
           # produce a reproducible archive, so fetch with depth 0.
           fetch-depth: 0
+          # `persist-credentials: false` ensures the auto-provisioned
+          # GITHUB_TOKEN is not cached in `.git/config` after checkout.
+          # Subsequent `cargo` steps (and the `build-release-artifacts.sh`
+          # script) therefore have no token to leak even if a build step
+          # were tricked into exfiltrating credentials. Closes the
+          # `artipacked` zizmor warning for this workflow.
+          persist-credentials: false
 
       - name: Install pinned Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -92,19 +106,37 @@ jobs:
           # Strip the leading 'v' from the tag (e.g., v0.1.0 -> 0.1.0)
           # so the artifact filename matches the version in the tag body.
           VERSION="${GITHUB_REF_NAME#v}"
-          # Reject anything that doesn't look like semver. The CI lockfile
-          # and the workspace `[workspace.package].version` are the source
-          # of truth for the version; the tag is a label, not a value.
-          case "$VERSION" in
-            [0-9]*.[0-9]*.[0-9]*)
-              ;;
-            *)
-              echo "::error::tag ${GITHUB_REF_NAME} is not a semver-shaped version (expected vMAJOR.MINOR.PATCH)"
-              exit 1
-              ;;
-          esac
+          # Anchored regex: must be exactly MAJOR.MINOR.PATCH
+          # (optionally with -rcN). Anchoring matters — a glob-style match
+          # like `[0-9]*.[0-9]*.[0-9]*` would silently accept `1.2.3.evil`
+          # or `1.2.3 $(rm -rf /)`. The regex rejects any tag that contains
+          # a shell metacharacter.
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$ ]]; then
+            echo "::error::tag ${GITHUB_REF_NAME} is not vMAJOR.MINOR.PATCH (optionally -rcN)"
+            exit 1
+          fi
+          # The tag must match `[workspace.package].version` in Cargo.toml.
+          # The lockfile and Cargo.toml are the source of truth; the tag is
+          # a label, not a value. `awk` extracts the first `version = "..."`
+          # line that appears inside a `[workspace.package]` table — that is
+          # the field all crates inherit via `version.workspace = true`.
+          WORKSPACE_VERSION="$(
+            awk '
+              /^\[workspace\.package\]/ { found = 1; next }
+              /^\[/                      { found = 0 }
+              found && /^version = /     { print; exit }
+            ' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/'
+          )"
+          if [ -z "$WORKSPACE_VERSION" ]; then
+            echo "::error::could not extract [workspace.package].version from Cargo.toml"
+            exit 1
+          fi
+          if [ "$VERSION" != "$WORKSPACE_VERSION" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} resolves to ${VERSION} but [workspace.package].version is ${WORKSPACE_VERSION}"
+            exit 1
+          fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Building ELANG release ${VERSION}"
+          echo "Building ELANG release ${VERSION} (matches [workspace.package].version)"
 
       - name: Build release binaries (locked)
         run: cargo build --locked --release --workspace --all-targets
@@ -121,9 +153,14 @@ jobs:
         # `--verify` proves the script is deterministic (two scratch
         # builds must agree) and that the delivered copy matches the
         # scratch copies. Exit non-zero on any mismatch.
+        #
+        # The output directory is the script's default
+        # (`target/release-artifacts/`) — passing `--out-dir dist`
+        # fails because `dist/` is not git-ignored and the script
+        # refuses to swallow itself into the next run's file list.
         run: |
           set -euo pipefail
-          scripts/build-release-artifacts.sh --verify --out-dir dist --version "${{ steps.version.outputs.version }}"
+          scripts/build-release-artifacts.sh --verify --version "$RELEASE_VERSION"
 
       - name: Build release-notes attestation
         # The body of the GitHub Release. Records the resolved dep set
@@ -132,7 +169,7 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "# ELANG ${{ steps.version.outputs.version }}"
+            echo "# ELANG ${RELEASE_VERSION}"
             echo
             echo "Built from commit \`${GITHUB_SHA}\` on ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}@${GITHUB_REF_NAME}."
             echo
@@ -142,7 +179,14 @@ jobs:
             echo
             echo "| File | SHA-256 |"
             echo "|------|---------|"
-            for f in dist/*.tar.gz dist/*.tar.gz.sha256 Cargo.lock.sha256; do
+            for f in \
+              target/release-artifacts/*.tar.gz \
+              target/release-artifacts/*.tar.gz.sha256 \
+              Cargo.lock.sha256 \
+              docs/release/v0.1.0/dependencies.txt \
+              docs/release/v0.1.0/repertoire.sha256 \
+              docs/release/v0.1.0/conformance-hashes.txt \
+              docs/release/v0.1.0/ARCHIVE.md; do
               [ -f "$f" ] || continue
               digest="$(sha256sum "$f" | cut -d' ' -f1)"
               echo "| \`$(basename "$f")\` | \`${digest}\` |"
@@ -166,22 +210,22 @@ jobs:
             echo "those bytes; publisher authenticity requires a signed tag or an"
             echo "out-of-band trust mechanism, neither of which the v0.1.0 release"
             echo "claims. See \`docs/release/v0.1.0/README.md\` for the full model."
-          } > dist/RELEASE-NOTES.md
+          } > target/release-artifacts/RELEASE-NOTES.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: ELANG ${{ steps.version.outputs.version }}
-          body_path: dist/RELEASE-NOTES.md
+          name: ELANG ${RELEASE_VERSION}
+          body_path: target/release-artifacts/RELEASE-NOTES.md
           # `fail_on_unmatched_files: true` means a missing release asset
           # fails the release. Better to abort a release than to publish
           # a release without its lockfile attestation or sidecar.
           fail_on_unmatched_files: true
           files: |
-            dist/*.tar.gz
-            dist/*.tar.gz.sha256
-            dist/RELEASE-NOTES.md
+            target/release-artifacts/*.tar.gz
+            target/release-artifacts/*.tar.gz.sha256
+            target/release-artifacts/RELEASE-NOTES.md
             Cargo.lock.sha256
             docs/release/v0.1.0/dependencies.txt
             docs/release/v0.1.0/repertoire.sha256

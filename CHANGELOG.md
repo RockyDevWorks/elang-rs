@@ -115,8 +115,6 @@ and this project uses independent version domains (see
   `cargo run -p elang-conformance --bin gen_canonical_goldens`; regeneration
   is byte-identical and no digest is hand-written.
 
-### Added
-
 - **Package CI** — `.github/workflows/package.yml`. On every PR and every
   push to `main` the workflow builds the release binaries
   (`cargo build --locked --release --workspace --all-targets`), generates
@@ -124,7 +122,7 @@ and this project uses independent version domains (see
   (`cargo run -p elang-conformance --bin gen_release_archive`), then
   invokes `scripts/build-release-artifacts.sh --verify` to build the
   distributable source artifact end-to-end and prove it byte-reproducible
-  on Linux (`ubuntu-26.04` — GNU tar is required). The tarball and its
+  on Linux (`ubuntu-24.04` — GNU tar is required). The tarball and its
   `.sha256` sidecar are uploaded as a 14-day workflow artifact named
   `elang-source-artifact`. macOS / Windows build + test coverage stays
   in `ci.yml`; the artifact itself is Linux-only because byte-for-byte
