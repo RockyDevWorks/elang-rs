@@ -462,7 +462,7 @@ _(`allophone_empty_block`, `phoneme_empty_block`, `phonemes_empty_block`, `empty
 - [x] **T1516** Run dependency vulnerability and license audits.
 - [x] **T1517** Verify no untrusted input can trigger panic or out-of-bounds access.
 - [x] **T1518** Run differential tests against independent fixture parser/encoder where feasible.
-- [ ] **T1519** Triage all fuzz findings and add regression fixtures.
+- [x] **T1519** Triage all fuzz findings and add regression fixtures.
 - [x] **T1520** Document security limits and remaining trust/authenticity limitations.
 
 **Acceptance:** fuzz campaigns meet documented budgets; no unresolved critical parser/decompression/path vulnerabilities.
