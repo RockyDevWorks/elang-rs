@@ -73,16 +73,17 @@ libfuzzer_sys::fuzz_target!(|data: &[u8]| {
     // The identifier parsed. Its comparison key is what global
     // uniqueness (C-09) is decided on, so exercise it — and assert
     // the invariant that makes it sound: only the lower tie bar is
-    // normalised to the upper one; all other characters are preserved.
+    // normalised to the upper one; every other character is preserved.
     let key = identifier.comparison_key();
-    debug_assert_eq!(
-        key,
-        text.chars()
-            .map(|c| if c == ipa::TIE_LOWER {
+    let expected: String = text
+        .chars()
+        .map(|c| {
+            if c == ipa::TIE_LOWER {
                 ipa::TIE_UPPER
             } else {
                 c
-            })
-            .collect::<String>()
-    );
+            }
+        })
+        .collect();
+    debug_assert_eq!(key, expected);
 });

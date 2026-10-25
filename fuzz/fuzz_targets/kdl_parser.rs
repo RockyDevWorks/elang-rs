@@ -55,6 +55,9 @@ libfuzzer_sys::fuzz_target!(|data: &[u8]| {
     let Ok(doc) = parse_with_budgets(data, &mut budgets) else {
         return;
     };
+    if !doc.nodes.is_empty() {
+        debug_assert!(budgets.nodes_archive().current() > 0);
+    }
 
     // The AST was built. Walk it so the fuzzer also exercises the
     // traversal helpers that every consumer (EPF, ELD, integrity
