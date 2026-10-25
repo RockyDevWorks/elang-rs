@@ -45,6 +45,7 @@ fn archive_fixtures() -> Vec<Fixture> {
     let mut all = Vec::new();
     all.extend(elang_conformance::negatives::binary_fixtures());
     all.extend(elang_conformance::negatives::integrity_fixtures());
+    all.extend(elang_conformance::negatives::validate_negatives());
     all.extend(elang_conformance::zstd_negatives::fixtures());
     all.extend(elang_conformance::inspect_matrix::fixtures());
     all.extend(elang_conformance::parser_budgets::archive_fixtures());

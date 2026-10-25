@@ -191,13 +191,71 @@ pub fn ipa_fixtures() -> Vec<DocumentFixture> {
         });
     }
 
-    // Guard against the negative case being dropped: the corpus must
-    // publish exactly one accept case and one reject case.
+    // Negative: an IPA identifier with more than `MAX_SCALARS` (8) Unicode
+    // scalars. REQ-IPA-006 requires 1–8 scalars AND at most 4 logical base
+    // units, both enforced. The corpus previously pinned neither limit, so
+    // the boundary was only guaranteed by unit tests inside the owning
+    // crate — a second implementation reading this corpus had no way to
+    // learn the limit or its diagnostic code.
+    //
+    // Nine approved base symbols give nine scalars and nine units. The
+    // scalar limit is checked first, so this surfaces
+    // `IPA_TOO_MANY_SCALARS` rather than `IPA_TOO_MANY_UNITS`.
+    let too_many_scalars_id = "abcdefphi";
+    assert_eq!(
+        validate(too_many_scalars_id, &rep),
+        Err(elang_repertoire::ipa::IpaError::TooManyScalars(9)),
+        "IPA {too_many_scalars_id:?} must be rejected with TooManyScalars(9) — \
+         if MAX_SCALARS changed, update this fixture and the corpus together"
+    );
+    let source = format!(
+        "phonemes {{\n    consonants {{\n        phoneme \"{too_many_scalars_id}\" {{\n            roman \"q\"\n        }}\n    }}\n    vowels {{\n        phoneme \"a\" {{\n            roman \"a\"\n        }}\n    }}\n}}\n"
+    );
+    fixtures.push(DocumentFixture {
+        id: "ipa/reject-too-many-scalars",
+        description: "An IPA identifier longer than 8 Unicode scalars is rejected",
+        requirements: &["REQ-IPA-006"],
+        schema: crate::corpus::Schema::Eld,
+        source: source.into_bytes(),
+        expectation: crate::corpus::DocumentExpectation::Reject {
+            code: "IPA_TOO_MANY_SCALARS",
+            category: Category::Ipa,
+        },
+    });
+
+    // Negative: an IPA identifier within the scalar limit but with more than
+    // `MAX_UNITS` (4) logical base units. Five approved base symbols give
+    // five scalars — inside the 8-scalar limit — and five logical units,
+    // which is what this fixture isolates.
+    let too_many_units_id = "abcde";
+    assert_eq!(
+        validate(too_many_units_id, &rep),
+        Err(elang_repertoire::ipa::IpaError::TooManyUnits(5)),
+        "IPA {too_many_units_id:?} must be rejected with TooManyUnits(5) — \
+         if MAX_UNITS changed, update this fixture and the corpus together"
+    );
+    let source = format!(
+        "phonemes {{\n    consonants {{\n        phoneme \"{too_many_units_id}\" {{\n            roman \"q\"\n        }}\n    }}\n    vowels {{\n        phoneme \"a\" {{\n            roman \"a\"\n        }}\n    }}\n}}\n"
+    );
+    fixtures.push(DocumentFixture {
+        id: "ipa/reject-too-many-units",
+        description: "An IPA identifier with more than 4 logical base units is rejected",
+        requirements: &["REQ-IPA-006"],
+        schema: crate::corpus::Schema::Eld,
+        source: source.into_bytes(),
+        expectation: crate::corpus::DocumentExpectation::Reject {
+            code: "IPA_TOO_MANY_UNITS",
+            category: Category::Ipa,
+        },
+    });
+
+    // Guard against any negative case being dropped: the corpus must
+    // publish exactly one accept case and three reject cases.
     assert_eq!(
         fixtures.len(),
-        2,
-        "the IPA fixture set must contain exactly one accept and one reject \
-         case — a silently-skipped rejection fixture is a vacuous corpus"
+        4,
+        "the IPA fixture set must contain exactly one accept and three reject \
+         cases — a silently-skipped rejection fixture is a vacuous corpus"
     );
 
     fixtures
