@@ -765,25 +765,8 @@ pub fn validate_negatives() -> Vec<Fixture> {
 // Assembly helper for content-substitution fixtures
 // ---------------------------------------------------------------------------
 
-/// Rebuild the minimal archive with one resource's content replaced.
-///
-/// The replacement is a *content* change only: the index, the frame
-/// offsets, the footer hash and the archive length are all recomputed by
-/// the container layer, so the resulting archive is structurally perfect
-/// and fails only on the content the fixture targets.
-///
-/// # Panics
-///
-/// Panics when the container assembly fails or when `path` is not one of
-/// the minimal package's resources. Both are corpus-authoring bugs: an
-/// `Option` return would let a caller silently skip the fixture, and a
-/// skipped fixture is a vacuous corpus that still looks complete.
-pub fn rebuild_with_resource(path: &str, content: &[u8]) -> Vec<u8> {
-    use elang_container::footer::Footer;
-    use elang_container::frame::encode;
-    use elang_container::header::{Header, HEADER_LEN};
-    use elang_container::index::{Index, IndexEntry, COMPRESSION_ZSTD};
-
+/// Read the uncompressed resources from the minimal archive.
+fn read_minimal_resources() -> Vec<(String, Vec<u8>)> {
     // Start from a valid archive and read its resource contents.
     let original = minimal_archive();
     assert!(
@@ -808,19 +791,15 @@ pub fn rebuild_with_resource(path: &str, content: &[u8]) -> Vec<u8> {
             .expect("an indexed frame must decode");
         resources.push((path, bytes));
     }
+    resources
+}
 
-    // Substitute the target resource.
-    let mut substituted = false;
-    for (p, bytes) in resources.iter_mut() {
-        if p == path {
-            *bytes = content.to_vec();
-            substituted = true;
-        }
-    }
-    assert!(
-        substituted,
-        "resource {path:?} must exist in the minimal package"
-    );
+/// Assemble resources into an archive with sorted paths and contiguous frames.
+fn assemble_archive(mut resources: Vec<(String, Vec<u8>)>) -> Vec<u8> {
+    use elang_container::footer::Footer;
+    use elang_container::frame::encode;
+    use elang_container::header::{Header, HEADER_LEN};
+    use elang_container::index::{Index, IndexEntry, COMPRESSION_ZSTD};
 
     // Re-assemble: sort, encode, index, footer.
     resources.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
@@ -870,6 +849,38 @@ pub fn rebuild_with_resource(path: &str, content: &[u8]) -> Vec<u8> {
     out
 }
 
+/// Rebuild the minimal archive with one resource's content replaced.
+///
+/// The replacement is a *content* change only: the index, the frame
+/// offsets, the footer hash and the archive length are all recomputed by
+/// the container layer, so the resulting archive is structurally perfect
+/// and fails only on the content the fixture targets.
+///
+/// # Panics
+///
+/// Panics when the container assembly fails or when `path` is not one of
+/// the minimal package's resources. Both are corpus-authoring bugs: an
+/// `Option` return would let a caller silently skip the fixture, and a
+/// skipped fixture is a vacuous corpus that still looks complete.
+pub fn rebuild_with_resource(path: &str, content: &[u8]) -> Vec<u8> {
+    let mut resources = read_minimal_resources();
+
+    // Substitute the target resource.
+    let mut substituted = false;
+    for (p, bytes) in resources.iter_mut() {
+        if p == path {
+            *bytes = content.to_vec();
+            substituted = true;
+        }
+    }
+    assert!(
+        substituted,
+        "resource {path:?} must exist in the minimal package"
+    );
+
+    assemble_archive(resources)
+}
+
 /// Rebuild the minimal archive with substituted resources and a
 /// *regenerated* integrity manifest.
 ///
@@ -893,36 +904,10 @@ pub fn rebuild_with_resource(path: &str, content: &[u8]) -> Vec<u8> {
 /// bugs, for the same reason [`rebuild_with_resource`] panics: a silently
 /// skipped fixture is a vacuous corpus that still looks complete.
 pub fn rebuild_with_valid_integrity(subs: &[(&str, &[u8])]) -> Vec<u8> {
-    use elang_container::footer::Footer;
-    use elang_container::frame::encode;
-    use elang_container::header::{Header, HEADER_LEN};
-    use elang_container::index::{Index, IndexEntry, COMPRESSION_ZSTD};
     use elang_integrity::manifest::{Algorithm, IntegrityEntry, IntegrityManifest};
     use sha2::{Digest, Sha256};
 
-    // Start from a valid archive and read its resource contents.
-    let original = minimal_archive();
-    assert!(
-        !original.is_empty(),
-        "the minimal archive must not be empty"
-    );
-    let listing = elang_container::ArchiveListing::parse(&original)
-        .expect("the minimal archive must parse as an archive listing");
-    let view = listing.index();
-
-    let mut resources: Vec<(String, Vec<u8>)> = Vec::new();
-    for entry in view.entries() {
-        let path = entry.path().as_str().to_string();
-        let offset = entry.frame_offset() as usize;
-        let compressed = entry.compressed_size() as usize;
-        let frame = original
-            .get(offset..offset + compressed)
-            .expect("an indexed frame offset must lie inside the archive");
-        let mut budget = elang_container::frame::DecodeBudget::generic();
-        let bytes = elang_container::frame::decode(frame, &mut budget)
-            .expect("an indexed frame must decode");
-        resources.push((path, bytes));
-    }
+    let mut resources = read_minimal_resources();
 
     // Substitute the target resources.
     for (path, content) in subs {
@@ -968,52 +953,7 @@ pub fn rebuild_with_valid_integrity(subs: &[(&str, &[u8])]) -> Vec<u8> {
         }
     }
 
-    // Re-assemble: sort, encode, index, footer.
-    resources.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
-    let mut frames: Vec<(String, Vec<u8>, u64)> = Vec::with_capacity(resources.len());
-    for (p, bytes) in &resources {
-        let compressed =
-            encode(bytes, crate::golden_packages::GOLDEN_PROFILE).expect("a resource must encode");
-        frames.push((p.clone(), compressed, bytes.len() as u64));
-    }
-    let mut entries: Vec<IndexEntry> = Vec::with_capacity(frames.len());
-    let mut offset = HEADER_LEN as u64;
-    for (p, compressed, uncompressed_size) in &frames {
-        entries.push(
-            IndexEntry::new(
-                p,
-                offset,
-                compressed.len() as u64,
-                *uncompressed_size,
-                COMPRESSION_ZSTD,
-            )
-            .expect("an index entry must be constructible"),
-        );
-        offset = offset.saturating_add(compressed.len() as u64);
-    }
-    let index = Index::with_entries(entries).expect("the index must be constructible");
-    let (index_bytes, index_hash) = index.encode_and_hash().expect("the index must encode");
-    let index_size = index_bytes.len() as u64;
-    let footer =
-        Footer::new(offset, index_size, index_hash).expect("the footer must be constructible");
-
-    let mut out = Vec::new();
-    let header = Header::current();
-    let mut header_buf = [0u8; HEADER_LEN];
-    header
-        .encode(&mut header_buf, 0)
-        .expect("the header must encode");
-    out.extend_from_slice(&header_buf);
-    for (_, compressed, _) in &frames {
-        out.extend_from_slice(compressed);
-    }
-    out.extend_from_slice(&index_bytes);
-    let mut footer_buf = [0u8; 64];
-    footer
-        .encode(&mut footer_buf, 0)
-        .expect("the footer must encode");
-    out.extend_from_slice(&footer_buf);
-    out
+    assemble_archive(resources)
 }
 
 #[cfg(test)]

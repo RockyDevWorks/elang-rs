@@ -201,7 +201,7 @@ pub fn ipa_fixtures() -> Vec<DocumentFixture> {
     // Nine approved base symbols give nine scalars and nine units. The
     // scalar limit is checked first, so this surfaces
     // `IPA_TOO_MANY_SCALARS` rather than `IPA_TOO_MANY_UNITS`.
-    let too_many_scalars_id = "abcdefghi";
+    let too_many_scalars_id = "abcdefphi";
     assert_eq!(
         validate(too_many_scalars_id, &rep),
         Err(elang_repertoire::ipa::IpaError::TooManyScalars(9)),
