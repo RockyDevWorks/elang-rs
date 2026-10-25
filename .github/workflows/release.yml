@@ -65,13 +65,6 @@ jobs:
       CARGO_INCREMENTAL: "0"
       RUST_BACKTRACE: "0"
       RUSTUP_TOOLCHAIN: stable
-      # The resolved release version, computed from the tag in the
-      # `Compute version from tag` step. All downstream steps reference
-      # `$RELEASE_VERSION` instead of interpolating `${{ steps.version.outputs.version }}`
-      # directly — the env-var indirection means shell metacharacters in
-      # a maliciously-shaped tag cannot reach the script interpreter
-      # through command-substitution expansion (zizmor `template-injection`).
-      RELEASE_VERSION: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -136,6 +129,13 @@ jobs:
             exit 1
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          # Also export as a job-level env var so subsequent steps can
+          # reference `$RELEASE_VERSION` in `run:` blocks AND
+          # `${{ env.RELEASE_VERSION }}` in `with:` blocks (the
+          # `steps.*` context is not available at job-level env, and
+          # the `with:` block does not perform shell expansion on
+          # `${VAR}`). `$GITHUB_ENV` is the supported mechanism.
+          echo "RELEASE_VERSION=${VERSION}" >> "$GITHUB_ENV"
           echo "Building ELANG release ${VERSION} (matches [workspace.package].version)"
 
       - name: Build release binaries (locked)
@@ -216,7 +216,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: ELANG ${RELEASE_VERSION}
+          name: ELANG ${{ env.RELEASE_VERSION }}
           body_path: target/release-artifacts/RELEASE-NOTES.md
           # `fail_on_unmatched_files: true` means a missing release asset
           # fails the release. Better to abort a release than to publish
