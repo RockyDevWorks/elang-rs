@@ -153,9 +153,12 @@ Errors must never be truncated, so the cap is *diagnostic-only*.
 
 ## What the parser does NOT enforce
 
-The limits above are what the parser enforces. The list below is
-**equally important**: the limits the parser does *not* enforce,
-and which a defensive deployment must layer above the ELANG reader.
+The limits above (except for the **reserved** semantic budgets
+flagged in §Semantic budgets, which are wired into the error type
+but not yet enforced by ELD's semantic phase) are what the parser
+enforces. The list below is **equally important**: the limits the
+parser does *not* enforce, and which a defensive deployment must
+layer above the ELANG reader.
 
 ### No rate limiting
 
