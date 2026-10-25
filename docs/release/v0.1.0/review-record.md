@@ -14,7 +14,7 @@
 > which is itself evidence that the review is not a formality.
 > Every finding carries its source in the `Source` column.**
 >
-> Nine further findings (#42–#50) were raised on PR #71, which added the
+> Eleven further findings (#42–#52) were raised on PR #71, which added the
 > release-artifact packaging script and the test-coverage expansion after
 > this record was written. They are recorded separately in
 > § "Follow-up review — PR #71".
@@ -206,6 +206,8 @@ addressed and the thread resolved; the dispositions are:
 | 48 | CodeRabbit (PR #71) | The packaging script's `--out-dir` guard checked whether the *archive* was ignored; a `*.tar.gz` glob leaves the `.sha256` sidecar unignored. | **Fixed** — the guard checks the output *directory*. |
 | 49 | CodeRabbit (PR #71) | The sidecar digest was interpolated into the `printf` that wrote it, so a hashing failure produced an empty digest and a successful build. | **Fixed** — the digest is captured first and the function returns non-zero on failure. |
 | 50 | CodeRabbit (PR #71) | `--verify` proved two scratch builds identical but delivered a third build without comparing it. | **Fixed** — the delivered artifact is re-hashed and compared with the verified digest. |
+| 51 | CodeRabbit (PR #71) | The member comparison cannot compare a path whose name contains a newline: `tar -tzf` escapes the newline while `tr` splits the NUL list on newlines, so a correct archive is reported as a mismatch. Git's index can legally hold such a name. | **Fixed** — the script inspects each NUL-delimited path and refuses to build, naming the offending path, instead of failing later with a misleading mismatch. |
+| 52 | CodeRabbit (PR #71) | The peak-memory test accepted `None` on Linux, so a regression in `current()` would ship a silently unmeasured report without the test noticing. | **Fixed** — on Linux the sample must be present and measured; on platforms without `/proc/self/status` the optional sample stays optional. |
 
 This follow-up section is **bot review only**. It is not a substitute
 for the human sign-off below, and it does not reopen the dispositions

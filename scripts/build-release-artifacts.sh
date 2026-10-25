@@ -164,6 +164,20 @@ trap 'rm -f "$LIST" "$LIST.files"' EXIT
 FILE_COUNT="$(tr -cd '\0' <"$LIST" | wc -c | tr -d ' ')"
 [ "$FILE_COUNT" -gt 0 ] || die "no files to package"
 
+# Reject any path whose name contains a newline. The member comparison
+# below cannot compare a name with an embedded newline correctly: `tar
+# -tzf` escapes the newline (`\n`), while `tr` splits the NUL list on
+# newlines, so a correct archive would be reported as a mismatch.
+# Git itself allows the index to hold such names (rare, but legal on
+# Linux), so the check is performed here rather than assumed away.
+while IFS= read -r -d '' path; do
+	case "$path" in
+	*$'\n'*)
+		die "file names containing newlines are not supported: ${path//$'\n'/\\n}"
+		;;
+	esac
+done <"$LIST"
+
 # Every listed path must exist as a regular file: a tracked path that was
 # deleted from the working tree would otherwise produce a tarball that is
 # missing a file the release claims to contain.

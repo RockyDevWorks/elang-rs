@@ -47,7 +47,10 @@ and this project uses independent version domains (see
   the repository unless the output *directory* is git-ignored (a
   `*.tar.gz` glob would ignore the archive but not its `.sha256` sidecar),
   and `--verify` compares the digest of the artifact it actually delivers
-  against the two scratch builds it proved reproducible.
+  against the two scratch builds it proved reproducible. A path whose name
+  contains a newline is refused by name: the member comparison cannot
+  compare such a path correctly, so the build fails with a clear message
+  instead of a misleading mismatch.
 
 - **Portable coverage tests.** The new CLI error-path tests are gated per
   platform: the non-UTF-8 argument tests and the POSIX symlink and
