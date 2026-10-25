@@ -452,9 +452,9 @@ _(`allophone_empty_block`, `phoneme_empty_block`, `phonemes_empty_block`, `empty
 - [ ] **T1506** Add fuzz target for ELD structural validation.
 - [ ] **T1507** Add fuzz target for IPA tokenizer/tie-bar/modifier parser.
 - [ ] **T1508** Add fuzz target for condition AST, evaluator and canonical sorting key.
-- [ ] **T1509** Add property tests for canonicalization idempotence.
-- [ ] **T1510** Add property tests for parse/serialize roundtrips of validated models.
-- [ ] **T1511** Add property tests for bytewise path and IPA ordering.
+- [x] **T1509** Add property tests for canonicalization idempotence.
+- [x] **T1510** Add property tests for parse/serialize roundtrips of validated models.
+- [x] **T1511** Add property tests for bytewise path and IPA ordering.
 - [ ] **T1512** Add memory/time tests for max node, string, comment and reference budgets.
 - [ ] **T1513** Add decompression-bomb, giant-offset and integer-overflow tests.
 - [ ] **T1514** Add extraction path traversal, symlink and overwrite tests.
