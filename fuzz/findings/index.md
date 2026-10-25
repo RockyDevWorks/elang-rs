@@ -9,7 +9,7 @@ itself lives at `fuzz/findings/<NNNN>-<slug>.md`.
 | _none yet_ | | | | | | | |
 
 A finding only earns its row once the regression test
-(`fuzz/fuzz_targets/regressions.rs::regression_<target>_<NNNN>`) is
+(`crates/elang-conformance/tests/fuzz_regressions.rs::regression_<target>_<NNNN>`) is
 in place and passing on `origin/main`. See
 [`README.md`](./README.md) for the triage procedure.
 

@@ -105,11 +105,11 @@ A worked example, using a hypothetical finding `0001`:
    #[test]
    fn regression_container_structure_0001() {
        let bytes = include_bytes!(
-           "../../fuzz/regressions/container_structure/0001-truncated-magic.bin"
+           "../../../fuzz/regressions/container_structure/0001-truncated-magic.bin"
        );
        let result = elang_container::Header::decode(bytes);
        assert!(result.is_err(), "truncated magic must be rejected");
-       assert_eq!(result.unwrap_err().category(), ErrorCategory::Input);
+       assert_eq!(result.unwrap_err().category(), elang_core::Category::Container);
    }
    ```
 8. Update `fuzz/findings/index.md` with the row.

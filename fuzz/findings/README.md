@@ -32,12 +32,11 @@ triage procedure below.
 For every finding produced by CI or by a local fuzz run:
 
 1. **Reproduce locally.** Copy the `crash-<sha1>` artifact into
-   `fuzz/regressions/<target>/<id>.<ext>` where `<id>` is the
+   `fuzz/regressions/<target>/<NNNN>-<slug>.bin` where `<NNNN>` is the
    monotonically increasing finding number (zero-padded to 4 digits) and
-   `<ext>` is the original libFuzzer extension (`bin` for raw byte
-   sequences, no extension for the corpus entries that reproduce hangs).
+   `<slug>` describes the finding.
    Verify the reproduction by running
-   `cargo +nightly fuzz run <target> <regressions/<target>/<id>.<ext>`
+   `cargo +nightly fuzz run <target> fuzz/regressions/<target>/<NNNN>-<slug>.bin`
    and confirming the same crash class is reported.
 
 2. **Classify.** Pick one of: `panic`, `oob-read`, `oob-write`,
@@ -58,8 +57,8 @@ For every finding produced by CI or by a local fuzz run:
    bytes committed in step 1 and assert that the parser returns the
    expected `Result::Err(<error>)` rather than panicking, hanging, or
    OOB-reading. The test lives at
-   `fuzz/fuzz_targets/regressions.rs` (one test per finding,
-   named `regression_<target>_<id>`) and is wired into the workspace
+   `crates/elang-conformance/tests/fuzz_regressions.rs` (one test per finding,
+   named `regression_<target>_<NNNN>`) and is wired into the workspace
    `cargo test --workspace --all-features` so any future drift in the
    parse path that re-introduces the defect fails CI before merge.
 
@@ -73,16 +72,17 @@ For every finding produced by CI or by a local fuzz run:
    checking the diff against `origin/main` can see at a glance which
    findings were open and which were closed.
 
-## What does NOT get a finding
+## Rejected inputs and harness panics
 
 - A libFuzzer-discovered input that the harness already rejects with a
   `Result::Err(_)` is not a finding. It goes into
   `fuzz/corpus/<target>/` and improves coverage on subsequent runs,
   but no triage record is required.
-- A panicking harness from a fuzz target that's `#[allow]`-ed past the
-  workspace lint policy (i.e., the fuzz harness itself) is by design
-  — the policy exemption is documented at the top of every fuzz target
-  source file.
+- Every harness panic must be investigated through triage, even when
+  the fuzz target has lint allowances. An allowance permits the harness
+  to compile; it does not make a crash expected. Maintainers must
+  investigate the crash and record the cause before classifying it as
+  a harness defect or an expected outcome.
 
 ## Finding record template
 
@@ -124,14 +124,16 @@ PR #<pr> — <commit hash>, <one-line summary>
 #[test]
 fn regression_<target>_NNNN() {
     let bytes = include_bytes!(
-        "../../fuzz/regressions/<target>/NNNN-<slug>.bin"
+        "../../../fuzz/regressions/<target>/NNNN-<slug>.bin"
     );
-    let _ = <call the parser with bytes>; // must not panic
+    let result = <call the parser with bytes>; // must not panic
+    let error = result.expect_err("malformed fixture must be rejected");
+    assert_eq!(error.category(), <expected error category>);
 }
 \`\`\`
 
 Test name: `regression_<target>_<NNNN>`, file:
-`fuzz/fuzz_targets/regressions.rs`. Asserts
+`crates/elang-conformance/tests/fuzz_regressions.rs`. Asserts
 `<expected error variant or category>`.
 ```
 

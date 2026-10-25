@@ -43,9 +43,11 @@ shared with `fuzz/findings/<NNNN>-<slug>.md`.
    #[test]
    fn regression_<target>_<NNNN>() {
        let bytes = include_bytes!(
-           "../../fuzz/regressions/<target>/<NNNN>-<slug>.bin"
+           "../../../fuzz/regressions/<target>/<NNNN>-<slug>.bin"
        );
-       let _ = <call the parser>; // must not panic
+       let result = <call the parser with bytes>; // must not panic
+       let error = result.expect_err("malformed fixture must be rejected");
+       assert_eq!(error.category(), <expected error category>);
    }
    ```
 6. Add the row to `fuzz/findings/index.md`.

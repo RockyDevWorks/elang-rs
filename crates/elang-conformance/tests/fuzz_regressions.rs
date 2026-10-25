@@ -10,12 +10,11 @@
 //! > a success on a malformed buffer. Every rejectable input must
 //! > return a structured `Err`.
 //!
-//! A test that loads a regression fixture and asserts the call does
-//! not panic — i.e. returns either `Ok` (rare; a previously-broken
-//! happy path that the fix restored) or `Err` (the common case) —
-//! pins the contract against future regressions. If the parser
-//! regresses and starts panicking on the same input, this test
-//! fails before the change can merge.
+//! A test that loads a malformed regression fixture must assert the
+//! expected error category as well as the absence of a panic. A
+//! previously-broken valid input must assert the expected success.
+//! If the parser panics or accepts malformed bytes, the regression
+//! test fails before the change can merge.
 //!
 //! # Why a workspace test, not a fuzz target
 //!
@@ -62,6 +61,7 @@ use std::path::Path;
 fn regression_fixtures(target: &str) -> Option<Vec<std::path::PathBuf>> {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
+        .join("..")
         .join("fuzz")
         .join("regressions")
         .join(target);
@@ -89,12 +89,27 @@ fn regression_fixtures(target: &str) -> Option<Vec<std::path::PathBuf>> {
 fn regression_fixtures_directory_is_well_formed() {
     let findings_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
+        .join("..")
         .join("fuzz")
         .join("findings");
     if !findings_dir.exists() {
         // No findings yet — that's a valid state. Skip.
         return;
     }
+    let has_findings = std::fs::read_dir(&findings_dir)
+        .expect("findings root readable")
+        .any(|entry| {
+            let path = entry.expect("DirEntry").path();
+            path.is_file()
+                && path.extension().is_some_and(|ext| ext == "md")
+                && path
+                    .file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .and_then(|stem| stem.split_once('-'))
+                    .is_some_and(|(id, slug)| {
+                        id.len() == 4 && id.bytes().all(|b| b.is_ascii_digit()) && !slug.is_empty()
+                    })
+        });
 
     // For every committed finding record under `fuzz/findings/`, the
     // expected directory `fuzz/regressions/<target>/` must exist with
@@ -105,11 +120,16 @@ fn regression_fixtures_directory_is_well_formed() {
     // the per-finding regression tests added below as findings land.
     let regressions_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
+        .join("..")
         .join("fuzz")
         .join("regressions");
 
     if !regressions_root.exists() {
-        // No regressions committed yet — also a valid state.
+        assert!(
+            !has_findings,
+            "finding records require committed regressions"
+        );
+        // No findings or regressions committed yet — a valid state.
         return;
     }
 
@@ -133,17 +153,16 @@ fn regression_fixtures_directory_is_well_formed() {
         }
     }
 
-    // If we got here, the layout is valid. The count is informational.
     assert!(
-        target_dirs > 0 || !findings_dir.join("README.md").exists(),
-        "fuzz/findings/README.md implies findings exist; regressions dir must have at least one target subdir"
+        target_dirs > 0 || !has_findings,
+        "finding records exist; regressions dir must have at least one target subdir"
     );
 }
 
-/// Smoke check that every target under `fuzz/fuzz_targets/` has a
+/// Smoke check that every binary declared in `fuzz/Cargo.toml` has a
 /// known name we can list explicitly. When a new target is added,
-/// the corresponding regression test stub below needs a new
-/// `match` arm — this assertion makes the omission loud.
+/// the regression harness needs to acknowledge it — this assertion
+/// makes the omission loud.
 #[test]
 fn known_fuzz_targets_are_acknowledged() {
     // The two targets currently on `origin/main`. PR #58 (T1503-T1508)
@@ -153,19 +172,35 @@ fn known_fuzz_targets_are_acknowledged() {
         "container_structure", // T1501
         "resource_path",       // T1502
     ];
-    assert!(
-        KNOWN_TARGETS.contains(&"container_structure"),
-        "KNOWN_TARGETS must include container_structure (T1501)"
-    );
-    assert!(
-        KNOWN_TARGETS.contains(&"resource_path"),
-        "KNOWN_TARGETS must include resource_path (T1502)"
-    );
+    // Read the explicitly declared binaries without adding a TOML dependency.
+    let manifest = include_str!("../../../fuzz/Cargo.toml");
+    let lines: Vec<_> = manifest
+        .lines()
+        .map(|line| line.split('#').next().unwrap_or_default().trim())
+        .collect();
+    for bin in lines.split(|line| *line == "[[bin]]").skip(1) {
+        let name = bin
+            .iter()
+            .take_while(|line| !line.starts_with('['))
+            .find_map(|line| {
+                let (key, value) = line.split_once('=')?;
+                (key.trim() == "name").then_some(value.trim())
+            })
+            .expect("every fuzz [[bin]] must have a name")
+            .strip_prefix('"')
+            .and_then(|value| value.split('"').next())
+            .expect("fuzz binary names must be double-quoted");
+        assert!(
+            KNOWN_TARGETS.contains(&name),
+            "fuzz/Cargo.toml declares {name}, but it is not in KNOWN_TARGETS"
+        );
+    }
 
     // If a target has a regression directory, that target must be in
     // KNOWN_TARGETS — otherwise the regression test below will silently
     // skip it.
     let regressions_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
         .join("..")
         .join("fuzz")
         .join("regressions");
@@ -178,7 +213,7 @@ fn known_fuzz_targets_are_acknowledged() {
                 assert!(
                     KNOWN_TARGETS.contains(&name),
                     "regressions/{name} exists but {name} is not in KNOWN_TARGETS — \
-                     add it to fuzz/fuzz_targets/Cargo.toml, the fuzz.yml matrix, and \
+                     add it to fuzz/Cargo.toml, the fuzz.yml matrix, and \
                      KNOWN_TARGETS here so the regression test below exercises it"
                 );
             }
@@ -233,10 +268,10 @@ fn every_known_target_is_currently_clean() {
 // 1. `include_bytes!`s the committed reproduction under
 //    `fuzz/regressions/<target>/<id>.bin`.
 // 2. Calls the same parser entry point the fuzz target called.
-// 3. Asserts the call returns `Ok(_)` or `Err(_)` — i.e. **does
-//    not panic**, **does not OOB-read**, **does not hang past the
-//    harness timeout**. A panic on this test is a regression in
-//    the parser; the fix is to look up the finding in
+// 3. For malformed input, uses `expect_err` and asserts the expected
+//    error category. The call must also **not panic**, **not OOB-read**,
+//    and **not hang past the harness timeout**. A panic or unexpected
+//    success on malformed input is a regression; look up the finding in
 //    `fuzz/findings/<NNNN>-<slug>.md` and re-apply the fix from
 //    the PR cited there.
 //

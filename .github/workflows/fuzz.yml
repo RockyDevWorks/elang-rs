@@ -205,8 +205,9 @@ jobs:
         run: cargo +nightly fuzz build ${{ matrix.target }}
       - name: Run fuzz campaign
         run: |
-          mkdir -p fuzz/corpus/${{ matrix.target }}
+          set -euo pipefail
           mkdir -p fuzz/artifacts/${{ matrix.target }}
+          mkdir -p fuzz/corpus/${{ matrix.target }}
           if compgen -G "fuzz/seeds/${{ matrix.target }}/*" > /dev/null; then
             cp -r "fuzz/seeds/${{ matrix.target }}/." "fuzz/corpus/${{ matrix.target }}/"
           fi
@@ -222,9 +223,8 @@ jobs:
       - name: Persist campaign stats
         # Capture the final libFuzzer stats line into the step summary
         # so the audit trail (workflow run page) records what each
-        # nightly campaign did. We grep the SUMMARY: line, which
-        # libFuzzer emits at end-of-run with the final coverage /
-        # corpus / exec counters.
+        # nightly campaign did. libFuzzer emits stat:: lines at
+        # end-of-run; retain SUMMARY: diagnostics as well.
         if: always()
         run: |
           if [ -f fuzz/artifacts/${{ matrix.target }}/campaign.log ]; then
@@ -232,7 +232,7 @@ jobs:
               echo "## libFuzzer campaign stats for ${{ matrix.target }}"
               echo
               echo '```'
-              grep -E '^(SUMMARY:|STAT:|cov:|exec/s:|corpus:)' \
+              grep -E '^(SUMMARY:|stat::|STAT:|cov:|exec/s:|corpus:)' \
                 fuzz/artifacts/${{ matrix.target }}/campaign.log \
                 | tail -10
               echo '```'
