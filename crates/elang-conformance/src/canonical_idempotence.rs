@@ -14,7 +14,7 @@
 //! `parse → canon → parse → canon` and the two `canon` outputs are
 //! compared. proptest's machinery handles the test enumeration,
 //! failure shrinkage (the smallest input case that breaks the
-//! property) and replay (`PROPTEST_REPLAY`).
+//! property) and replay via persisted regression files or `PROPTEST_RNG_SEED`.
 //!
 //! The corpus is the input domain rather than a randomly generated one
 //! because the corpus already covers the structural edges that matter —
@@ -62,7 +62,7 @@ proptest::proptest! {
     // **not** declare a random strategy: the input domain is the
     // conformance corpus itself, enumerated by index. proptest's
     // machinery still applies (per-case isolation, failure shrinkage,
-    // replay via `PROPTEST_REPLAY=...`), and the input range gives
+    // replay via `PROPTEST_RNG_SEED=...`), and the input range gives
     // us the per-case attribution that an unrolled `#[test]` loop
     // would have to hand-write.
 

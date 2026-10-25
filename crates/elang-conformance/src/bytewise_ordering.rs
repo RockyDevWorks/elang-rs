@@ -65,19 +65,21 @@ use proptest::string::string_regex;
 /// - no `.` / `..` / empty segments
 /// - ≤ 1024 UTF-8 bytes
 ///
-/// The regex captures the structural rules; the byte-length cap is
-/// applied at sampling time (proptest's `string_regex` would otherwise
-/// happily generate longer strings on its size ramp).
+/// The regex captures the segment alphabet and shape; filters exclude
+/// `.` / `..` segments and enforce the byte-length cap at sampling time.
 fn resource_path_strategy() -> BoxedStrategy<String> {
     // `[A-Za-z0-9_.-]+` for segments; segments joined by `/`.
     // No leading `/` (regex starts with a segment char), no
-    // empty segments, no `.`/`..` (those would have to be the only
-    // chars in a segment and the `+` means at least one char).
+    // empty segments. The filter below excludes `.`/`..` segments.
     let inner = "[A-Za-z0-9_.-]{1,32}(/[A-Za-z0-9_.-]{1,32}){0,8}";
     string_regex(inner)
         .expect("valid regex")
         .prop_filter("path must fit in MAX_RESOURCE_PATH_BYTES", |s| {
             s.len() <= 1024
+        })
+        .prop_filter("path must not contain dot segments", |s| {
+            s.split('/')
+                .all(|segment| segment != "." && segment != "..")
         })
         .boxed()
 }
@@ -114,15 +116,8 @@ proptest::proptest! {
     /// `Vec<ResourcePath>` sort in bytewise order.
     #[test]
     fn resource_path_round_trips_through_new(s in resource_path_strategy()) {
-        let Ok(path) = ResourcePath::new(s.clone()) else {
-            // The strategy guarantees structural validity but
-            // `ResourcePath::new` may still reject (e.g. very
-            // long inputs that exceed 1024 bytes — the cap is
-            // checked at `s.len() > MAX_RESOURCE_PATH_BYTES`,
-            // which is in bytes). Filter; the property is
-            // conditional on a successful construction.
-            return Ok(());
-        };
+        let path = ResourcePath::new(s.clone())
+            .expect("generated resource path must be valid");
         proptest::prop_assert_eq!(path.as_str(), s.as_str());
     }
 
@@ -135,8 +130,10 @@ proptest::proptest! {
         a in resource_path_strategy(),
         b in resource_path_strategy(),
     ) {
-        let Ok(pa) = ResourcePath::new(a.clone()) else { return Ok(()); };
-        let Ok(pb) = ResourcePath::new(b.clone()) else { return Ok(()); };
+        let pa = ResourcePath::new(a.clone())
+            .expect("generated resource path must be valid");
+        let pb = ResourcePath::new(b.clone())
+            .expect("generated resource path must be valid");
 
         let std_ord = pa.cmp(&pb);
         let bytewise_ord = pa.as_str().as_bytes().cmp(pb.as_str().as_bytes());
@@ -222,16 +219,24 @@ proptest::proptest! {
                     continue;
                 };
 
-                // Compute the keys the canonical sorter would
-                // produce: `sorted_children` maps each `&Condition`
-                // through `condition_key` and sorts by the
-                // resulting byte string.
-                let mut once_keys: Vec<Vec<u8>> = when
+                // Compare the sorter's returned order with independently
+                // sorted keys from the original children.
+                let mut expected_keys: Vec<Vec<u8>> = when
                     .children()
                     .iter()
                     .map(ck::condition_key)
                     .collect();
-                once_keys.sort();
+                expected_keys.sort();
+                let once_keys: Vec<Vec<u8>> = ck::sorted_children(when.children())
+                    .into_iter()
+                    .map(ck::condition_key)
+                    .collect();
+                proptest::prop_assert_eq!(
+                    &once_keys,
+                    &expected_keys,
+                    "case `{}` `when` sorter differs from bytewise key order",
+                    case.id,
+                );
 
                 // Re-sort the already-sorted keys. The result must
                 // equal `once_keys` byte-for-byte: this is the
@@ -265,11 +270,16 @@ proptest::proptest! {
 fn exercise_subtree_idempotent(c: &Condition, case_id: &str) {
     match c {
         Condition::Group(children) => {
-            // Compute the keys the sorter produces and assert
-            // idempotence: re-sorting an already-sorted key set is
-            // a no-op.
-            let mut once_keys: Vec<Vec<u8>> = children.iter().map(ck::condition_key).collect();
-            once_keys.sort();
+            let mut expected_keys: Vec<Vec<u8>> = children.iter().map(ck::condition_key).collect();
+            expected_keys.sort();
+            let once_keys: Vec<Vec<u8>> = ck::sorted_children(children)
+                .into_iter()
+                .map(ck::condition_key)
+                .collect();
+            assert_eq!(
+                once_keys, expected_keys,
+                "case `{case_id}` `group` sorter differs from bytewise key order",
+            );
             let mut twice_keys = once_keys.clone();
             twice_keys.sort();
             assert_eq!(
@@ -281,15 +291,18 @@ fn exercise_subtree_idempotent(c: &Condition, case_id: &str) {
             }
         }
         Condition::Or(left, right) => {
-            // `sorted_operands` returns the two operands in
-            // non-decreasing order under `condition_key`. Assert
-            // the same idempotence property on the resulting key
-            // pair.
+            // Preserve the returned operand order when comparing against
+            // independently sorted keys and checking idempotence.
+            let mut expected_keys = vec![ck::condition_key(left), ck::condition_key(right)];
+            expected_keys.sort();
             let sorted = ck::sorted_operands(left, right);
             let k_left = ck::condition_key(sorted[0]);
             let k_right = ck::condition_key(sorted[1]);
-            let mut once_keys = vec![k_left, k_right];
-            once_keys.sort();
+            let once_keys = vec![k_left, k_right];
+            assert_eq!(
+                once_keys, expected_keys,
+                "case `{case_id}` `or` sorter differs from bytewise key order",
+            );
             let mut twice_keys = once_keys.clone();
             twice_keys.sort();
             assert_eq!(
