@@ -54,14 +54,20 @@ jobs:
             budget: 30
             max_len: 2048
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Install nightly toolchain
-        uses: dtolnay/rust-toolchain@nightly
+        # Pin to the `nightly` branch HEAD of the action (NOT master HEAD) —
+        # the branch ships toolchain-default = nightly, while master HEAD
+        # would silently default to stable and break cargo-fuzz.
+        uses: dtolnay/rust-toolchain@2c76c034f9e32a5d6e2c104dc4df23a22476db04
         with:
           components: rustfmt
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@aa7c1c80a07a27a84c0aa76d0cef0aad3830e330 # v2.7.8
       - name: Install cargo-fuzz
-        run: cargo +nightly install cargo-fuzz --locked
+        # Pinned to an exact version, matching the pinned-deps policy in
+        # SECURITY.md: `--locked` fixes the transitive graph but not the
+        # cargo-fuzz version itself, so pin that too.
+        run: cargo +nightly install cargo-fuzz --version 0.13.2 --locked
       - name: Build fuzz target
         run: cargo +nightly fuzz build ${{ matrix.target }}
       - name: Prepare seed corpus
@@ -108,13 +114,13 @@ jobs:
             budget: 300
             max_len: 2048
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@nightly
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: dtolnay/rust-toolchain@2c76c034f9e32a5d6e2c104dc4df23a22476db04 # nightly branch HEAD
         with:
           components: rustfmt
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@aa7c1c80a07a27a84c0aa76d0cef0aad3830e330 # v2.7.8
       - name: Install cargo-fuzz
-        run: cargo +nightly install cargo-fuzz --locked
+        run: cargo +nightly install cargo-fuzz --version 0.13.2 --locked
       - name: Build fuzz target
         run: cargo +nightly fuzz build ${{ matrix.target }}
       - name: Run fuzz campaign
@@ -128,7 +134,7 @@ jobs:
                -artifact_prefix=fuzz/artifacts/${{ matrix.target }}/
       - name: Upload artifacts on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: fuzz-artifacts-${{ matrix.target }}
           path: fuzz/artifacts/${{ matrix.target }}/

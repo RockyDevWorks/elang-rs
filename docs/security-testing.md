@@ -98,7 +98,8 @@ conformance corpus (T1408, binary form) are candidates for the
 # One-time: nightly toolchain (cargo-fuzz requires it).
 rustup toolchain install nightly --profile minimal \
     --component rustfmt --component clippy
-cargo +nightly install cargo-fuzz --locked
+# Pin cargo-fuzz itself; `--locked` only fixes the transitive graph.
+cargo +nightly install cargo-fuzz --version 0.13.2 --locked
 
 # Build every target (used by CI smoke job).
 cargo +nightly fuzz build
