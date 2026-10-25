@@ -82,7 +82,7 @@ proptest = "=1.12.0"
 # Dev-only — `elang-kdl`'s `[dev-dependencies]` is the only consumer;
 # the production binary never links `kdl`. ADR 0010's "hand-rolled"
 # rationale stands; this is a cross-check, not a replacement.
-kdl = "=6.5.0"
+kdl = "=6.7.1"
 
 # Workspace-wide lint policy (T0215). Untrusted-input safety is enforced by
 # denying panic-prone constructs. These are inherited via `[lints] workspace = true`.
