@@ -52,7 +52,7 @@ concurrency:
 jobs:
   package:
     name: Build + verify distributable artifact
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     env:
       CARGO_TERM_COLOR: never
