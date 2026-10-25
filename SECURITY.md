@@ -54,3 +54,13 @@ Please report suspected vulnerabilities privately to the maintainers rather than
 opening a public issue. Include a minimal reproducing input where possible.
 Reproducing archives should be shared as attachments, not pasted inline. We aim
 to acknowledge reports promptly and will coordinate disclosure.
+
+## Security testing
+
+The fuzzing, property-based, resource-exhaustion and extraction-security
+testing strategy — including the `cargo-fuzz` (libFuzzer) harnesses, the
+proptest property tests, the per-target smoke budgets and the nightly
+campaign schedule — is documented in
+[`docs/security-testing.md`](docs/security-testing.md). Recorded fuzz
+campaigns, regression fixtures and triage history live alongside the
+implementation; they are the evidence that backs the claims above.

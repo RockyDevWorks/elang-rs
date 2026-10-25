@@ -14,6 +14,12 @@ members = [
     "crates/elang-unicode",
     "crates/elang-writer",
 ]
+# Phase 15, T1501+ (Issue #25): the `fuzz/` crate uses cargo-fuzz and is
+# built on nightly with sanitizer instrumentation and a different lint
+# policy. It is intentionally excluded from `cargo build --workspace`
+# so stable and MSRV builds, `cargo clippy --workspace`, `cargo fmt`,
+# and CI keep their strict untrusted-input lint rules.
+exclude = ["fuzz"]
 
 # Centralized package metadata inherited by every crate via `package.workspace = true`.
 [workspace.package]

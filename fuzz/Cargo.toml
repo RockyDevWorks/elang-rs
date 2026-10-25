@@ -1,0 +1,38 @@
+[package]
+# Fuzz harness crate for elang-rs (Phase 15, Issue #25).
+# This crate is NOT a member of the main workspace — cargo-fuzz builds it on
+# nightly with its own profile and instrumentation. It is excluded from
+# `cargo build --workspace` and from the workspace lint policy by design.
+name = "elang-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "=0.4.10"
+
+# Internal crates under test. Paths are relative to this `fuzz/` directory,
+# not to the workspace root. Only pull in the crates needed for the targets
+# defined in this file; add new ones when adding new targets.
+elang-core = { path = "../crates/elang-core" }
+elang-container = { path = "../crates/elang-container" }
+elang-unicode = { path = "../crates/elang-unicode" }
+
+# Pin std-only fuzz targets by listing each target as its own [[bin]] with
+# `test = false`. libFuzzer drives the entry point; cargo test is not used.
+[[bin]]
+name = "container_structure"
+path = "fuzz_targets/container_structure.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "resource_path"
+path = "fuzz_targets/resource_path.rs"
+test = false
+doc = false
+bench = false

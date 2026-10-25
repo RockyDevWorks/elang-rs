@@ -1,0 +1,131 @@
+name: Fuzz
+
+# Phase 15 (Issue #25) fuzz infrastructure. Smoke-tests every cargo-fuzz
+# target on every PR, then runs longer nightly campaigns on a schedule.
+#
+# Per target the workflow:
+#   1. Builds the target with cargo-fuzz (smoke gate).
+#   2. Runs it for a short budget seeded from fuzz/seeds/<target>/.
+#   3. Asserts no crash artifact was produced.
+#
+# The nightly cron runs the same targets for longer budgets so coverage
+# evolves over time. Artifacts are kept for 7 days for triage.
+
+on:
+  pull_request:
+    paths:
+      - 'fuzz/**'
+      - 'crates/elang-core/**'
+      - 'crates/elang-container/**'
+      - 'crates/elang-unicode/**'
+      - '.github/workflows/fuzz.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'fuzz/**'
+      - 'crates/elang-core/**'
+      - 'crates/elang-container/**'
+      - 'crates/elang-unicode/**'
+  schedule:
+    # Daily at 04:00 UTC: longer fuzz campaigns, separate from the
+    # 05:30 cargo-audit cron in security.yml so they don't contend.
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: fuzz smoke (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: container_structure
+            budget: 60
+            max_len: 4096
+          - target: resource_path
+            budget: 30
+            max_len: 2048
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: Build fuzz target
+        run: cargo +nightly fuzz build ${{ matrix.target }}
+      - name: Prepare seed corpus
+        # The default corpus directory is git-ignored; copy the committed
+        # seeds in so libFuzzer has starting inputs. The generated corpus
+        # is left on disk for local follow-up, but not committed by CI.
+        run: |
+          mkdir -p "fuzz/corpus/${{ matrix.target }}"
+          cp -r "fuzz/seeds/${{ matrix.target }}/." "fuzz/corpus/${{ matrix.target }}/"
+      - name: Run fuzz target
+        run: |
+          set -euo pipefail
+          # `-runs=N` caps iterations; `-max_total_time` is the wall-clock
+          # budget. We assert the exit code is 0 (libFuzzer returns
+          # non-zero only when it discovers a crash).
+          cargo +nightly fuzz run "${{ matrix.target }}" \
+            -- -max_total_time=${{ matrix.budget }} \
+               -max_len=${{ matrix.max_len }} \
+               -print_final_stats=1
+      - name: Check no crash artifact
+        # Belt-and-suspenders: even if libFuzzer returned 0, a stray
+        # crash artifact would still indicate a defect.
+        run: |
+          if compgen -G "fuzz/artifacts/${{ matrix.target }}/crash-*" > /dev/null; then
+            echo "::error::Crash artifact produced for ${{ matrix.target }}"
+            exit 1
+          fi
+
+  nightly:
+    # Longer campaigns, schedule-only. Skipped on PRs so they don't
+    # block reviews.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    name: fuzz nightly (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    needs: smoke
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: container_structure
+            budget: 600
+            max_len: 4096
+          - target: resource_path
+            budget: 300
+            max_len: 2048
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: Build fuzz target
+        run: cargo +nightly fuzz build ${{ matrix.target }}
+      - name: Run fuzz campaign
+        run: |
+          mkdir -p fuzz/corpus/${{ matrix.target }}
+          cp -r fuzz/seeds/${{ matrix.target}}/. fuzz/corpus/${{ matrix.target }}/
+          cargo +nightly fuzz run ${{ matrix.target }} \
+            -- -max_total_time=${{ matrix.budget }} \
+               -max_len=${{ matrix.max_len }} \
+               -print_final_stats=1 \
+               -artifact_prefix=fuzz/artifacts/${{ matrix.target }}/
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}/
+          retention-days: 7
