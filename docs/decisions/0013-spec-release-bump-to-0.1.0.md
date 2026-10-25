@@ -71,16 +71,15 @@ flip and is committed together with it.
   the public versioning page are self-consistent with the steering contract
   and with the normative manifest.
 - `error-codes.json`'s declared `spec_release` matches the constant in
-  `elang-core`; consumers of the registry that read `spec_release` see the
-  same value the implementation targets.
+  `elang-core` and identifies the specification release the implementation
+  targets.
 - `PINNED_SPEC_CHECKSUM` is updated in the same change; the corpus drift test
   asserts the new checksum matches the regenerated manifest bytes.
-- The dash-suffix is gone. Any external document that parsed the spec
-  release as a semver-with-prerelease (`0.0.1-1`) will need to accept the
-  clean `0.1.0` form. No external document is known to do so today; the only
-  known parsers are the project's own `SemVer::parse` (which accepts both)
-  and the registry JSON reader (which treats the value as an opaque
-  identifier).
+- The old specification release `0.0.1-1` was an opaque registry identifier.
+  The new identifier `0.1.0` also fits the strict `MAJOR.MINOR.PATCH` grammar
+  accepted by `SemVer::parse`; that parser rejects the old dash-suffixed
+  identifier. External consumers that compare the specification release
+  identifier must update their expected value.
 - The CHANGELOG entry under `[Unreleased]` records the bump and cites this
   ADR so reviewers can trace the rationale.
 
