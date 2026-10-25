@@ -163,9 +163,9 @@
 - [ ] **T0509** Enforce <=256 MiB decoded string bytes/resource and <=1 GiB/archive.
 - [ ] **T0510** Enforce <=10,000,000 semantic references/archive and traversal depth <=128.
 - [ ] **T0511** Reject duplicate singleton fields, extra args, unknown properties/nodes at schema layer.
-- [ ] **T0512** Support permitted source comments and arbitrary KDL 2.0 whitespace.
-- [ ] **T0513** Implement canonical standard double-quoted KDL string emitter.
-- [ ] **T0514** Test escapes, source comments, pathological nesting, token limits and Unicode edge cases.
+- [x] **T0512** Support permitted source comments and arbitrary KDL 2.0 whitespace.
+- [x] **T0513** Implement canonical standard double-quoted KDL string emitter.
+- [x] **T0514** Test escapes, source comments, pathological nesting, token limits and Unicode edge cases.
 - [ ] **T0515** Fuzz lexer/parser and enforce bounded time/memory.
 
 **Acceptance:** KDL 2.0 parser passes spec fixtures; all budgets fail closed before unbounded allocation.
