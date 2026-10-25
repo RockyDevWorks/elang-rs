@@ -1,0 +1,11 @@
+epf "0.1.0"
+eld "0.1.0"
+language-version "1.0.0"
+metadata {
+    name "Conformance Full"
+    description "Full-featured reference package."
+    identifier "urn:elang:language:rocky:conformance-full:1.0.0"
+}
+manifest {
+    phonemes "Linguistics/phonemes.eld"
+}

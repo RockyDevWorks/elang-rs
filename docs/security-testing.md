@@ -36,15 +36,23 @@ libFuzzer and drives it through one parser chain. The target name maps
 |---------------------|--------|----------------------------------------------------------------------------------------------------------|
 | `container_structure` | T1501  | `Header::decode`, `Footer::decode`, `Index::decode` against arbitrary bytes                            |
 | `resource_path`       | T1502  | UTF-8 → NFC → `ResourcePath::new` chain against arbitrary bytes                                      |
-| `zstd_frame`          | T1503  | Zstd frame-header parse and bounded decompression                                                      |
-| `kdl_parser`          | T1504  | KDL 2.0 parser and AST construction                                                                     |
-| `epf_schema`          | T1505  | EPF schema validation                                                                                   |
-| `eld_schema`          | T1506  | ELD structural validation                                                                               |
-| `ipa_tokenizer`       | T1507  | IPA tokenizer, tie-bar and modifier parser                                                              |
-| `phon_condition`      | T1508  | phonological condition AST, evaluator and canonical sorting key                                         |
+| `zstd_frame`          | T1503  | Zstd frame-header inspection + bounded streaming decode with a 1 MiB per-resource ceiling             |
+| `kdl_parser`          | T1504  | KDL 2.0 parser and AST construction, with both per-resource and archive-wide `BudgetTracker`s         |
+| `epf_schema`          | T1505  | EPF schema validation, including the 1 MiB `MAX_EPF_BYTES` input-size cap                              |
+| `eld_schema`          | T1506  | ELD structural validation (groups, roots, allophones, IPA, romanization, tie-bar uniqueness)          |
+| `ipa_tokenizer`       | T1507  | IPA unit-splitter, tie-bar state machine, modifier classifier, and comparison-key normalisation        |
+| `phon_condition`      | T1508  | condition AST builder, canonical key + sort helpers, depth introspection, and pure evaluator           |
 
-Targets in this PR (T1501 + T1502); the remaining six land in subsequent
-Phase 15 PRs.
+Targets T1501 + T1502 landed in PR #55; T1503–T1508 land in this PR. The
+remaining Phase 15 tasks (T1512–T1520, resource-limit tests and
+supply-chain audit) follow in subsequent PRs.
+
+The fuzz crate is wired so each target is its own `[[bin]]` entry in
+`fuzz/Cargo.toml` and its own row in the `smoke` / `nightly` matrices of
+`.github/workflows/fuzz.yml`. Per-target budgets are tuned to the cost
+of the parser under test: Zstd decode gets the largest budget because
+it is the most expensive codepath; the cheap IPA tokenizer and
+condition AST get smaller ones.
 
 ### Lint policy
 
@@ -119,10 +127,18 @@ Per-target smoke budgets (configured in `.github/workflows/fuzz.yml`):
 |---------------------|------------------------|--------------------------|
 | `container_structure` | 60 s                  | 600 s                    |
 | `resource_path`       | 30 s                  | 300 s                    |
+| `zstd_frame`          | 60 s                  | 600 s                    |
+| `kdl_parser`          | 30 s                  | 300 s                    |
+| `epf_schema`          | 45 s                  | 450 s                    |
+| `eld_schema`          | 45 s                  | 450 s                    |
+| `ipa_tokenizer`       | 30 s                  | 300 s                    |
+| `phon_condition`      | 45 s                  | 450 s                    |
 
-The first PR landed only T1501 + T1502. As later PRs add more targets,
-each new target inherits the same smoke + campaign pattern with budgets
-proportional to the surface area under test.
+The per-target `-max_len` for each `cargo +nightly fuzz run` call is
+configured in `.github/workflows/fuzz.yml` alongside the time budget:
+Zstd decode and KDL lexing take 4 KiB; EPF/ELD/condition docs take 8
+KiB; IPA identifiers are capped at 256 B (the maximum 8-scalar
+identifier is well under that).
 
 ## Reproducing a failure
 
@@ -133,7 +149,7 @@ When libFuzzer finds a crashing input it writes it to
 cargo +nightly fuzz run container_structure fuzz/artifacts/container_structure/crash-<hash>
 ```
 
-The repro runs the original input through the target outside of the
+The repro runs the original input through the target outside the
 fuzzer loop. The corresponding entry then becomes a regression fixture
 under `crates/<relevant>/tests/regressions/`, with a corresponding
 issue and Phase 15 T1519 regression-coverage update.

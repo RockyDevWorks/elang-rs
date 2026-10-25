@@ -1,0 +1,8 @@
+epf "0.1.0"
+eld "0.1.0"
+language-version "1.0.0"
+metadata {
+    identifier "not-a-urn"
+    name "Conformance Minimal"
+}
+manifest {}
