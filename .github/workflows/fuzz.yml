@@ -206,14 +206,38 @@ jobs:
       - name: Run fuzz campaign
         run: |
           mkdir -p fuzz/corpus/${{ matrix.target }}
+          mkdir -p fuzz/artifacts/${{ matrix.target }}
           if compgen -G "fuzz/seeds/${{ matrix.target }}/*" > /dev/null; then
             cp -r "fuzz/seeds/${{ matrix.target }}/." "fuzz/corpus/${{ matrix.target }}/"
           fi
+          # `tee` the libFuzzer output so we can grep the final-stats
+          # line in the next step without losing the on-disk stream
+          # (libFuzzer also writes its own log lines via -artifact_prefix).
           cargo +nightly fuzz run ${{ matrix.target }} \
             -- -max_total_time=${{ matrix.budget }} \
                -max_len=${{ matrix.max_len }} \
                -print_final_stats=1 \
-               -artifact_prefix=fuzz/artifacts/${{ matrix.target }}/
+               -artifact_prefix=fuzz/artifacts/${{ matrix.target }}/ \
+            2>&1 | tee fuzz/artifacts/${{ matrix.target }}/campaign.log
+      - name: Persist campaign stats
+        # Capture the final libFuzzer stats line into the step summary
+        # so the audit trail (workflow run page) records what each
+        # nightly campaign did. We grep the SUMMARY: line, which
+        # libFuzzer emits at end-of-run with the final coverage /
+        # corpus / exec counters.
+        if: always()
+        run: |
+          if [ -f fuzz/artifacts/${{ matrix.target }}/campaign.log ]; then
+            {
+              echo "## libFuzzer campaign stats for ${{ matrix.target }}"
+              echo
+              echo '```'
+              grep -E '^(SUMMARY:|STAT:|cov:|exec/s:|corpus:)' \
+                fuzz/artifacts/${{ matrix.target }}/campaign.log \
+                | tail -10
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Upload artifacts on failure
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

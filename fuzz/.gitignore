@@ -2,3 +2,6 @@ target
 corpus
 artifacts
 coverage
+# Per-campaign libFuzzer stdout stream, regenerated on every fuzz run.
+# Not a regression fixture — see fuzz/regressions/ for those.
+**/campaign.log
