@@ -458,10 +458,10 @@ _(`allophone_empty_block`, `phoneme_empty_block`, `phonemes_empty_block`, `empty
 - [ ] **T1512** Add memory/time tests for max node, string, comment and reference budgets.
 - [ ] **T1513** Add decompression-bomb, giant-offset and integer-overflow tests.
 - [ ] **T1514** Add extraction path traversal, symlink and overwrite tests.
-- [ ] **T1515** Audit unsafe code/FFI boundaries and pinned libzstd linkage.
-- [ ] **T1516** Run dependency vulnerability and license audits.
-- [ ] **T1517** Verify no untrusted input can trigger panic or out-of-bounds access.
-- [ ] **T1518** Run differential tests against independent fixture parser/encoder where feasible.
+- [x] **T1515** Audit unsafe code/FFI boundaries and pinned libzstd linkage.
+- [x] **T1516** Run dependency vulnerability and license audits.
+- [x] **T1517** Verify no untrusted input can trigger panic or out-of-bounds access.
+- [x] **T1518** Run differential tests against independent fixture parser/encoder where feasible.
 - [ ] **T1519** Triage all fuzz findings and add regression fixtures.
 - [ ] **T1520** Document security limits and remaining trust/authenticity limitations.
 

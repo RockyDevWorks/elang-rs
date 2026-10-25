@@ -151,3 +151,97 @@ The recorded budget, seed set and CI integration are evidence of a
 structured adversarial search, not a guarantee that the implementation
 is free of remaining defects. See [SECURITY.md §Non-goals](../SECURITY.md)
 for the explicit trust limitations of ELANG v0.1.0.
+
+## Security audits (T1515–T1518)
+
+Phase 15 also closes four audit-style tasks that are not fuzz harnesses
+themselves but produce the evidence the threat model in
+[SECURITY.md](../SECURITY.md) is enforced by.
+
+### T1515 — `unsafe` / FFI / libzstd linkage audit
+
+The workspace contains **one** `unsafe` block. It lives at
+[`crates/elang-container/src/frame.rs:497`](../crates/elang-container/src/frame.rs)
+and is a single `zstd_sys::ZSTD_getErrorCode(e)` call inside the
+streaming-decode error mapper. The block carries a SAFETY comment
+(`zstd-safe 8.2.0 has no safe error-code accessor`) and a
+`#[allow(unsafe_code, reason = "...")]` attribute. No other crate in
+the workspace uses `unsafe`.
+
+The libzstd pin is enforced at three layers:
+
+- **Workspace dep pin** in [`Cargo.toml`](../Cargo.toml):
+  `zstd = "=0.14.3"`, `zstd-safe = "=8.2.0"`, `zstd-sys = "=2.1.2"` —
+  all three exact pins.
+- **Compile-time constant** at
+  [`crates/elang-container/src/frame.rs:66`](../crates/elang-container/src/frame.rs):
+  `PINNED_LIBZSTD_VERSION: u32 = 10_507;` (i.e. 1.5.7).
+- **Runtime FFI check** via
+  [`linked_libzstd_version()`](../crates/elang-container/src/frame.rs),
+  asserted by `pinned_zstd_constant_is_157` and `linked_libzstd_is_157`
+  in `frame/tests.rs`.
+
+### T1516 — dependency vulnerability and license audit
+
+`cargo audit` and `cargo deny` are wired into CI via
+[`.github/workflows/security.yml`](../.github/workflows/security.yml).
+The `security.yml` workflow runs on every push to `main` and on a
+nightly cron at 05:30 UTC. At the time of T1516 closure both tools
+report clean:
+
+- `cargo audit`: 55 dependencies scanned, 0 advisories.
+- `cargo deny check`: `advisories ok, bans ok, licenses ok, sources ok`.
+  Warnings about un-encountered allow-listed licenses
+  (`BSD-2-Clause`, `ISC`, `NCSA`, `Unicode-DFS-2016`, `Zlib`) are
+  expected — they cover future dependency choices and stay in the
+  policy so adding a same-license dep never trips the check.
+
+License allow-list is in [`deny.toml`](../deny.toml). The T1518
+differential harness adds `kdl = "=6.5.0"` (Apache-2.0, already in
+the allow list) as a `[dev-dependency]` of `elang-kdl` only.
+
+### T1517 — panic / out-of-bounds on untrusted input
+
+The workspace lint policy
+([`Cargo.toml [workspace.lints]`](../Cargo.toml)) denies, with `-D
+warnings` in CI:
+
+- `clippy::unwrap_used` / `clippy::expect_used` / `clippy::panic`
+  / `clippy::indexing_slicing` — every panic-prone path on untrusted
+  data fails the build before merge.
+- `clippy::arithmetic_side_effects` / `cast_possible_truncation` /
+  `cast_sign_loss` / `cast_possible_wrap` — every unchecked integer
+  math or cast on untrusted data fails the build before merge.
+
+Combined with the 8 fuzz targets (T1501–T1508, see
+[## Fuzz targets](#fuzz-targets)), which run on every PR smoke and
+nightly campaign, the panic/OOB surface is structurally enforced and
+fuzz-checked.
+
+### T1518 — differential tests against an independent parser
+
+[`crates/elang-kdl/tests/differential.rs`](../crates/elang-kdl/tests/differential.rs)
+cross-checks `elang-kdl` against the official `kdl` crate (kdl-rs v6.5.0)
+on a corpus of KDL 2.0 spec inputs:
+
+1. **Accept/reject verdict agreement** — both parsers must agree on
+   accept for spec shapes both implement, and on reject for KDL 1.0
+   shapes and KDL 2.0 syntax errors.
+2. **Top-level node name agreement** — for inputs both accept, the
+   sequence of top-level node names must match (after `kdl-rs`'s
+   quote stripping).
+3. **Spec-surface coverage** — the corpus covers every documented
+   KDL 2.0 surface (value forms, escape sequences, raw strings,
+   slashdash, comments, version pragma, type annotations,
+   unicode identifiers) and at least one reject + one elang-only
+   accept case.
+
+Cases where the reference parser has *dropped* a spec surface (e.g.
+`/kdl-version "2.0"` in `kdl-rs` v6 — the v6 series no longer
+parses the version pragma) are flagged as `elang_only_accept`, not
+disagreements. The harness asserts the asymmetry rather than
+allowing it to drift silently.
+
+This is a structural check, not a tautology: a grammar drift in
+either parser surfaces as a verdict or node-name mismatch with the
+case id and the source pinned in the corpus.
