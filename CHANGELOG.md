@@ -10,6 +10,22 @@ and this project uses independent version domains (see
 
 ### Added
 
+- **Release-artifact packaging (T1617 preparation).**
+  `scripts/build-release-artifacts.sh` assembles the distributable source
+  artifact (`elang-v0.1.0.tar.gz`) plus a SHA-256 sidecar. The artifact's
+  bytes depend on file *contents* only — entries sorted by path, ownership
+  forced to `0:0`, every timestamp forced to the Unix epoch, and a gzip
+  header carrying neither filename nor timestamp — so two builds of the
+  same tree produce the same digest. The script refuses to report success
+  unless the archive holds exactly the files it was asked to pack — the
+  archive's member names are compared with the file list, not just their
+  count — and it refuses an `--out-dir` inside the repository unless that
+  path is git-ignored, so the artifact can never be packed into itself.
+  It **creates no tag, publishes nothing, signs nothing and makes no network
+  call**; the tag, the signature and the publication remain the human
+  release step. `crates/elang-conformance/tests/release_packaging.rs`
+  asserts the same property in CI.
+
 - Phase 0 scaffold: Cargo workspace with nine crates
   (`elang-core`, `elang-container`, `elang-kdl`, `elang-epf`, `elang-eld`,
   `elang-repertoire`, `elang-integrity`, `elang-conformance`, `elang-cli`).
@@ -64,6 +80,16 @@ and this project uses independent version domains (see
   by the real pipeline via
   `cargo run -p elang-conformance --bin gen_canonical_goldens`; regeneration
   is byte-identical and no digest is hand-written.
+
+### Fixed
+
+- **Crate `repository` metadata pointed at a repository that does not
+  exist.** All twelve crates inherit `repository` from
+  `[workspace.package]`, which read
+  `https://github.com/elang-lang/elang-rs` — a URL that returns 404. Every
+  published crate would have carried a dead repository link, and crates.io
+  derives the *Documentation* link from it. Corrected to
+  `https://github.com/RockyDevWorks/elang-rs`.
 
 ### Notes
 
