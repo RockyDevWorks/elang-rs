@@ -1279,18 +1279,49 @@ fn extract_body_handles_generics_and_return_types() {
 mod coverage_gap_tests {
     use super::*;
 
-    /// Write `source` into a scratch directory outside the repository
-    /// and return the file's path.
+    /// A scratch directory outside the repository that removes itself
+    /// when it goes out of scope.
     ///
-    /// The scratch directory lives under the process temp dir (never
-    /// inside the repository working tree) and is removed by the
-    /// caller.
-    fn scratch_file(name: &str, source: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("elang-when-gap-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("create scratch dir");
-        let path = dir.join(name);
+    /// The cleanup runs on drop, so it also happens when an assertion
+    /// fails — a failed test must not leave scratch files behind.
+    struct ScratchDir {
+        path: PathBuf,
+    }
+
+    impl Drop for ScratchDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
+
+    /// Create a fresh, uniquely named scratch directory.
+    ///
+    /// The counter keeps concurrently running tests apart: the test
+    /// harness runs tests in parallel threads of one process, and a
+    /// shared directory name would let one test delete another's files.
+    fn scratch_dir() -> ScratchDir {
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+        let unique = format!(
+            "elang-when-gap-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        );
+        let path = std::env::temp_dir().join(unique);
+        std::fs::create_dir_all(&path).expect("create scratch dir");
+        ScratchDir { path }
+    }
+
+    /// Write `source` into a scratch directory outside the repository
+    /// and return the file's path together with the guard that removes
+    /// the directory again.
+    fn scratch_file(name: &str, source: &str) -> (PathBuf, ScratchDir) {
+        let dir = scratch_dir();
+        let path = dir.path.join(name);
         std::fs::write(&path, source).expect("write scratch file");
-        path
+        (path, dir)
     }
 
     /// The text of the assertion argument list at `span`.
@@ -1310,7 +1341,7 @@ mod coverage_gap_tests {
         // `xfn target` contains the needle `fn target` but not at a
         // token boundary, so the scanner must keep searching and
         // finally give up rather than extracting the wrong body.
-        let path = scratch_file("non_boundary.rs", "xfn target() { let s = 1; }");
+        let (path, _guard) = scratch_file("non_boundary.rs", "xfn target() { let s = 1; }");
         assert!(extract_body(&path, "target").is_none());
     }
 
@@ -1318,7 +1349,7 @@ mod coverage_gap_tests {
     fn coverage_gap_extract_body_rejects_a_bodyless_declaration() {
         // A trait method has no body; the `;` at depth zero ends the
         // scan instead of an opening brace.
-        let path = scratch_file("bodyless.rs", "fn target(&self);");
+        let (path, _guard) = scratch_file("bodyless.rs", "fn target(&self);");
         assert!(extract_body(&path, "target").is_none());
     }
 

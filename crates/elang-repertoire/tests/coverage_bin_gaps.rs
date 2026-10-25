@@ -36,14 +36,24 @@ fn gen_repertoire_reproduces_the_pinned_json() {
     let schema_dir = workdir.join("specs").join("schema");
     fs::create_dir_all(&schema_dir).expect("scratch schema directory is created");
 
+    // Remove the previous run's output first. Otherwise a generator that
+    // exits successfully *without* writing the file would still be
+    // satisfied by the stale file from an earlier run, and the assertion
+    // below would pass without proving that this run wrote anything.
+    let output_path = schema_dir.join("ipa-v1.json");
+    match fs::remove_file(&output_path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => panic!("stale generator output cannot be removed: {error}"),
+    }
+
     let output = Command::new(env!("CARGO_BIN_EXE_gen_repertoire"))
         .current_dir(&workdir)
         .output()
         .expect("the generator runs");
     assert!(output.status.success(), "generator failed: {output:?}",);
 
-    let generated =
-        fs::read_to_string(schema_dir.join("ipa-v1.json")).expect("the generator wrote its output");
+    let generated = fs::read_to_string(&output_path).expect("the generator wrote its output");
     assert_eq!(
         generated, REPERTOIRE_JSON,
         "the generator must reproduce the pinned repertoire JSON byte-for-byte"

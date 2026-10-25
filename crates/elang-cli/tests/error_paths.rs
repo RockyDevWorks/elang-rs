@@ -10,10 +10,17 @@
 
 #![allow(clippy::expect_used, clippy::panic, clippy::arithmetic_side_effects)]
 
-use std::ffi::OsStr;
-use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
+
+// Constructing a non-UTF-8 `OsStr` needs the platform's own extension
+// trait: Unix takes raw bytes, Windows takes UTF-16. Only the Unix side is
+// exercised here; the Windows runner skips the argument-decoding tests
+// rather than carrying a second, differently-shaped implementation.
+#[cfg(unix)]
+use std::ffi::OsStr;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt;
 
 use elang_container::ArchiveListing;
 
@@ -83,6 +90,10 @@ fn stdout_of(out: &Output) -> String {
 /// `pico-args` reports `NonUtf8Argument` for both a non-UTF-8 subcommand and
 /// a non-UTF-8 option value, which is the only way to reach the CLI's
 /// argument-decoding failure paths.
+///
+/// Unix only: the raw-byte constructor does not exist on Windows, where an
+/// `OsStr` is UTF-16 and a non-UTF-8 value needs a lone surrogate.
+#[cfg(unix)]
 fn non_utf8_arg() -> &'static OsStr {
     OsStr::from_bytes(&[0xff, 0xfe])
 }
@@ -129,6 +140,9 @@ fn build_archive_from(tmp: &TempDir, epf_bytes: &[u8]) -> PathBuf {
 /// The writer API is used directly because the CLI has no flag for extra
 /// resources; the payload is what makes the extraction hit a file-size
 /// limit.
+///
+/// Linux only: the only consumer is the `ulimit -f` test below.
+#[cfg(target_os = "linux")]
 fn build_archive_with_a_large_resource(tmp: &TempDir, size: usize) -> PathBuf {
     let epf = elang_epf::parse(EPF_FIXTURE).expect("parse epf");
     let repertoire = elang_repertoire::repertoire::load().expect("load repertoire");
@@ -157,6 +171,8 @@ fn build_archive_with_a_large_resource(tmp: &TempDir, size: usize) -> PathBuf {
 // Argument decoding
 // ---------------------------------------------------------------------------
 
+// Unix only: a non-UTF-8 subcommand can only be built from raw bytes.
+#[cfg(unix)]
 #[test]
 /// `elang rejects a non utf-8 subcommand and exits two`.
 fn a_non_utf8_subcommand_is_reported_and_exits_two() {
@@ -177,6 +193,8 @@ fn a_non_utf8_subcommand_is_reported_and_exits_two() {
     );
 }
 
+// Unix only: a non-UTF-8 subcommand can only be built from raw bytes.
+#[cfg(unix)]
 #[test]
 /// `elang json mode reports a non utf-8 subcommand as a dispatch envelope`.
 fn a_non_utf8_subcommand_emits_a_dispatch_envelope_in_json_mode() {
@@ -202,6 +220,8 @@ fn a_non_utf8_subcommand_emits_a_dispatch_envelope_in_json_mode() {
     );
 }
 
+// Unix only: a non-UTF-8 option value can only be built from raw bytes.
+#[cfg(unix)]
 #[test]
 /// `elang pack rejects a non utf-8 option value and exits two`.
 fn pack_rejects_a_non_utf8_option_value_and_exits_two() {
@@ -275,6 +295,8 @@ fn pack_without_an_output_flag_exits_two() {
     );
 }
 
+// Unix only: a non-UTF-8 option value can only be built from raw bytes.
+#[cfg(unix)]
 #[test]
 /// `elang unpack rejects a non utf-8 output value and exits two`.
 fn unpack_rejects_a_non_utf8_output_value_and_exits_two() {
@@ -571,6 +593,8 @@ fn unpack_reports_an_output_directory_it_cannot_resolve() {
     );
 }
 
+// Unix only: POSIX symlinks. Windows needs a privilege to create one.
+#[cfg(unix)]
 #[test]
 /// `elang unpack refuses to write through a symlinked parent directory`.
 fn unpack_refuses_to_write_through_a_symlinked_parent_directory() {
@@ -607,6 +631,8 @@ fn unpack_refuses_to_write_through_a_symlinked_parent_directory() {
     );
 }
 
+// Unix only: POSIX symlinks. Windows needs a privilege to create one.
+#[cfg(unix)]
 #[test]
 /// `elang unpack follows a symlinked parent directory that stays inside the output tree`.
 fn unpack_follows_a_symlinked_parent_directory_inside_the_output_tree() {
@@ -638,10 +664,14 @@ fn unpack_follows_a_symlinked_parent_directory_inside_the_output_tree() {
 }
 
 /// Restores a directory's write permission when it goes out of scope.
+///
+/// Unix only: the mode is a POSIX permission bit set.
+#[cfg(unix)]
 struct WritePermGuard {
     path: PathBuf,
 }
 
+#[cfg(unix)]
 impl Drop for WritePermGuard {
     /// Restore the directory mode so the temporary directory can be removed.
     fn drop(&mut self) {
@@ -650,6 +680,8 @@ impl Drop for WritePermGuard {
     }
 }
 
+// Unix only: removing write permission is a POSIX mode bit.
+#[cfg(unix)]
 #[test]
 /// `elang unpack reports a directory it cannot create inside the output tree`.
 fn unpack_reports_a_directory_it_cannot_create_inside_the_output_tree() {
@@ -665,6 +697,15 @@ fn unpack_reports_a_directory_it_cannot_create_inside_the_output_tree() {
     let _guard = WritePermGuard {
         path: out_dir.clone(),
     };
+    // A privileged process bypasses the mode bits, so the setup below
+    // cannot make the CLI fail. Probe for that and skip the test rather
+    // than asserting an outcome the environment cannot produce.
+    let probe = out_dir.join("probe");
+    if std::fs::create_dir(&probe).is_ok() {
+        let _ = std::fs::remove_dir(&probe);
+        eprintln!("skipped: this process can write to a 0555 directory");
+        return;
+    }
 
     let out = run(&[
         "unpack",
@@ -745,6 +786,11 @@ fn unpack_reports_a_resource_it_cannot_create() {
     );
 }
 
+// Linux only: `ulimit -f` raises SIGXFSZ on exceeding the ceiling. Linux
+// returns EFBIG from the write when the signal is ignored; on macOS the
+// process is killed by the signal instead, so the CLI never reaches its
+// own diagnostic. The behaviour under test is Linux's.
+#[cfg(target_os = "linux")]
 #[test]
 /// `elang unpack reports a resource it cannot write`.
 fn unpack_reports_a_resource_it_cannot_write() {
@@ -760,15 +806,19 @@ fn unpack_reports_a_resource_it_cannot_write() {
     let tmp = tempdir();
     let archive = build_archive_with_a_large_resource(&tmp, LIMIT_BYTES + 1);
     let out_dir = tmp.child("out");
+    // The paths are passed as positional parameters rather than
+    // interpolated into the script text: a temporary path containing an
+    // apostrophe would otherwise terminate the shell quote.
     let script = format!(
-        "trap '' XFSZ; ulimit -f {LIMIT_BLOCKS}; exec '{}' unpack '{}' --output '{}'",
-        bin(),
-        archive.display(),
-        out_dir.display()
+        "trap '' XFSZ; ulimit -f {LIMIT_BLOCKS}; exec \"$1\" unpack \"$2\" --output \"$3\""
     );
     let out = Command::new("sh")
         .arg("-c")
         .arg(&script)
+        .arg("sh")
+        .arg(bin())
+        .arg(&archive)
+        .arg(&out_dir)
         .output()
         .expect("run elang under a file-size limit");
     assert_eq!(

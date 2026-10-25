@@ -200,9 +200,16 @@ mod tests {
     /// A field whose value is all digits but does not fit in a `u64` is
     /// skipped, not fatal: the parse continues and the missing field
     /// leaves the sample absent.
+    ///
+    /// The other two fields are present and valid, so the overflow of
+    /// `VmHWM` is the only reason the sample can be absent. Without them
+    /// the parse would also fail on the missing fields, and the test
+    /// would pass even if the overflowing value were accepted.
     #[test]
     fn coverage_gap_a_value_that_does_not_fit_u64_is_skipped() {
-        let body = "VmHWM: 999999999999999999999999 kB\n";
+        let body = "VmHWM: 999999999999999999999999 kB\n\
+                    VmRSS: 1024 kB\n\
+                    VmPeak: 2048 kB\n";
         assert!(parse_proc_self_status(body).is_none());
     }
 

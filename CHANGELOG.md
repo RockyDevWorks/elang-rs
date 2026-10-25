@@ -42,7 +42,19 @@ and this project uses independent version domains (see
   It **creates no tag, publishes nothing, signs nothing and makes no network
   call**; the tag, the signature and the publication remain the human
   release step. `crates/elang-conformance/tests/release_packaging.rs`
-  asserts the same property in CI.
+  asserts the same property in CI. The script requires GNU `tar` and
+  therefore builds the release on Linux; it refuses an `--out-dir` inside
+  the repository unless the output *directory* is git-ignored (a
+  `*.tar.gz` glob would ignore the archive but not its `.sha256` sidecar),
+  and `--verify` compares the digest of the artifact it actually delivers
+  against the two scratch builds it proved reproducible.
+
+- **Portable coverage tests.** The new CLI error-path tests are gated per
+  platform: the non-UTF-8 argument tests and the POSIX symlink and
+  permission tests run on Unix, and the file-size-limit test runs on Linux
+  only, because exceeding `ulimit -f` raises `SIGXFSZ` there and kills the
+  process on macOS. The Windows and macOS CI jobs therefore compile and run
+  the same suite instead of failing on a Unix-only API.
 
 - Phase 0 scaffold: Cargo workspace with nine crates
   (`elang-core`, `elang-container`, `elang-kdl`, `elang-epf`, `elang-eld`,
