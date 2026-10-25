@@ -20,9 +20,11 @@ name: Package
 #
 # # What this uploads
 #
-# * `dist/elang-v<version>.tar.gz` — the distributable source artifact
-#   (tracked files + untracked-but-not-ignored files, sorted by path).
-# * `dist/elang-v<version>.tar.gz.sha256` — the sidecar in `sha256sum` format.
+# * `target/release-artifacts/elang-v<version>.tar.gz` — the
+#   distributable source artifact (tracked files +
+#   untracked-but-not-ignored files, sorted by path).
+# * `target/release-artifacts/elang-v<version>.tar.gz.sha256` — the
+#   sidecar in `sha256sum` format.
 #
 # The archive is uploaded as a workflow artifact so every PR and every
 # `main` push has a downloadable, hashable copy of the source release.
@@ -36,8 +38,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Least-privilege: read-only is enough; we only write to `dist/` and
-# upload to the workflow's artifact store.
+# Least-privilege: read-only is enough; we only write to
+# `target/release-artifacts/` (git-ignored via `/target`) and upload to
+# the workflow's artifact store. No token is needed for either step
+# beyond what the runner provides.
 permissions:
   contents: read
 
@@ -57,7 +61,7 @@ jobs:
       RUSTUP_TOOLCHAIN: stable
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # `persist-credentials: false` ensures the auto-provisioned
           # GITHUB_TOKEN is not cached in `.git/config` after checkout.
@@ -68,12 +72,12 @@ jobs:
           persist-credentials: false
 
       - name: Install pinned Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: stable
 
       - name: Cache target/
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e9d7b9f1e587218970671bac74e5511ed9506e6a # v2
         with:
           cache-on-failure: true
 

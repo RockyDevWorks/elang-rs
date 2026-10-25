@@ -43,7 +43,7 @@ happens on a separate commit, gated by independent review.
 
 | Task | Why |
 |---|---|
-| **T1617** `v0.1.0` tag + signed release artifacts | User handles the tag entirely; this branch must not create it. The artifact *build* step is automated and CI-verified (`scripts/build-release-artifacts.sh`); only the tag, the signature and the publication remain. |
+| **T1617** `v0.1.0` tag + signed release artifacts | The **tag** and the **publisher-authenticity signature** are human-gated: a maintainer creates `v0.1.0` locally, signs it with the project signing key, and pushes the signed tag. This branch (PR #73) MUST NOT create the tag or push a signature. The **artifact build**, **byte-reproducibility verification**, and **GitHub Release publication** are all automated by `.github/workflows/release.yml` on tag push: the workflow re-runs the verified packaging script, writes the integrity-attestation release notes, and creates the release with the tarball + `.sha256` sidecar + lockfile attestation + archive digests as release assets. What stays human is the *trigger* and the *authenticity claim*, not the *publish* step. |
 | **T1620** Final v0.1.0 release declaration | Depends on T1616 + the tag + every gate; not part of this workstream. |
 
 ## Measured outputs vs. reproducible outputs

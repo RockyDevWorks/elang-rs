@@ -67,7 +67,7 @@ jobs:
       RUSTUP_TOOLCHAIN: stable
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # `gen_release_archive` reads the resolved dep set from
           # `Cargo.lock` and computes its SHA-256, and `scripts/build-release-artifacts.sh`
@@ -83,12 +83,12 @@ jobs:
           persist-credentials: false
 
       - name: Install pinned Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: stable
 
       - name: Cache target/
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e9d7b9f1e587218970671bac74e5511ed9506e6a # v2
         with:
           cache-on-failure: true
 
@@ -213,11 +213,17 @@ jobs:
           } > target/release-artifacts/RELEASE-NOTES.md
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ github.ref_name }}
           name: ELANG ${{ env.RELEASE_VERSION }}
           body_path: target/release-artifacts/RELEASE-NOTES.md
+          # Mark release candidates as pre-releases on the GitHub UI so
+          # `v0.1.0-rc1` does not appear to users as a stable release.
+          # `softprops/action-gh-release` evaluates this expression at
+          # publish time; we read `RELEASE_VERSION` (already validated
+          # by the version step) and check for the `-rc` suffix.
+          prerelease: ${{ contains(env.RELEASE_VERSION, '-rc') }}
           # `fail_on_unmatched_files: true` means a missing release asset
           # fails the release. Better to abort a release than to publish
           # a release without its lockfile attestation or sidecar.
