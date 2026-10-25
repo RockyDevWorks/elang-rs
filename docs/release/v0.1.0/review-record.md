@@ -14,6 +14,11 @@
 > which is itself evidence that the review is not a formality.
 > Every finding carries its source in the `Source` column.**
 >
+> Nine further findings (#42–#50) were raised on PR #71, which added the
+> release-artifact packaging script and the test-coverage expansion after
+> this record was written. They are recorded separately in
+> § "Follow-up review — PR #71".
+>
 > The subagent review is **one input** into the human sign-off. It is
 > not a substitute for it. A human must read this document, read the
 > code it points to, and decide for themselves whether the stated
@@ -45,6 +50,9 @@ Out of scope (deliberately not reviewed here):
   authenticity" for what is and is not being asserted.
 - Code outside the diff versus `origin/main`. The Phase 1–15 work is
   covered by prior reviews; this review does not re-open it.
+- The release-artifact packaging script and the test-coverage expansion
+  on PR #71. Those arrived after this record was written; their review
+  evidence is recorded in § "Follow-up review — PR #71" below.
 - The fuzz / nightly / differential / property-test surfaces. They are
   documented in `docs/security-testing.md` and exercised by
   `.github/workflows/fuzz.yml`; this review did not re-run them.
@@ -176,6 +184,32 @@ produce, the following properties:
 6. **That the signed-off state survives future changes.** The
    `v0.1.0` tag will pin a commit; the review record describes that
    commit. A future change to the pinned commit reopens the review.
+
+## Follow-up review — PR #71
+
+The release-artifact packaging script
+(`scripts/build-release-artifacts.sh`) and the test-coverage expansion
+that raised the workspace's Codecov-equivalent line coverage to 99.09%
+were added on PR #71, after this record was written. They were reviewed
+by the CodeRabbit review bot, which raised **nine findings** on the
+coverage work and **five** on the packaging script. Every one was
+addressed and the thread resolved; the dispositions are:
+
+| # | Source | Finding | Disposition |
+|---|---|---|---|
+| 42 | CodeRabbit (PR #71) | `crates/elang-cli/tests/error_paths.rs` imported `std::os::unix::ffi::OsStrExt` without a platform guard, so the Windows CI job failed to compile the test target. | **Fixed** — the import, the `non_utf8_arg` helper and the four tests that use it are `#[cfg(unix)]`; the POSIX symlink and permission-mode tests are `#[cfg(unix)]`; the file-size-limit test is `#[cfg(target_os = "linux")]`, because macOS kills the process with `SIGXFSZ` where Linux returns `EFBIG`. |
+| 43 | CodeRabbit (PR #71) | The `0555`-directory setup cannot fail for a privileged process, so the test asserted an outcome the environment cannot produce. | **Fixed** — the test probes the directory and skips itself when the process bypasses the mode bits. |
+| 44 | CodeRabbit (PR #71) | Temporary paths were interpolated into a shell script; a path containing an apostrophe would break the quote. | **Fixed** — the paths are passed to `sh -c` as positional parameters. |
+| 45 | CodeRabbit (PR #71) | The peak-memory overflow test omitted `VmRSS` and `VmPeak`, so it also passed on the missing-field branch and did not isolate the overflow. | **Fixed** — both fields now carry valid values. |
+| 46 | CodeRabbit (PR #71) | The attribution tests' scratch directory was not removed by its callers. | **Fixed** — a drop guard removes it, including when an assertion fails, and the directory name carries a per-process counter so parallel tests cannot race. |
+| 47 | CodeRabbit (PR #71) | The repertoire generator test could be satisfied by a stale output file from an earlier run. | **Fixed** — the output is removed before the generator runs. |
+| 48 | CodeRabbit (PR #71) | The packaging script's `--out-dir` guard checked whether the *archive* was ignored; a `*.tar.gz` glob leaves the `.sha256` sidecar unignored. | **Fixed** — the guard checks the output *directory*. |
+| 49 | CodeRabbit (PR #71) | The sidecar digest was interpolated into the `printf` that wrote it, so a hashing failure produced an empty digest and a successful build. | **Fixed** — the digest is captured first and the function returns non-zero on failure. |
+| 50 | CodeRabbit (PR #71) | `--verify` proved two scratch builds identical but delivered a third build without comparing it. | **Fixed** — the delivered artifact is re-hashed and compared with the verified digest. |
+
+This follow-up section is **bot review only**. It is not a substitute
+for the human sign-off below, and it does not reopen the dispositions
+recorded above for Phase 16.
 
 ## Sign-off
 

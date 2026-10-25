@@ -13,12 +13,12 @@ and this project uses independent version domains (see
 - **Test-coverage expansion to 99%.** 98 new tests (1,516 passing, 0
   failing, 1 pre-existing ignored) raise the Codecov-equivalent line
   coverage of the workspace from **97.31% to 99.09%** (missed lines 508 → 176
-  of 19,344). The measurement is the one the project's own CI produces: `cargo llvm-cov --workspace --all-features
+  of 19,356). The measurement is the one the project's own CI produces: `cargo llvm-cov --workspace --all-features
   --lcov --output-path lcov.info`, then the LCOV `DA:` per-line records with
   `codecov.yml`'s ignore list applied — the same artefact
   `.github/workflows/ci.yml` uploads to Codecov. On llvm-cov's own summary
   "Lines" metric (which counts partially-covered lines as missed) the
-  workspace moves from 96.11% to 97.85%; the gap between the two metrics is
+  workspace moves from 96.11% to 97.86%; the gap between the two metrics is
   a fixed set of ~249 lines that llvm-cov's line table counts but that
   execute on every run. The new tests are test-only: they add `#[cfg(test)]`
   modules and integration-test files and change no production behaviour, and
