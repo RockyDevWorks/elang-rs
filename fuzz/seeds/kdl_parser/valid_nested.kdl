@@ -1,1 +1,1 @@
-outer { inner1 { leaf1 leaf2 } inner2 }
+outer { inner1 { leaf1; leaf2 }; inner2 }
