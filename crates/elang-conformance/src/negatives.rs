@@ -36,6 +36,9 @@ use elang_writer::{write_archive, ExtraResource, PackageConfig};
 use crate::corpus::{Expectation, Fixture, Level};
 use crate::golden_packages;
 
+/// The path of the integrity manifest inside a package.
+const INTEGRITY_PATH: &str = "META-INF/integrity.kdl";
+
 /// The byte offset of the header magic within the archive.
 const MAGIC_OFFSET: usize = 0;
 
@@ -489,6 +492,51 @@ pub fn binary_fixtures() -> Vec<Fixture> {
         archive: bad_index_version,
     });
 
+    // An index entry whose frame end cannot be represented: the frame
+    // offset plus the compressed size overflows u64.
+    //
+    // The overflow guard itself was only reachable through unit tests in
+    // `elang-container` (`rejects_a_frame_end_that_overflows_u64`,
+    // `rejects_a_first_frame_offset_at_u64_max`). The corpus published
+    // invalid-offset fixtures but no integer-overflow fixture, so a
+    // second implementation reading the corpus had no way to learn that
+    // the frame end must be computed with checked arithmetic and
+    // rejected rather than allowed to wrap.
+    //
+    // `compressed_size = u64::MAX` makes `offset + size` wrap. The layout
+    // validator checks the overflow *before* the contiguity comparison, so
+    // the diagnostic is the precise one: the frame describes a range that
+    // cannot exist.
+    let overflowing_frame_end = archive_with_custom_index(|frame_offset| {
+        use elang_container::index::{COMPRESSION_ZSTD, ENTRY_FORMAT, INDEX_MAGIC, INDEX_VERSION};
+        let mut idx = Vec::new();
+        idx.extend_from_slice(&INDEX_MAGIC);
+        idx.extend_from_slice(&INDEX_VERSION.to_le_bytes());
+        idx.extend_from_slice(&ENTRY_FORMAT.to_le_bytes());
+        idx.extend_from_slice(&1u32.to_le_bytes());
+        encode_index_entry(
+            &mut idx,
+            b"Linguistics/phonemes.eld",
+            frame_offset,
+            u64::MAX,
+            2,
+            COMPRESSION_ZSTD,
+        );
+        idx
+    });
+    fixtures.push(Fixture {
+        id: "binary/index-frame-end-overflows-u64",
+        description:
+            "An index entry whose frame offset plus compressed size overflows u64 (stage 5).",
+        requirements: &["REQ-BIN-010", "REQ-BIN-005"],
+        expectation: Expectation::Reject {
+            level: Level::Inspect,
+            code: "INDEX_ENTRY_MALFORMED",
+            category: Category::Index,
+        },
+        archive: overflowing_frame_end,
+    });
+
     // A non-UTF-8 byte in the path field. The footer hash matches the
     // (deliberately broken) bytes; the reader's index decoder is the
     // first place to detect it.
@@ -622,14 +670,16 @@ pub fn integrity_fixtures() -> Vec<Fixture> {
 
 /// Every negative fixture in this module, in corpus order.
 ///
-/// The module publishes two families — the malformed-container fixtures
-/// ([`binary_fixtures`]) and the resource-integrity fixtures
-/// ([`integrity_fixtures`]) — so this function concatenates them into
+/// The module publishes three families — the malformed-container fixtures
+/// ([`binary_fixtures`]), the resource-integrity fixtures
+/// ([`integrity_fixtures`]) and the stage-12 validate fixtures
+/// ([`validate_negatives`]) — so this function concatenates them into
 /// the single list the runner and the catalog enumerate.
 #[must_use]
 pub fn fixtures() -> Vec<Fixture> {
     let mut fixtures = binary_fixtures();
     fixtures.extend(integrity_fixtures());
+    fixtures.extend(validate_negatives());
     fixtures
 }
 
@@ -645,29 +695,78 @@ pub fn catalog_entries() -> Vec<crate::catalog::CatalogEntry> {
         .collect()
 }
 
+/// An ELD whose `when` block references an undeclared phoneme.
+///
+/// The document is structurally well-formed: it parses as an ELD, its
+/// EPF still points at it, and the integrity manifest still matches its
+/// bytes. The only thing wrong with it is semantic — the `when` block
+/// names a phoneme the document never declares.
+///
+/// "z" is a valid base IPA symbol, so it clears Phase 8's IPA validation
+/// and fails precisely as an *unresolved reference*, not as a malformed
+/// identifier. That distinction matters: a malformed identifier would be
+/// rejected by the structural parser, and this fixture is meant to prove
+/// the *reference resolver* is reached and does its job.
+const ELD_WITH_UNRESOLVED_REFERENCE: &[u8] = b"phonemes {\n\
+    consonants {\n\
+        phoneme \"p\" {\n\
+            roman \"p\"\n\
+            when {\n\
+                word-position \"initial\"\n\
+                previous-phoneme \"z\"\n\
+            }\n\
+        }\n\
+    }\n\
+    vowels {\n\
+        phoneme \"a\" {\n\
+            roman \"a\"\n\
+        }\n\
+    }\n\
+}\n";
+
+/// Stage-12 (`validate`) negative fixtures.
+///
+/// The corpus published no fixture rejected at `Level::Validate`. Every
+/// negative archive it carried was rejected at `Level::Inspect` or
+/// `Level::Verify`, so a reader that implemented stages 1–11 and then
+/// stubbed out stage 12 would still have passed the entire corpus. The
+/// `validate` acceptance criterion could not be falsified by the corpus
+/// because the corpus contained nothing for it to falsify.
+///
+/// These fixtures close that hole. The archive is *structurally perfect*
+/// and *digest-correct* — it passes `inspect` and `verify` in full — and
+/// only the semantic content is wrong. Because the fixture is declared at
+/// `Level::Validate`, the runner also proves the anti-laundering property
+/// in the other direction: the lower levels must **accept** it, so the
+/// rejection genuinely comes from stage 12 and not from an earlier stage
+/// that happens to trip over the same bytes.
+#[must_use]
+pub fn validate_negatives() -> Vec<Fixture> {
+    let archive = rebuild_with_valid_integrity(&[(
+        "Linguistics/phonemes.eld",
+        ELD_WITH_UNRESOLVED_REFERENCE,
+    )]);
+
+    vec![Fixture {
+        id: "reader/eld-unresolved-when-reference",
+        description:
+            "A structurally valid package whose ELD `when` block references an undeclared phoneme (stage 12).",
+        requirements: &["REQ-CONF-003", "REQ-READER-002", "REQ-READER-005"],
+        expectation: Expectation::Reject {
+            level: Level::Validate,
+            code: "WHEN_REFERENCE_UNRESOLVED",
+            category: Category::When,
+        },
+        archive,
+    }]
+}
+
 // ---------------------------------------------------------------------------
 // Assembly helper for content-substitution fixtures
 // ---------------------------------------------------------------------------
 
-/// Rebuild the minimal archive with one resource's content replaced.
-///
-/// The replacement is a *content* change only: the index, the frame
-/// offsets, the footer hash and the archive length are all recomputed by
-/// the container layer, so the resulting archive is structurally perfect
-/// and fails only on the content the fixture targets.
-///
-/// # Panics
-///
-/// Panics when the container assembly fails or when `path` is not one of
-/// the minimal package's resources. Both are corpus-authoring bugs: an
-/// `Option` return would let a caller silently skip the fixture, and a
-/// skipped fixture is a vacuous corpus that still looks complete.
-pub fn rebuild_with_resource(path: &str, content: &[u8]) -> Vec<u8> {
-    use elang_container::footer::Footer;
-    use elang_container::frame::encode;
-    use elang_container::header::{Header, HEADER_LEN};
-    use elang_container::index::{Index, IndexEntry, COMPRESSION_ZSTD};
-
+/// Read the uncompressed resources from the minimal archive.
+fn read_minimal_resources() -> Vec<(String, Vec<u8>)> {
     // Start from a valid archive and read its resource contents.
     let original = minimal_archive();
     assert!(
@@ -692,19 +791,15 @@ pub fn rebuild_with_resource(path: &str, content: &[u8]) -> Vec<u8> {
             .expect("an indexed frame must decode");
         resources.push((path, bytes));
     }
+    resources
+}
 
-    // Substitute the target resource.
-    let mut substituted = false;
-    for (p, bytes) in resources.iter_mut() {
-        if p == path {
-            *bytes = content.to_vec();
-            substituted = true;
-        }
-    }
-    assert!(
-        substituted,
-        "resource {path:?} must exist in the minimal package"
-    );
+/// Assemble resources into an archive with sorted paths and contiguous frames.
+fn assemble_archive(mut resources: Vec<(String, Vec<u8>)>) -> Vec<u8> {
+    use elang_container::footer::Footer;
+    use elang_container::frame::encode;
+    use elang_container::header::{Header, HEADER_LEN};
+    use elang_container::index::{Index, IndexEntry, COMPRESSION_ZSTD};
 
     // Re-assemble: sort, encode, index, footer.
     resources.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
@@ -754,6 +849,113 @@ pub fn rebuild_with_resource(path: &str, content: &[u8]) -> Vec<u8> {
     out
 }
 
+/// Rebuild the minimal archive with one resource's content replaced.
+///
+/// The replacement is a *content* change only: the index, the frame
+/// offsets, the footer hash and the archive length are all recomputed by
+/// the container layer, so the resulting archive is structurally perfect
+/// and fails only on the content the fixture targets.
+///
+/// # Panics
+///
+/// Panics when the container assembly fails or when `path` is not one of
+/// the minimal package's resources. Both are corpus-authoring bugs: an
+/// `Option` return would let a caller silently skip the fixture, and a
+/// skipped fixture is a vacuous corpus that still looks complete.
+pub fn rebuild_with_resource(path: &str, content: &[u8]) -> Vec<u8> {
+    let mut resources = read_minimal_resources();
+
+    // Substitute the target resource.
+    let mut substituted = false;
+    for (p, bytes) in resources.iter_mut() {
+        if p == path {
+            *bytes = content.to_vec();
+            substituted = true;
+        }
+    }
+    assert!(
+        substituted,
+        "resource {path:?} must exist in the minimal package"
+    );
+
+    assemble_archive(resources)
+}
+
+/// Rebuild the minimal archive with substituted resources and a
+/// *regenerated* integrity manifest.
+///
+/// [`rebuild_with_resource`] deliberately leaves the integrity manifest
+/// stale, because that is exactly what the integrity fixtures need: the
+/// digest must stop matching. This helper does the opposite. It
+/// recomputes the manifest over the substituted resources using the
+/// writer's own scope — every resource except the manifest itself — so
+/// the archive still passes stage 11 and any rejection the fixture
+/// targets has to come from a *later* stage.
+///
+/// That distinction is what makes a stage-12 fixture meaningful. Without
+/// it, any substituted content is caught at stage 11 as a digest
+/// mismatch, the archive never reaches the semantic validator, and the
+/// fixture would silently test nothing.
+///
+/// # Panics
+///
+/// Panics when the container assembly fails or when a substituted path is
+/// not one of the minimal package's resources. Both are corpus-authoring
+/// bugs, for the same reason [`rebuild_with_resource`] panics: a silently
+/// skipped fixture is a vacuous corpus that still looks complete.
+pub fn rebuild_with_valid_integrity(subs: &[(&str, &[u8])]) -> Vec<u8> {
+    use elang_integrity::manifest::{Algorithm, IntegrityEntry, IntegrityManifest};
+    use sha2::{Digest, Sha256};
+
+    let mut resources = read_minimal_resources();
+
+    // Substitute the target resources.
+    for (path, content) in subs {
+        let mut substituted = false;
+        for (p, bytes) in resources.iter_mut() {
+            if p == path {
+                *bytes = content.to_vec();
+                substituted = true;
+            }
+        }
+        assert!(
+            substituted,
+            "resource {path:?} must exist in the minimal package"
+        );
+    }
+
+    // Regenerate the integrity manifest over every resource *except* the
+    // manifest itself — the writer's scope, reproduced exactly so the
+    // canonical bytes match byte-for-byte.
+    let mut integrity = IntegrityManifest {
+        algorithm: Algorithm::Sha256,
+        resources: Default::default(),
+    };
+    for (path, uncompressed) in &resources {
+        if path == INTEGRITY_PATH {
+            continue;
+        }
+        let resource_path = elang_core::ResourcePath::new(path.clone())
+            .expect("a minimal-package resource path must be valid");
+        let digest: [u8; 32] = Sha256::digest(uncompressed.as_slice()).into();
+        integrity.resources.insert(
+            resource_path.clone(),
+            IntegrityEntry {
+                path: resource_path,
+                digest,
+            },
+        );
+    }
+    let integrity_bytes = elang_integrity::write::canonical_bytes(&integrity);
+    for (p, bytes) in resources.iter_mut() {
+        if p == INTEGRITY_PATH {
+            *bytes = integrity_bytes.clone();
+        }
+    }
+
+    assemble_archive(resources)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -771,6 +973,29 @@ mod tests {
         for fixture in integrity_fixtures() {
             run_fixture(&fixture).unwrap_or_else(|f| panic!("{f}"));
         }
+    }
+
+    #[test]
+    fn every_validate_fixture_behaves_as_declared() {
+        for fixture in validate_negatives() {
+            run_fixture(&fixture).unwrap_or_else(|f| panic!("{f}"));
+        }
+    }
+
+    /// The stage-12 fixture must fail for the *semantic* reason it
+    /// claims, not because some earlier stage tripped over the substituted
+    /// bytes. Pinning the exact code proves the archive reached the
+    /// reference resolver with a valid digest manifest.
+    #[test]
+    fn the_validate_fixture_is_rejected_by_the_reference_resolver() {
+        let fixture = &validate_negatives()[0];
+        let err = elang_reader::Package::open(fixture.archive.as_slice())
+            .expect("the archive must open")
+            .validate()
+            .expect_err("the archive must fail stage 12");
+        assert_eq!(err.diagnostic.code, "WHEN_REFERENCE_UNRESOLVED");
+        assert_eq!(err.diagnostic.category, Category::When);
+        assert_eq!(err.diagnostic.stage, Some(12));
     }
 
     #[test]

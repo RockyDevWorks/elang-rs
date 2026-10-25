@@ -249,6 +249,112 @@ pub fn eld_structure_fixtures() -> Vec<DocumentFixture> {
         });
     }
 
+    // -- Positive: exactly MAX_GROUPS (16) groups are accepted --------
+    //
+    // The reject side of the cardinality boundary (17 groups) was pinned
+    // only by a unit test inside `elang-eld`, so the corpus never told a
+    // second implementation where the limit was or that the limit was
+    // inclusive. An off-by-one regression from `> 16` to `>= 16` would
+    // have broken every valid 16-group inventory without the corpus
+    // noticing. This fixture pins the accept side.
+    {
+        // 14 custom groups plus the two mandatory ones is exactly 16.
+        // Group names must match `[a-z]+(?:-[a-z]+)*` (C-04), so they are
+        // letter-only here rather than numbered.
+        let custom: &[(&str, &str, &str)] = &[
+            ("ga", "b", "xb"),
+            ("gb", "c", "xc"),
+            ("gc", "d", "xd"),
+            ("gd", "e", "xe"),
+            ("ge", "f", "xf"),
+            ("gf", "h", "xh"),
+            ("gg", "i", "xi"),
+            ("gh", "j", "xj"),
+            ("gi", "k", "xk"),
+            ("gj", "l", "xl"),
+            ("gk", "m", "xm"),
+            ("gl", "n", "xn"),
+            ("gm", "o", "xo"),
+            ("gn", "q", "xq"),
+        ];
+        let mut src = String::from("phonemes {\n");
+        src.push_str("    consonants {\n");
+        src.push_str("        phoneme \"p\" {\n            roman \"p\"\n        }\n");
+        src.push_str("    }\n");
+        src.push_str("    vowels {\n");
+        src.push_str("        phoneme \"a\" {\n            roman \"a\"\n        }\n");
+        src.push_str("    }\n");
+        for (group, ipa, roman) in custom {
+            src.push_str(&format!("    {group} {{\n"));
+            src.push_str(&format!("        phoneme \"{ipa}\" {{\n"));
+            src.push_str(&format!("            roman \"{roman}\"\n"));
+            src.push_str("        }\n");
+            src.push_str("    }\n");
+        }
+        src.push_str("}\n");
+        fixtures.push(DocumentFixture {
+            id: "eld/accept-sixteen-groups",
+            description: "An inventory with exactly 16 groups (the C-03 maximum) parses cleanly",
+            requirements: &["REQ-ELD-003", "REQ-ELD-004"],
+            schema: Schema::Eld,
+            source: src.into_bytes(),
+            expectation: DocumentExpectation::Accept,
+        });
+    }
+
+    // -- Positive: exactly MAX_ALLOPHONES_PER_ROOT (16) are accepted --
+    //
+    // Same off-by-one exposure as the group count above: the corpus pinned
+    // the 17-allophone rejection only through an `elang-eld` unit test, so
+    // nothing in the published corpus recorded that the per-root allophone
+    // limit is inclusive at 16.
+    {
+        // 16 distinct approved base symbols, none colliding with the root
+        // `p` or the vowel `a`.
+        let allophones: &[(&str, &str)] = &[
+            ("b", "ab"),
+            ("c", "ac"),
+            ("d", "ad"),
+            ("e", "ae"),
+            ("f", "af"),
+            ("h", "ah"),
+            ("i", "ai"),
+            ("j", "aj"),
+            ("k", "ak"),
+            ("l", "al"),
+            ("m", "am"),
+            ("n", "an"),
+            ("o", "ao"),
+            ("q", "aq"),
+            ("s", "as"),
+            ("t", "at"),
+        ];
+        let mut src = String::from("phonemes {\n");
+        src.push_str("    consonants {\n");
+        src.push_str("        phoneme \"p\" {\n");
+        src.push_str("            roman \"p\"\n");
+        for (ipa, roman) in allophones {
+            src.push_str(&format!("            allophone \"{ipa}\" {{\n"));
+            src.push_str(&format!("                roman \"{roman}\"\n"));
+            src.push_str("            }\n");
+        }
+        src.push_str("        }\n");
+        src.push_str("    }\n");
+        src.push_str("    vowels {\n");
+        src.push_str("        phoneme \"a\" {\n            roman \"a\"\n        }\n");
+        src.push_str("    }\n");
+        src.push_str("}\n");
+        fixtures.push(DocumentFixture {
+            id: "eld/accept-sixteen-allophones",
+            description:
+                "A root phoneme with exactly 16 allophones (the C-07 maximum) parses cleanly",
+            requirements: &["REQ-ELD-009", "REQ-ELD-010"],
+            schema: Schema::Eld,
+            source: src.into_bytes(),
+            expectation: DocumentExpectation::Accept,
+        });
+    }
+
     fixtures
 }
 
@@ -325,6 +431,40 @@ pub fn epf_fixtures() -> Vec<DocumentFixture> {
             category: Category::EpfSchema,
         },
     });
+
+    // -- Negative: a duplicate field inside the metadata block ---------
+    //
+    // The C-06 duplicate-field rule was previously only guaranteed by
+    // unit tests inside `elang-epf` (C-06 family: `duplicate_metadata_field_is_rejected`,
+    // `duplicate_description_is_rejected`, `duplicate_phonemes_is_rejected`).
+    // The corpus published no duplicate-field fixture at all, so a second
+    // implementation reading the corpus had no way to learn the rule or
+    // its diagnostic code. This fixture pins the metadata-child case.
+    {
+        let mut src = String::new();
+        src.push_str("epf \"0.1.0\"\n");
+        src.push_str("eld \"0.1.0\"\n");
+        src.push_str("language-version \"1.0.0\"\n");
+        src.push_str("metadata {\n");
+        src.push_str("    identifier \"urn:elang:language:rocky:conformance:1.0.0\"\n");
+        src.push_str("    identifier \"urn:elang:language:rocky:conformance:1.0.0\"\n");
+        src.push_str("    name \"Conformance Probe\"\n");
+        src.push_str("}\n");
+        src.push_str("manifest {\n");
+        src.push_str("    phonemes \"Linguistics/phonemes.eld\"\n");
+        src.push_str("}\n");
+        fixtures.push(DocumentFixture {
+            id: "epf/reject-duplicate-metadata-field",
+            description: "A repeated metadata child (identifier) is rejected as EPF_DUPLICATE_NODE",
+            requirements: &["REQ-EPF-011"],
+            schema: Schema::Epf,
+            source: src.into_bytes(),
+            expectation: DocumentExpectation::Reject {
+                code: "EPF_DUPLICATE_NODE",
+                category: Category::EpfSchema,
+            },
+        });
+    }
 
     // -- Negative: an unknown metadata field --------------------------
     {
