@@ -44,7 +44,9 @@
 )]
 
 pub mod binary_vectors;
+pub mod bytewise_ordering;
 pub mod canonical_goldens;
+pub mod canonical_idempotence;
 pub mod catalog;
 pub mod condition_vectors;
 pub mod corpus;
@@ -58,6 +60,7 @@ pub mod normative_manifest;
 pub mod parser_budgets;
 pub mod requirement_coverage_data;
 pub mod roundtrip;
+pub mod roundtrip_proptest;
 pub mod unicode_ipa;
 pub mod when_attribution;
 pub mod zstd_negatives;
