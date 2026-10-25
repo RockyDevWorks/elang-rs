@@ -10,6 +10,24 @@ and this project uses independent version domains (see
 
 ### Added
 
+- **Test-coverage expansion to 99%.** 98 new tests (1,516 passing, 0
+  failing, 1 pre-existing ignored) raise the Codecov-equivalent line
+  coverage of the workspace from **97.31% to 99.09%** (missed lines 508 → 176
+  of 19,344). The measurement is the one the project's own CI produces: `cargo llvm-cov --workspace --all-features
+  --lcov --output-path lcov.info`, then the LCOV `DA:` per-line records with
+  `codecov.yml`'s ignore list applied — the same artefact
+  `.github/workflows/ci.yml` uploads to Codecov. On llvm-cov's own summary
+  "Lines" metric (which counts partially-covered lines as missed) the
+  workspace moves from 96.11% to 97.85%; the gap between the two metrics is
+  a fixed set of ~249 lines that llvm-cov's line table counts but that
+  execute on every run. The new tests are test-only: they add `#[cfg(test)]`
+  modules and integration-test files and change no production behaviour, and
+  no existing test was weakened, deleted or ignored. The 176 remaining
+  uncovered lines are defensive arms that earlier validation stages already
+  make unreachable (multi-gigabyte archive ceilings, `panic!` arms inside
+  the crates' own tests, proptest failure closures), so closing them would
+  require changing production behaviour rather than adding tests.
+
 - **Release-artifact packaging (T1617 preparation).**
   `scripts/build-release-artifacts.sh` assembles the distributable source
   artifact (`elang-v0.1.0.tar.gz`) plus a SHA-256 sidecar. The artifact's

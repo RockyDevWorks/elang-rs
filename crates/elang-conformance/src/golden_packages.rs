@@ -497,4 +497,33 @@ mod tests {
             "golden format version must fit the reader's bootstrap decode budget"
         );
     }
+
+    /// An archive that does not even open must be reported as a
+    /// stage 1–7 failure, not as a generic error.
+    #[test]
+    fn coverage_gap_assert_validates_reports_an_archive_that_does_not_open() {
+        let mut pkg = minimal().expect("minimal package builds");
+        pkg.archive = vec![0u8; 16];
+        let err = assert_validates(&pkg).expect_err("garbage must not open");
+        assert!(err.contains("stages 1-7 failed"), "unexpected error: {err}");
+    }
+
+    /// An archive that opens and verifies but fails the semantic stage
+    /// must be reported as a stage 8–12 failure.
+    #[test]
+    fn coverage_gap_assert_validates_reports_a_package_that_fails_validation() {
+        // A stage-12 negative: the container is structurally perfect
+        // and digest-correct, and only the semantic content is wrong.
+        let fixture = crate::negatives::validate_negatives()
+            .into_iter()
+            .next()
+            .expect("the corpus publishes stage-12 negatives");
+        let mut pkg = minimal().expect("minimal package builds");
+        pkg.archive = fixture.archive;
+        let err = assert_validates(&pkg).expect_err("a stage-12 negative must not validate");
+        assert!(
+            err.contains("stages 8-12 failed"),
+            "unexpected error: {err}"
+        );
+    }
 }

@@ -182,4 +182,40 @@ mod tests {
         assert_eq!(sample.vmrss_kib(), 80);
         assert_eq!(sample.vmpeak_kib(), 9000);
     }
+
+    /// The MiB converters divide the KiB readings by 1024, and a
+    /// sample taken from `/proc/self/status` is a real measurement.
+    #[test]
+    fn coverage_gap_mib_converters_divide_by_1024() {
+        let body = "VmPeak:    2048 kB\n\
+                    VmRSS:      1024 kB\n\
+                    VmHWM:      3072 kB\n";
+        let sample = parse_proc_self_status(body).expect("parse");
+        assert_eq!(sample.vmhwm_mib(), 3.0);
+        assert_eq!(sample.vmrss_mib(), 1.0);
+        assert_eq!(sample.vmpeak_mib(), 2.0);
+        assert!(sample.is_measured());
+    }
+
+    /// A field whose value is all digits but does not fit in a `u64` is
+    /// skipped, not fatal: the parse continues and the missing field
+    /// leaves the sample absent.
+    #[test]
+    fn coverage_gap_a_value_that_does_not_fit_u64_is_skipped() {
+        let body = "VmHWM: 999999999999999999999999 kB\n";
+        assert!(parse_proc_self_status(body).is_none());
+    }
+
+    /// `current` reads the live status file. The outcome depends on
+    /// the host — on Linux it yields a real sample, elsewhere it yields
+    /// `None` — but a sample that *is* returned must be a real
+    /// measurement.
+    #[test]
+    fn coverage_gap_current_returns_a_measurement_when_proc_is_available() {
+        // The outcome depends on the host — on Linux it yields a real
+        // sample, elsewhere it yields `None` — but a sample that *is*
+        // returned must be a real measurement.
+        let sample = current();
+        assert!(sample.is_none_or(|s| s.is_measured()));
+    }
 }

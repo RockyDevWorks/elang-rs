@@ -117,4 +117,12 @@ mod tests {
             run_fixture(fixture).unwrap_or_else(|f| panic!("{f}"));
         }
     }
+
+    /// A cell the matrix does not publish must fail loudly instead of
+    /// silently producing a duplicate id.
+    #[test]
+    #[should_panic(expected = "unknown matrix cell")]
+    fn coverage_gap_matrix_id_rejects_an_unknown_cell() {
+        let _ = matrix_id("unknown-package", Level::Inspect);
+    }
 }

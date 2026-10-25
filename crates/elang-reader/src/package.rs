@@ -500,3 +500,63 @@ pub(crate) mod __test_support {
         TestArchive { bytes: archive }
     }
 }
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    reason = "coverage-gap unit tests; a panic signals a regression"
+)]
+mod coverage_gaps {
+    //! Coverage-gap tests for the private stage-advancement helper.
+    //!
+    //! `advance_range` runs a contiguous run of stages. Its `advance` call
+    //! can only fail on a protocol violation — the tracker refusing a stage
+    //! that is not the immediate successor of the one it last completed —
+    //! and the helper must then stop instead of replaying the ladder.
+
+    use super::advance_range;
+    use elang_core::{Stage, StageTracker};
+
+    /// `StageTracker::advance` reports the stage it just *left*, so the
+    /// first transition of a fresh tracker reports `None` even though it
+    /// was accepted. `advance_range` therefore always stops after the
+    /// first stage of a run that starts at stage 1 — the refusal branch is
+    /// the only outcome for `advance_range(tracker, 1, _)`.
+    #[test]
+    fn advance_range_stops_when_the_tracker_refuses_the_next_stage() {
+        let mut tracker = StageTracker::new();
+        // The first accepted transition has no predecessor, so `advance`
+        // reports `None` while still recording the stage.
+        assert!(tracker.advance(Stage::Preflight).is_none());
+        assert!(tracker.advance(Stage::Header).is_some());
+        assert_eq!(tracker.reached(), Some(Stage::Header));
+
+        // Replaying stage 1 is out of order: the tracker expects
+        // `Footer`, so `advance` refuses the transition and `advance_range`
+        // returns without touching the tracker.
+        advance_range(&mut tracker, 1, 1);
+        assert_eq!(tracker.reached(), Some(Stage::Header));
+    }
+
+    /// A run that starts at the *successor* of the stage the tracker
+    /// already completed is accepted, and `advance` reports the stage it
+    /// left. `advance_range` then keeps walking the ladder instead of
+    /// stopping at the first step.
+    #[test]
+    fn advance_range_keeps_walking_when_the_tracker_accepts_the_stage() {
+        let mut tracker = StageTracker::new();
+        // Seed the tracker at `Preflight`; the first transition reports
+        // `None` (no predecessor) but is accepted.
+        assert!(tracker.advance(Stage::Preflight).is_none());
+        assert_eq!(tracker.reached(), Some(Stage::Preflight));
+
+        // Stage 2 (`Header`) is the successor of `Preflight`, so `advance`
+        // accepts it and reports the stage it left.
+        advance_range(&mut tracker, 2, 2);
+        assert_eq!(tracker.reached(), Some(Stage::Header));
+    }
+}

@@ -513,6 +513,116 @@ fn encode_then_verify_against_index_matches_content_size() {
 }
 
 // =============================================================================
+// Header-field truncation: every `FRAME_TRUNCATED` header path
+// =============================================================================
+//
+// The frame header is a sequence of optional fields whose widths depend on
+// the descriptor byte. Each test below truncates the buffer at exactly one
+// field boundary so the reader has to report *which* field was missing.
+
+#[test]
+fn inspect_rejects_a_frame_that_ends_before_the_window_descriptor() {
+    // Descriptor 0x44: FCS field is two bytes, Single_Segment is clear (so a
+    // Window_Descriptor must follow), checksum present, no dictionary ID.
+    // The buffer stops right after the descriptor, so the window descriptor
+    // byte is missing.
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&[0x28, 0xB5, 0x2F, 0xFD]); // magic
+    bytes.push(0x44); // descriptor
+    let err = inspect(&bytes).unwrap_err();
+    assert_eq!(err.code(), "FRAME_TRUNCATED");
+}
+
+#[test]
+fn inspect_rejects_a_frame_that_ends_inside_the_dictionary_id_field() {
+    // Descriptor 0x45: same as above plus a one-byte Dictionary_ID field.
+    // The window descriptor is present, the dictionary ID byte is not.
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&[0x28, 0xB5, 0x2F, 0xFD]); // magic
+    bytes.push(0x45); // descriptor: dict_id_flag = 1
+    bytes.push(0x00); // window descriptor
+    let err = inspect(&bytes).unwrap_err();
+    assert_eq!(err.code(), "FRAME_TRUNCATED");
+}
+
+#[test]
+fn inspect_rejects_a_frame_that_ends_inside_the_content_size_field() {
+    // Descriptor 0x64: Single_Segment is set (so no window descriptor) and
+    // the content-size field is two bytes wide. Only one of the two bytes is
+    // present.
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&[0x28, 0xB5, 0x2F, 0xFD]); // magic
+    bytes.push(0x64); // descriptor
+    bytes.push(0x00); // one byte of the two-byte content size
+    let err = inspect(&bytes).unwrap_err();
+    assert_eq!(err.code(), "FRAME_TRUNCATED");
+}
+
+// =============================================================================
+// Budget accounting
+// =============================================================================
+
+#[test]
+fn decode_rejects_an_aggregate_charge_that_would_overflow_u64() {
+    // The aggregate is charged *before* any byte is produced, so an
+    // aggregate counter already at `u64::MAX` must fail the addition rather
+    // than wrap around to a small total.
+    let frame = encode(b"tiny payload", Profile::Canonical).unwrap();
+    let mut budget = DecodeBudget {
+        max_resource_bytes: u64::MAX,
+        max_aggregate_bytes: u64::MAX,
+        aggregate_used: u64::MAX,
+    };
+    let err = decode(&frame, &mut budget).unwrap_err();
+    assert_eq!(err.code(), "DECOMPRESSION_BUDGET_EXCEEDED");
+    assert_eq!(
+        budget.aggregate_used,
+        u64::MAX,
+        "a rejected decode must not touch the aggregate"
+    );
+}
+
+#[test]
+fn decode_rejects_a_frame_whose_declared_size_contradicts_its_body() {
+    // A frame whose declared content size does not match the bytes it
+    // actually carries is rejected by libzstd itself, which is reported as a
+    // generic decompression failure rather than a checksum mismatch.
+    let payload: Vec<u8> = (0..100_000u32).map(|i| (i % 251) as u8).collect();
+    let frame = encode(&payload, Profile::Canonical).unwrap();
+    let header = inspect(&frame).unwrap();
+    assert_eq!(
+        frame[4] >> 6,
+        2,
+        "a 100 kB payload must use the four-byte content-size field"
+    );
+    let at = header.header_size - 4;
+    let declared = u32::from_le_bytes(
+        frame[at..at + 4]
+            .try_into()
+            .expect("four-byte content-size field"),
+    );
+    let mut tampered = frame.clone();
+    tampered[at..at + 4].copy_from_slice(&declared.saturating_add(1).to_le_bytes());
+    let mut budget = DecodeBudget {
+        max_resource_bytes: u64::MAX,
+        max_aggregate_bytes: u64::MAX,
+        aggregate_used: 0,
+    };
+    let err = decode(&tampered, &mut budget).unwrap_err();
+    assert_eq!(err.code(), "FRAME_DECOMPRESS_FAILED");
+}
+
+#[test]
+fn apply_reports_a_parameter_libzstd_refuses() {
+    // `windowLog` is bounded by libzstd; an out-of-range value is rejected by
+    // the parameter setter, which `apply` has to translate into the
+    // crate's own error code.
+    let mut cctx = CCtx::create();
+    let err = apply(&mut cctx, CParameter::WindowLog(99)).unwrap_err();
+    assert_eq!(err.code(), "FRAME_ENCODE_FAILED");
+}
+
+// =============================================================================
 // Helpers
 // =============================================================================
 
