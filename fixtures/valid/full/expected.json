@@ -1,0 +1,39 @@
+{
+  "description": "Full-featured .elang package: multiple groups, allophones, conditions, extra resource (T1402).",
+  "fixture": "valid/full",
+  "golden": [
+    {
+      "path": "archive.elang",
+      "sha256": "c81016352a7924924c7bfbcbb0e296fe9c638a756998d71c4bccd4a015897788"
+    },
+    {
+      "path": "header.bin",
+      "sha256": "ee15caa934ffa9220a103c5b83276df6c4e13120d2caa51089febb0c55900bdf"
+    },
+    {
+      "path": "index.bin",
+      "sha256": "141fa2690c5966ab6e77b9061fc27c89d837adb5af8ea59da03c280f9f1514f0"
+    },
+    {
+      "path": "footer.bin",
+      "sha256": "596aa0a7df2924260d464fd30b2e2ae1007e76fd436d53da9c97151b73f3b709"
+    }
+  ],
+  "input": "archive.elang",
+  "modes": [
+    "inspect"
+  ],
+  "outcome": "pass",
+  "requirements": [
+    "REQ-PKG-001",
+    "REQ-PKG-002",
+    "REQ-PKG-003",
+    "REQ-CONF-002",
+    "REQ-READER-002",
+    "REQ-EPF-001",
+    "REQ-ELD-001",
+    "REQ-CANON-001",
+    "REQ-WRITER-001",
+    "REQ-WRITER-002"
+  ]
+}

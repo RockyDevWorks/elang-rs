@@ -1,0 +1,14 @@
+{
+  "description": "A declared group with no members is rejected",
+  "errorCode": "ELD_GROUP_INVALID",
+  "fixture": "invalid/eld/reject-empty-group",
+  "input": "input.eld",
+  "modes": [
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-ELD-006"
+  ],
+  "stage": 12
+}

@@ -1,0 +1,17 @@
+{
+  "description": "A frame truncated mid-body is rejected",
+  "errorCode": "FRAME_TRUNCATED",
+  "fixture": "invalid/zstd/truncated",
+  "input": "archive.elang",
+  "modes": [
+    "inspect",
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-FRAME-006",
+    "REQ-FRAME-008"
+  ],
+  "stage": 7
+}

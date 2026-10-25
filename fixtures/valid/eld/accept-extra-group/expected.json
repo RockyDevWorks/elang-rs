@@ -1,0 +1,12 @@
+{
+  "description": "A custom group alongside the mandatory ones parses cleanly",
+  "fixture": "valid/eld/accept-extra-group",
+  "input": "input.eld",
+  "modes": [
+    "inspect"
+  ],
+  "outcome": "pass",
+  "requirements": [
+    "REQ-ELD-004"
+  ]
+}

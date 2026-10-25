@@ -1,0 +1,14 @@
+{
+  "description": "A minimal consonants+vowels document parses cleanly",
+  "fixture": "valid/eld/accept-minimal",
+  "input": "input.eld",
+  "modes": [
+    "inspect"
+  ],
+  "outcome": "pass",
+  "requirements": [
+    "REQ-ELD-001",
+    "REQ-ELD-003",
+    "REQ-ELD-006"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "fixture": "valid/example/hello-en",
+  "description": "Published worked example: a complete ELANG v0.1.0 language package packed from the sources in `examples/hello-en/` with the canonical profile.",
+  "requirements": ["REQ-PKG-001", "REQ-PKG-004"],
+  "input": "hello-en.elang",
+  "modes": ["inspect", "verify", "validate"],
+  "outcome": "pass",
+  "golden": [
+    { "path": "hello-en.elang", "sha256": "3b0cfc2e05155421a1c81f3e25597cc1edefdf32b368ab0af7a4a1c4be317273" }
+  ]
+}

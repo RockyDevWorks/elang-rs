@@ -1,0 +1,21 @@
+{
+  "method": "linux_proc_self_status_vmhwm",
+  "memory_supported": true,
+
+  "environment": {
+    "os": "linux",
+    "arch": "x86_64",
+    "cpu_brand": "AMD EPYC 9355P 32-Core Processor",
+    "kernel_release": "6.8.0-147-generic",
+    "profile": "release"
+  },
+
+  "measurements": [
+    {"id":"accepted/baseline","description":"The smallest valid package (five mandatory resources, no extras) read through the full validate path.","expectation":"accepted","accepted":true,"error_code":null,"vmhwm_kib":3484,"vmrss_kib":3484,"vmpeak_kib":5036,"archive_bytes":942},
+    {"id":"accepted/max-resource-count","description":"A valid package carrying the maximum number of resources the format allows (25,000 total), each with a small payload.","expectation":"accepted","accepted":true,"error_code":null,"vmhwm_kib":37048,"vmrss_kib":33972,"vmpeak_kib":40208,"archive_bytes":2641741},
+    {"id":"accepted/large-single-resource","description":"A valid package carrying one extra resource of 64 MiB, which the reader must decode and hash in full.","expectation":"accepted","accepted":true,"error_code":null,"vmhwm_kib":72232,"vmrss_kib":4500,"vmpeak_kib":202892,"archive_bytes":3104},
+    {"id":"rejected/oversized-resource-claim","description":"An archive whose index claims a resource larger than the 1 GiB per-resource ceiling. The reader must refuse it without allocating the claimed size.","expectation":"rejected","accepted":false,"error_code":"INDEX_SIZE_OVER_CEILING","vmhwm_kib":3324,"vmrss_kib":3324,"vmpeak_kib":4748,"archive_bytes":1058},
+    {"id":"rejected/aggregate-size-claim","description":"An archive whose index claims an aggregate uncompressed size above the 8 GiB aggregate ceiling. The reader must refuse it without allocating the claimed size.","expectation":"rejected","accepted":false,"error_code":"LIMIT_UNCOMPRESSED_AGGREGATE","vmhwm_kib":3456,"vmrss_kib":3456,"vmpeak_kib":4748,"archive_bytes":1801},
+    {"id":"rejected/resource-count-claim","description":"An archive whose index claims more resources than the 25,000 ceiling allows. The reader must refuse it without building the claimed index.","expectation":"rejected","accepted":false,"error_code":"INDEX_COUNT_OUT_OF_RANGE","vmhwm_kib":3332,"vmrss_kib":3332,"vmpeak_kib":4748,"archive_bytes":942}
+  ]
+}

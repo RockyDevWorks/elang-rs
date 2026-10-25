@@ -1,0 +1,15 @@
+{
+  "description": "A repeated metadata child (identifier) is rejected as EPF_DUPLICATE_NODE",
+  "errorCode": "EPF_DUPLICATE_NODE",
+  "fixture": "invalid/epf/reject-duplicate-metadata-field",
+  "input": "input.epf",
+  "modes": [
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-EPF-011"
+  ],
+  "stage": 10
+}

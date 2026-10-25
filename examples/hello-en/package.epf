@@ -1,0 +1,11 @@
+epf "0.1.0"
+eld "0.1.0"
+language-version "1.0.0"
+metadata {
+    identifier "urn:elang:language:rocky:hello-en:1.0.0"
+    name "Hello EN"
+    description "A minimal worked example of an ELANG v0.1.0 language package."
+}
+manifest {
+    phonemes "Linguistics/phonemes.eld"
+}

@@ -1,0 +1,14 @@
+{
+  "description": "A minimal EPF document parses cleanly",
+  "fixture": "valid/epf/accept-minimal",
+  "input": "input.epf",
+  "modes": [
+    "inspect"
+  ],
+  "outcome": "pass",
+  "requirements": [
+    "REQ-EPF-001",
+    "REQ-EPF-003",
+    "REQ-EPF-005"
+  ]
+}

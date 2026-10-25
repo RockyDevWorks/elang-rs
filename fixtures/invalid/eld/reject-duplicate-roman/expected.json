@@ -1,0 +1,14 @@
+{
+  "description": "Two phonemes sharing a romanisation are rejected",
+  "errorCode": "ROMAN_DUPLICATE",
+  "fixture": "invalid/eld/reject-duplicate-roman",
+  "input": "input.eld",
+  "modes": [
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-ELD-013"
+  ],
+  "stage": 12
+}

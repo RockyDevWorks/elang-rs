@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/RockyDevWorks/elang-rs/schemas/expected-result.schema.json",
+  "title": "ELANG v0.1.0 conformance expected-result record",
+  "description": "One record per conformance fixture. Describes the input, the reader modes the expectation holds for, and the expected outcome.",
+  "type": "object",
+  "required": ["fixture", "input", "modes", "outcome"],
+  "additionalProperties": false,
+  "properties": {
+    "fixture": {
+      "type": "string",
+      "description": "Stable fixture id.",
+      "pattern": "^(valid|invalid)/[a-z][a-z0-9-]*(/[a-z][a-z0-9-]*)*$"
+    },
+    "description": {
+      "type": "string",
+      "description": "One-line human description of the behaviour under test."
+    },
+    "requirements": {
+      "type": "array",
+      "description": "Normative requirement ids the fixture protects.",
+      "items": { "type": "string", "pattern": "^REQ-[A-Z0-9-]+$" }
+    },
+    "input": {
+      "type": "string",
+      "description": "Path to the fixture input, relative to the directory that contains this record.",
+      "minLength": 1
+    },
+    "modes": {
+      "type": "array",
+      "description": "Reader modes in which the stated outcome MUST hold. Inspect covers reader stages 1-7, Verify stages 1-11, Validate stages 1-12. For `outcome: pass`, acceptance is cumulative, so the record lists every mode down to the asserted level. For `outcome: fail`, the record lists only the modes whose stage ceiling reaches `stage`; a mode that stops before `stage` accepts the input.",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "enum": ["inspect", "verify", "validate"] }
+    },
+    "outcome": {
+      "enum": ["pass", "fail"],
+      "description": "`pass` — the input must be accepted. `fail` — the input must be rejected."
+    },
+    "stage": {
+      "type": "integer",
+      "description": "Reader stage (1-12) at which rejection MUST occur. Required when outcome is `fail`.",
+      "minimum": 1,
+      "maximum": 12
+    },
+    "errorCode": {
+      "type": "string",
+      "description": "Registered error code from the OA-10 error-code registry. Required when outcome is `fail`.",
+      "pattern": "^[A-Z][A-Z0-9_]*$"
+    },
+    "golden": {
+      "type": "array",
+      "description": "Byte-exact golden outputs, when the fixture pins them.",
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256"],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Path to the byte-exact golden output, relative to the directory that contains this record.",
+            "minLength": 1
+          },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "outcome": { "const": "fail" } }, "required": ["outcome"] },
+      "then": { "required": ["stage", "errorCode"] }
+    }
+  ]
+}

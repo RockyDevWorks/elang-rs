@@ -1,0 +1,17 @@
+{
+  "description": "A 64-byte archive is below the minimum container size (stage 1).",
+  "errorCode": "ARCHIVE_TOO_SMALL",
+  "fixture": "invalid/binary/archive-too-small",
+  "input": "archive.elang",
+  "modes": [
+    "inspect",
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-BIN-001",
+    "REQ-BIN-002"
+  ],
+  "stage": 1
+}

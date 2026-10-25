@@ -51,10 +51,12 @@ commands expose increasing depth:
     and `validate` confirm a package's contents match its integrity manifest.
     Never treat a successful `inspect` as integrity verification.
 
+The examples below use the published example package in `examples/hello-en/`.
+
 ## Inspect a package
 
 ```sh
-elang inspect mylang.elang
+elang inspect examples/hello-en/hello-en.elang
 ```
 
 This decodes the header, footer, and index, checks the physical frame layout,
@@ -63,7 +65,7 @@ and reports the resources it finds — without decompressing them.
 ## Verify integrity
 
 ```sh
-elang verify mylang.elang
+elang verify examples/hello-en/hello-en.elang
 ```
 
 This decompresses every resource within the size budgets and checks each one
@@ -72,7 +74,7 @@ against the SHA-256 recorded in `META-INF/integrity.kdl`.
 ## Validate fully
 
 ```sh
-elang validate mylang.elang
+elang validate examples/hello-en/hello-en.elang
 ```
 
 This runs the complete pipeline, including the `.eld` `phonemes` module
@@ -80,15 +82,26 @@ semantics (the only linguistic module v0.1.0 defines): group and cardinality
 rules, IPA identifier validity, romanization uniqueness, and `when` condition
 structure.
 
-A non-zero exit code means validation failed. The CLI prints a stable error code
-and the stage and resource where the failure occurred, and can emit
-machine-readable JSON diagnostics.
+A non-zero exit code means validation failed. The CLI prints the diagnostic on
+stderr in the form `[CATEGORY:CODE] message`, where `CATEGORY` and `CODE` are
+the stable values published in `specs/registry/error-codes.json`. The same
+diagnostic can be emitted in machine-readable JSON form via the global `--json`
+flag — see [Machine-readable JSON](cli.md#machine-readable-json).
 
 ## Build a package
 
 ```sh
-elang pack ./mylang-src -o mylang.elang
+elang pack \
+  --epf examples/hello-en/package.epf \
+  --eld examples/hello-en/Linguistics/phonemes.eld \
+  --output hello-en.elang \
+  --profile canonical
 ```
+
+!!! warning "`pack` takes two explicit inputs, not a directory"
+    `pack` reads one EPF document and one ELD document and writes one archive.
+    There is no source-directory form and no `-o` shorthand — the output path
+    is `--output`. See the [CLI reference](cli.md#pack) for the full flag list.
 
 The writer canonicalizes each resource, computes the integrity manifest over the
 exact uncompressed bytes, sorts resources by canonical path, and lays out the
@@ -103,11 +116,22 @@ container. Choose a writer profile depending on your goal:
 ## Extract a package
 
 ```sh
-elang unpack mylang.elang -o ./out
+elang unpack examples/hello-en/hello-en.elang --output ./out
 ```
 
 Extraction is safe by design: it refuses to overwrite files and rejects path
-traversal and symlink-escape attempts.
+traversal and symlink-escape attempts. Pass `--force` to overwrite existing
+files; it does not relax the traversal or symlink checks.
+
+## Canonicalize an ELD
+
+`canonicalize-eld` rewrites an ELD document into its canonical byte form and
+prints it to **stdout**. It takes one operand and writes no file — there is no
+`-o` flag, so redirect stdout to save the result:
+
+```sh
+elang canonicalize-eld examples/hello-en/Linguistics/phonemes.eld > phonemes.canonical.eld
+```
 
 ## Next steps
 

@@ -41,12 +41,42 @@ Limits are enforced **during** parsing, not merely checked after allocation:
 
 Diagnostic truncation never turns a failure into a success.
 
+## Container-level ceilings
+
+The binary container adds its own ceilings on top of the parser budgets. These
+are the container-level limits defined in `elang-core`'s `limits` module and
+enforced by the crate that owns them:
+
+| Limit | Maximum | Applies to | Enforced by |
+|-------|--------:|------------|-------------|
+| `MAX_COMPRESSED_ARCHIVE_BYTES` | 6 GiB | Total compressed archive size | Writer — `elang-writer` refuses to build an archive over the ceiling. The reader does not apply this ceiling. |
+| `MAX_RESOURCES` | 25,000 | Resources per archive | Reader — stage 5 (index) rejects a declared count over the ceiling; writer — rejects the input set before building. |
+| `MAX_INDEX_BYTES` | 32 MiB | Serialized index size | Reader — stage 3 (footer) rejects an index region outside the permitted range; writer — the footer it builds must fit the same range. |
+| `MAX_GENERIC_RESOURCE_BYTES` | 1 GiB | Uncompressed bytes per resource | Reader — stage 5 rejects an over-ceiling declared per-resource size, and the stage 11 decode budget caps each decoded resource; writer — per-resource check before encoding. |
+| `MAX_EPF_BYTES` | 1 MiB | `package.epf` uncompressed size | Reader — stage 10 decode budget plus the EPF parser's input-size guard; writer — per-resource check before encoding. |
+| `MAX_INTEGRITY_BYTES` | 16 MiB | `META-INF/integrity.kdl` uncompressed size | Reader — stage 9 decode budget plus the integrity parser's input-size guard; writer — per-resource check before encoding. |
+| `MAX_ELD_BYTES` | 1 GiB | Phoneme `.eld` uncompressed size | Reader — stage 12 decode budget; writer — per-resource check before encoding. |
+
+!!! note "The CLI adds no ceilings of its own"
+    The CLI delegates to the reader and the writer, so each ceiling is enforced
+    wherever the crate that owns it runs. `inspect`, `verify`, and `validate`
+    report reader-side ceilings with the failing stage; `pack` reports
+    writer-side ceilings as writer errors.
+
 ## Memory-safety posture
 
-- Safe Rust by default. `unsafe` is lint-denied except at the single audited
-  libzstd FFI boundary.
-- No panics or unchecked indexing on untrusted input (lint-enforced across the
-  workspace).
+- Safe Rust by default. The workspace sets `unsafe_code = "warn"` and CI
+  escalates it to a hard error via `RUSTFLAGS = "-D warnings"`; six crates
+  additionally carry a crate-level `#![deny(unsafe_code)]`. The one FFI
+  boundary (the pinned libzstd linkage in `elang-container`) is covered by
+  that CI escalation and a scoped, justified `#[allow]`. **The guarantee is
+  CI-enforced, not compile-time-denied locally.**
+- No panics or unchecked indexing on untrusted input: enforced by the
+  workspace clippy lints `unwrap_used`, `expect_used`, `panic` and
+  `indexing_slicing` (also `warn` locally, escalated by CI). Four production
+  modules that parse untrusted bytes carry a scoped, justified
+  `#![allow(clippy::indexing_slicing)]`; there the property is upheld by
+  review and bounded-slice style rather than by the lint.
 - Checked integer and offset arithmetic everywhere the container layer computes
   positions and sizes.
 

@@ -1,0 +1,15 @@
+{
+  "description": "A non-ELANG identifier URN is rejected",
+  "errorCode": "EPF_BAD_URN",
+  "fixture": "invalid/epf/reject-bad-urn",
+  "input": "input.epf",
+  "modes": [
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-EPF-006"
+  ],
+  "stage": 10
+}

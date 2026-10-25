@@ -1,0 +1,12 @@
+{
+  "description": "A condition tree at exactly MAX_NESTING_DEPTH is accepted",
+  "fixture": "valid/budget/when-nesting-at-limit",
+  "input": "input.eld",
+  "modes": [
+    "inspect"
+  ],
+  "outcome": "pass",
+  "requirements": [
+    "REQ-WHEN-008"
+  ]
+}

@@ -27,7 +27,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use elang_conformance::normative_manifest::{
-    self, ARTIFACTS, MANIFEST_PATH, PINNED_SPEC_CHECKSUM, RELEASE,
+    self, artifact_entries, ARTIFACTS, MANIFEST_PATH, PINNED_SPEC_CHECKSUM, RELEASE,
 };
 
 fn release_root() -> PathBuf {
@@ -70,6 +70,12 @@ fn manifest_excludes_itself() {
         !ARTIFACTS.iter().any(|a| a.path == MANIFEST_PATH),
         "the manifest must not cover itself (circular digest)"
     );
+    assert!(
+        !artifact_entries()
+            .iter()
+            .any(|(_, path)| path == MANIFEST_PATH),
+        "the expanded corpus must not cover the manifest itself (circular digest)"
+    );
 }
 
 #[test]
@@ -83,6 +89,20 @@ fn artifact_paths_are_unique_and_nonempty() {
         );
     }
     assert!(!ARTIFACTS.is_empty(), "the corpus must not be empty");
+
+    // The same uniqueness guarantee must hold across the *expanded* corpus
+    // (ARTIFACTS plus the OA-14 canonical ELD expansion). A duplicate path
+    // in the expansion would make the manifest carry two entries for one
+    // file, and the per-artifact digest check would silently cover only
+    // one of them.
+    let mut expanded = BTreeSet::new();
+    for (_id, path) in artifact_entries() {
+        assert!(
+            expanded.insert(path.clone()),
+            "duplicate artifact path in the expanded corpus: {path}"
+        );
+        assert!(!path.is_empty(), "artifact path must not be empty");
+    }
 }
 
 #[test]
@@ -104,9 +124,75 @@ fn manifest_declares_the_expected_release_and_schema() {
         .expect("artifacts array");
     assert_eq!(
         artifacts.len(),
-        ARTIFACTS.len(),
+        artifact_entries().len(),
         "manifest must list every artifact exactly once"
     );
+}
+
+/// The OA-14 canonical ELD corpus must be inside the freeze: the vector
+/// document plus, for every published case, the authored source, the
+/// byte-exact golden and the conformance record.
+///
+/// ADR 0011 §6 made the OA-14 corpus the *last* step of the freeze — the
+/// generator and the freeze share `canonical_goldens::CASES` as their
+/// single source of truth, so this test proves the corpus scope actually
+/// reached the manifest rather than merely being intended to.
+#[test]
+fn the_oa14_canonical_corpus_is_frozen() {
+    let root = release_root();
+    let committed = fs::read(root.join(MANIFEST_PATH)).expect("read committed manifest");
+    let value: serde_json::Value = serde_json::from_slice(&committed).expect("parse manifest");
+    let artifacts = value
+        .get("artifacts")
+        .and_then(serde_json::Value::as_array)
+        .expect("artifacts array");
+
+    let frozen: BTreeSet<&str> = artifacts
+        .iter()
+        .filter_map(|e| e.get("path").and_then(serde_json::Value::as_str))
+        .collect();
+
+    // The vector document.
+    assert!(
+        frozen.contains("specs/registry/eld-canonical-vectors.json"),
+        "the OA-14 vector document must be part of the freeze"
+    );
+
+    // Every case's three files.
+    for case in elang_conformance::canonical_goldens::CASES {
+        for file in ["expected.json", "golden/canonical.eld", "input.eld"] {
+            let path = format!("fixtures/valid/canonical/{}/{file}", case.id);
+            assert!(
+                frozen.contains(path.as_str()),
+                "OA-14 corpus file must be frozen: {path}"
+            );
+        }
+    }
+}
+
+/// The `.sha256` sidecars are derived from the goldens that are already
+/// frozen, so they must NOT be listed — a second source of truth for the
+/// same digest is exactly what the freeze is meant to avoid.
+#[test]
+fn derived_sha256_sidecars_are_not_frozen() {
+    let root = release_root();
+    let committed = fs::read(root.join(MANIFEST_PATH)).expect("read committed manifest");
+    let value: serde_json::Value = serde_json::from_slice(&committed).expect("parse manifest");
+    let artifacts = value
+        .get("artifacts")
+        .and_then(serde_json::Value::as_array)
+        .expect("artifacts array");
+
+    for entry in artifacts {
+        let path = entry
+            .get("path")
+            .and_then(serde_json::Value::as_str)
+            .expect("entry.path");
+        assert!(
+            !path.ends_with(".sha256"),
+            "derived .sha256 sidecar must not be frozen: {path}"
+        );
+    }
 }
 
 #[test]

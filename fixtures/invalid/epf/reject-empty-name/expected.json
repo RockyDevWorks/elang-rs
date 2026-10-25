@@ -1,0 +1,15 @@
+{
+  "description": "An empty metadata name is rejected as EPF_BAD_METADATA_FIELD",
+  "errorCode": "EPF_BAD_METADATA_FIELD",
+  "fixture": "invalid/epf/reject-empty-name",
+  "input": "input.epf",
+  "modes": [
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-EPF-009"
+  ],
+  "stage": 10
+}

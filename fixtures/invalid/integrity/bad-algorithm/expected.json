@@ -1,0 +1,15 @@
+{
+  "description": "The manifest names an unsupported digest algorithm (stage 9).",
+  "errorCode": "INTEGRITY_BAD_ALGORITHM",
+  "fixture": "invalid/integrity/bad-algorithm",
+  "input": "archive.elang",
+  "modes": [
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-INTEGRITY-003"
+  ],
+  "stage": 9
+}

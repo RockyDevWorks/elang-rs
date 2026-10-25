@@ -1,0 +1,16 @@
+{
+  "description": "A frame with the wrong magic number is rejected",
+  "errorCode": "FRAME_BAD_MAGIC",
+  "fixture": "invalid/zstd/bad-magic",
+  "input": "archive.elang",
+  "modes": [
+    "inspect",
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-FRAME-002"
+  ],
+  "stage": 7
+}

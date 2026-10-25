@@ -1,0 +1,17 @@
+{
+  "description": "Two frames in one indexed slot are rejected",
+  "errorCode": "FRAME_CONCATENATED",
+  "fixture": "invalid/zstd/concatenated",
+  "input": "archive.elang",
+  "modes": [
+    "inspect",
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-FRAME-002",
+    "REQ-FRAME-006"
+  ],
+  "stage": 7
+}

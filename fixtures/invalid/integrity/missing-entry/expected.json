@@ -1,0 +1,15 @@
+{
+  "description": "The manifest omits indexed resources (stage 9).",
+  "errorCode": "INTEGRITY_MISSING_ENTRY",
+  "fixture": "invalid/integrity/missing-entry",
+  "input": "archive.elang",
+  "modes": [
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-INTEGRITY-002"
+  ],
+  "stage": 9
+}

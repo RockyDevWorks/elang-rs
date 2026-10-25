@@ -31,11 +31,23 @@ implementation is designed to fail closed against:
 
 ## Memory-safety policy
 
-- Safe Rust by default. `unsafe` is denied by lint except at audited FFI
-  boundaries (the pinned libzstd linkage); each such block is justified in code
-  and reviewed.
-- No `unwrap()`/`expect()`/`panic!`/unchecked indexing on untrusted input
-  (enforced by workspace clippy lints).
+- Safe Rust by default. The workspace lint sets `unsafe_code = "warn"` and CI
+  escalates it to a hard error via `RUSTFLAGS = "-D warnings"`; six of the
+  twelve crates additionally carry a crate-level `#![deny(unsafe_code)]`. The
+  crate holding the one FFI boundary — `elang-container`, for the pinned
+  libzstd linkage — relies on that CI escalation plus a scoped
+  `#[allow(unsafe_code, reason = "...")]` at the use site. Each such block is
+  justified in code and reviewed. **The guarantee is CI-enforced, not
+  compile-time-denied locally.**
+- No `unwrap()`/`expect()`/`panic!`/unchecked indexing on untrusted input is
+  enforced by the workspace clippy lints `unwrap_used`, `expect_used`, `panic`
+  and `indexing_slicing`, which are likewise set to `warn` and escalated to
+  errors by CI. Four production modules that parse untrusted bytes carry a
+  scoped module-level `#![allow(clippy::indexing_slicing)]` with a written
+  justification (`elang-container/src/{index,header,footer}.rs` and
+  `elang-unicode/src/nfc.rs`); in those modules the no-unchecked-indexing
+  property is upheld by review and by the bounded-slice style, not by the
+  lint.
 - Checked integer and offset arithmetic throughout; `overflow-checks` are on in
   all profiles.
 
@@ -72,9 +84,9 @@ deployment must layer above the reader are documented in
 
 ## Security limits and remaining trust limitations (T1520)
 
-The numeric limits the reader enforces (6 GiB compressed / 8 GiB
-uncompressed aggregate, 25,000 resources, 64-deep KDL nesting,
-2 M nodes per resource, etc.) live in
+The numeric limits the reader enforces (8 GiB uncompressed aggregate,
+32 MiB index, 25,000 resources, 64-deep KDL nesting, 2 M nodes
+per resource, 128 MiB Zstd window, etc.) live in
 [`crates/elang-core/src/limits.rs`](crates/elang-core/src/limits.rs)
 and are documented exhaustively in
 [`docs/security-limits.md`](docs/security-limits.md). The reader
@@ -83,6 +95,15 @@ streaming partial verification, no persistence of rejected inputs.
 A defensive deployment that wants any of those must layer them
 above the reader. See the "Defensive deployment checklist" section
 of `security-limits.md` for the full list.
+
+One ceiling in that table is **writer-side only**:
+`MAX_COMPRESSED_ARCHIVE_BYTES` (6 GiB) is enforced by the writer
+(`crates/elang-writer/src/build.rs`), not by the reader. The reader
+bounds expansion instead through the 8 GiB uncompressed aggregate
+budget and the per-resource ceilings; enforcing the compressed
+ceiling in the reader, and the 2 GiB recommended-size warning, are
+tracked as open task **T0420** (`REQ-FRAME-012`, status *Partial* in
+`docs/traceability.md`).
 
 The reader proves the archive's bytes are internally consistent;
 it does **not** prove the archive came from a trusted publisher.

@@ -1,0 +1,14 @@
+{
+  "description": "A condition tree one level past MAX_NESTING_DEPTH is rejected",
+  "errorCode": "WHEN_TOO_DEEP",
+  "fixture": "invalid/budget/when-nesting-over-limit",
+  "input": "input.eld",
+  "modes": [
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-WHEN-008"
+  ],
+  "stage": 12
+}

@@ -1,0 +1,18 @@
+{
+  "description": "The footer's index offset disagrees with the archive layout (stage 1).",
+  "errorCode": "ARCHIVE_SIZE_INCONSISTENT",
+  "fixture": "invalid/binary/footer-offset-inconsistent",
+  "input": "archive.elang",
+  "modes": [
+    "inspect",
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-BIN-004",
+    "REQ-BIN-005",
+    "REQ-BIN-006"
+  ],
+  "stage": 1
+}

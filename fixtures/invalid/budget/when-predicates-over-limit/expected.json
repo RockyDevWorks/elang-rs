@@ -1,0 +1,14 @@
+{
+  "description": "A when block with one predicate past the ceiling is rejected",
+  "errorCode": "WHEN_TOO_MANY_PREDICATES",
+  "fixture": "invalid/budget/when-predicates-over-limit",
+  "input": "input.eld",
+  "modes": [
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-WHEN-008"
+  ],
+  "stage": 12
+}

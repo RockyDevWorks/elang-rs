@@ -162,6 +162,7 @@ dependencies = [
  "elang-repertoire",
  "elang-writer",
  "pico-args",
+ "serde_json",
 ]
 
 [[package]]

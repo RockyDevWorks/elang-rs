@@ -203,11 +203,11 @@ fn inspect_checks_the_exact_window_ceiling_including_mantissa() {
     // the window check. A 256-byte input has a two-byte content-size field.
     let original = valid_canonical(&[0u8; 256]);
     assert_eq!(original[4], 0x64); // single segment, two-byte FCS, checksum
-    for (descriptor, window_size) in [(0x88, MAX_WINDOW_BYTES), (0x89, 144 << 20)] {
+    for (descriptor, window_size) in [(0x88, MAX_ZSTD_WINDOW_BYTES), (0x89, 144 << 20)] {
         let mut frame = original.clone();
         frame[4] &= !0x20; // clear Single_Segment_flag
         frame.insert(5, descriptor); // windowLog = 27, mantissa = 0 or 1
-        if window_size == MAX_WINDOW_BYTES {
+        if window_size == MAX_ZSTD_WINDOW_BYTES {
             assert_eq!(inspect(&frame).unwrap().window_size, window_size);
         } else {
             let err = inspect(&frame).unwrap_err();
@@ -221,7 +221,7 @@ fn inspect_accepts_a_valid_canonical_frame() {
     let frame = valid_canonical(b"this is a typical ELANG payload of modest size");
     let header = inspect(&frame).expect("canonical frame should be accepted");
     assert_eq!(header.content_size, 46);
-    assert!(header.window_size <= MAX_WINDOW_BYTES);
+    assert!(header.window_size <= MAX_ZSTD_WINDOW_BYTES);
     assert!(usize::try_from(header.compressed_size).unwrap_or(0) == frame.len());
     // has_checksum is implicit in inspect()'s accept path.
 }
@@ -466,7 +466,7 @@ fn canonical_window_never_exceeds_the_ceiling() {
     let payload = vec![0u8; 1024 * 1024]; // 1 MiB of zeros
     let frame = encode(&payload, Profile::Canonical).unwrap();
     let header = inspect(&frame).unwrap();
-    assert!(header.window_size <= MAX_WINDOW_BYTES);
+    assert!(header.window_size <= MAX_ZSTD_WINDOW_BYTES);
 }
 
 #[test]

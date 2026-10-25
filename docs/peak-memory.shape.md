@@ -1,0 +1,92 @@
+# ELANG v0.1.0 peak-memory report
+
+> **Shape variant.** Every measured resident-set number is replaced with `<MEASURED>` so the structure of this report can be byte-compared across runs and machines. The shape is what the reproducible-build workflow checks; the real numbers live in `docs/peak-memory.md`.
+
+## Environment
+
+- **OS / arch:** <MEASURED> / <MEASURED>
+- **CPU:** <MEASURED>
+- **Kernel:** <MEASURED>
+- **Build profile:** `<MEASURED>`
+- **Measurement method:** <MEASURED>
+
+## Measurements
+
+| Case | Expectation | Outcome | Archive bytes | `VmHWM` (KiB) | `VmHWM` (MiB) | `VmRSS` (KiB) | `VmPeak` (KiB) | Error code | Budget |
+|---|---|---|---:|---:|---:|---:|---:|---|---|
+| `accepted/baseline` | accepted | accepted | 942 | <MEASURED> | <MEASURED> | <MEASURED> | <MEASURED> | `—` | n/a — the floor of the accepted space |
+| `accepted/max-resource-count` | accepted | accepted | 2641741 | <MEASURED> | <MEASURED> | <MEASURED> | <MEASURED> | `—` | MAX_RESOURCES = 25,000 |
+| `accepted/large-single-resource` | accepted | accepted | 3104 | <MEASURED> | <MEASURED> | <MEASURED> | <MEASURED> | `—` | MAX_GENERIC_RESOURCE_BYTES = 1 GiB (measured at 1/16 of the ceiling) |
+| `rejected/oversized-resource-claim` | rejected | rejected | 1058 | <MEASURED> | <MEASURED> | <MEASURED> | <MEASURED> | `INDEX_SIZE_OVER_CEILING` | MAX_GENERIC_RESOURCE_BYTES = 1 GiB |
+| `rejected/aggregate-size-claim` | rejected | rejected | 1801 | <MEASURED> | <MEASURED> | <MEASURED> | <MEASURED> | `LIMIT_UNCOMPRESSED_AGGREGATE` | MAX_UNCOMPRESSED_AGGREGATE_BYTES = 8 GiB |
+| `rejected/resource-count-claim` | rejected | rejected | 942 | <MEASURED> | <MEASURED> | <MEASURED> | <MEASURED> | `INDEX_COUNT_OUT_OF_RANGE` | MAX_RESOURCES = 25,000 |
+
+## What each case proves
+
+### `accepted/baseline`
+
+The smallest valid package (five mandatory resources, no extras) read through the full validate path.
+
+**Result:** accepted, peak RSS <MEASURED> KiB.
+
+### `accepted/max-resource-count`
+
+A valid package carrying the maximum number of resources the format allows (25,000 total), each with a small payload.
+
+**Result:** accepted, peak RSS <MEASURED> KiB.
+
+### `accepted/large-single-resource`
+
+A valid package carrying one extra resource of 64 MiB, which the reader must decode and hash in full.
+
+**Result:** accepted, peak RSS <MEASURED> KiB.
+
+### `rejected/oversized-resource-claim`
+
+An archive whose index claims a resource larger than the 1 GiB per-resource ceiling. The reader must refuse it without allocating the claimed size.
+
+**Result:** rejected with `INDEX_SIZE_OVER_CEILING` at a peak RSS of <MEASURED> KiB. The rejection cost is the point: the reader refused the claim without materialising the size that was claimed.
+
+### `rejected/aggregate-size-claim`
+
+An archive whose index claims an aggregate uncompressed size above the 8 GiB aggregate ceiling. The reader must refuse it without allocating the claimed size.
+
+**Result:** rejected with `LIMIT_UNCOMPRESSED_AGGREGATE` at a peak RSS of <MEASURED> KiB. The rejection cost is the point: the reader refused the claim without materialising the size that was claimed.
+
+### `rejected/resource-count-claim`
+
+An archive whose index claims more resources than the 25,000 ceiling allows. The reader must refuse it without building the claimed index.
+
+**Result:** rejected with `INDEX_COUNT_OUT_OF_RANGE` at a peak RSS of <MEASURED> KiB. The rejection cost is the point: the reader refused the claim without materialising the size that was claimed.
+
+## Evaluation against the documented limits
+
+| Limit | Ceiling | Worst observed in this run | Headroom |
+|---|---:|---:|---|
+| `MAX_RESOURCES` (resources per archive) | 25,000 | 25,000 (the `accepted/max-resource-count` case) | at the ceiling by construction |
+| `MAX_GENERIC_RESOURCE_BYTES` (per resource) | 1 GiB | 64 MiB decoded in `accepted/large-single-resource` | 16x below the ceiling |
+| `MAX_UNCOMPRESSED_AGGREGATE_BYTES` (per archive) | 8 GiB | ~64 MiB decoded in the same case | ~128x below the ceiling |
+| `MAX_COMPRESSED_ARCHIVE_BYTES` (per archive) | 6 GiB | see the `archive_bytes` column | — |
+
+## Limitations and disclosures
+
+- The accepted cases sit at the documented ceiling for **resource count** and at a fraction of it for **byte size**. A literal 1 GiB single-resource case and a literal 8 GiB aggregate case were not run: they need the corresponding amount of RAM to be *valid* on the host, and a number produced on a machine that could not hold the payload would not describe the reader's behaviour on a machine that can.
+- The rejected cases measure the **cost of refusal**, not the cost of acceptance. The interesting property is that the reader rejects a 1 GiB / 8 GiB claim in a few MiB of RSS — that is the budget doing its job.
+- `VmHWM` is a high-water mark for the whole process, so it includes the harness's own overhead (the archive bytes are held in memory while it is read). The absolute figures are therefore an upper bound on the reader's own footprint, not a measurement of it in isolation.
+- On platforms without `/proc/self/status` the methodology above still applies but no number is reported; the release notes ship the Linux figures and state the non-Linux position explicitly.
+
+## Reproducibility
+
+This report mixes two kinds of content: a deterministic half (the
+scenario ids, the expectations, the accept/reject outcomes, the stable
+error codes, the budgets) and a measured half (the `VmHWM` / `VmRSS` /
+`VmPeak` numbers). The measured half is a function of the kernel and
+the moment of the run, so it is **not** reproducible.
+
+The generator therefore also has a `--shape` mode that writes
+`docs/peak-memory.shape.md` and `docs/peak-memory.shape.json`: the same
+report with every measured number replaced by a sentinel and every
+host-derived environment value masked. The shape files are what the
+`reproducible-build` CI workflow compares across two clean containers,
+and `crates/elang-conformance/tests/measurement_shape.rs` mirrors that
+check locally.

@@ -1,0 +1,14 @@
+{
+  "description": "An allophone with a distinct IPA and roman parses cleanly",
+  "fixture": "valid/eld/accept-allophone",
+  "input": "input.eld",
+  "modes": [
+    "inspect"
+  ],
+  "outcome": "pass",
+  "requirements": [
+    "REQ-ELD-009",
+    "REQ-ELD-010",
+    "REQ-ELD-011"
+  ]
+}

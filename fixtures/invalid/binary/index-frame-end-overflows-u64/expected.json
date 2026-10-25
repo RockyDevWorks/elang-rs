@@ -1,0 +1,17 @@
+{
+  "description": "An index entry whose frame offset plus compressed size overflows u64 (stage 5).",
+  "errorCode": "INDEX_ENTRY_MALFORMED",
+  "fixture": "invalid/binary/index-frame-end-overflows-u64",
+  "input": "archive.elang",
+  "modes": [
+    "inspect",
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-BIN-010",
+    "REQ-BIN-005"
+  ],
+  "stage": 5
+}

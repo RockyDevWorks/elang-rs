@@ -1,0 +1,17 @@
+{
+  "description": "An indexed resource path is not valid UTF-8 (stage 5).",
+  "errorCode": "PATH_NOT_UTF8",
+  "fixture": "invalid/binary/index-path-not-utf8",
+  "input": "archive.elang",
+  "modes": [
+    "inspect",
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-BIN-011",
+    "REQ-BIN-012"
+  ],
+  "stage": 5
+}

@@ -1,0 +1,11 @@
+epf "0.1.0"
+eld "0.1.0"
+language-version "1.0.0"
+metadata {
+    identifier "urn:elang:language:rocky:conformance:1.0.0"
+    identifier "urn:elang:language:rocky:conformance:1.0.0"
+    name "Conformance Probe"
+}
+manifest {
+    phonemes "Linguistics/phonemes.eld"
+}

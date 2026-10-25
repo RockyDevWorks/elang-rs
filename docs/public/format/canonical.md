@@ -94,9 +94,9 @@ condition trees stay different.
 The profile is published as byte-exact golden files so an independent
 implementation can be checked without reading the reference Rust code:
 
-- [`specs/registry/eld-canonical-vectors.json`](../../specs/registry/eld-canonical-vectors.json)
+- [`specs/registry/eld-canonical-vectors.json`](../../../specs/registry/eld-canonical-vectors.json)
   lists 13 canonical ELD goldens with their SHA-256 (open artifact OA-14).
-- [`fixtures/valid/canonical/`](../../fixtures/valid/canonical/) holds the
+- [`fixtures/valid/canonical/`](../../../fixtures/valid/canonical/) holds the
   goldens themselves, their digest sidecars and the conformance
   `expected.json` records. Each fixture's `input.eld` is the **authored**
   source, written in non-canonical declaration order on purpose — the golden
