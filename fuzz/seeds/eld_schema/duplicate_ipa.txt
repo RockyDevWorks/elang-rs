@@ -1,0 +1,1 @@
+phonemes { consonants { phoneme "t" { roman "t" } phoneme "t" { roman "t2" } } }
