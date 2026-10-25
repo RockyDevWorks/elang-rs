@@ -666,3 +666,52 @@ fn docs_state_sha256_is_not_a_publisher_signature() {
         "REQ-INTEGRITY-008: docs/public/format/integrity.md must state that the format defines no publisher signatures"
     );
 }
+
+/// Write `source` to a scratch file outside the repository and return
+/// its path.
+///
+/// The scratch directory lives under the process temp dir, never inside
+/// the repository working tree.
+fn coverage_gap_scratch_file(name: &str, source: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("elang-meta-gap-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create scratch dir");
+    let path = dir.join(name);
+    std::fs::write(&path, source).expect("write scratch file");
+    path
+}
+
+/// A file that cannot be read contributes no test names.
+#[test]
+fn coverage_gap_collect_fn_names_on_a_missing_file_is_empty() {
+    let names = collect_fn_names(std::path::Path::new("/nonexistent/elang-no-such-file.rs"));
+    assert!(names.is_empty());
+}
+
+/// Whitespace between the function name and its argument list is
+/// allowed: the scanner must still recognise the test.
+#[test]
+fn coverage_gap_collect_fn_names_tolerates_whitespace_before_the_arguments() {
+    let path = coverage_gap_scratch_file("spaced.rs", "#[test]\nfn spaced_name () {}\n");
+    assert_eq!(collect_fn_names(&path), vec!["spaced_name".to_string()]);
+}
+
+/// An identifier that merely ends in `async` is not the `async`
+/// keyword: the attribute scanner must not treat it as one.
+#[test]
+fn coverage_gap_collect_fn_names_ignores_an_identifier_that_ends_in_async() {
+    let path = coverage_gap_scratch_file("async_suffix.rs", "xxasync fn foo() {}\n");
+    assert!(collect_fn_names(&path).is_empty());
+}
+
+/// A `]` with no matching `[` above the function is not an attribute.
+#[test]
+fn coverage_gap_collect_fn_names_ignores_a_stray_closing_bracket() {
+    let path = coverage_gap_scratch_file("stray_bracket.rs", "]\nfn foo() {}\n");
+    assert!(collect_fn_names(&path).is_empty());
+}
+
+/// A directory that cannot be read contributes no files.
+#[test]
+fn coverage_gap_walk_rs_on_a_missing_directory_is_empty() {
+    assert!(walk_rs(std::path::Path::new("/nonexistent/elang-no-such-dir")).is_empty());
+}

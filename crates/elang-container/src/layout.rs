@@ -656,11 +656,10 @@ mod tests {
         let total = archive.len();
         for len in [0usize, 8, 31, 32, 95, 96, 200, total - 1] {
             let e = ArchiveListing::parse(&archive[..len]).unwrap_err();
-            assert!(
-                is_container_parse_code(e.code()),
-                "len {len} gave {}",
-                e.code()
-            );
+            // The code is bound to a local so the diagnostic message is
+            // built even when the assertion holds.
+            let code = e.code();
+            assert!(is_container_parse_code(code), "len {len} gave {code}");
         }
     }
 
@@ -864,11 +863,8 @@ mod tests {
             let e = ArchiveListing::parse(&archive[..len]).unwrap_err();
             // Either ARCHIVE_TOO_SMALL (didn't reach footer), or a footer
             // parse error that the helper resolves to a registered code.
-            assert!(
-                is_container_parse_code(e.code()),
-                "len {len} gave {}",
-                e.code()
-            );
+            let code = e.code();
+            assert!(is_container_parse_code(code), "len {len} gave {code}");
         }
     }
 
@@ -1088,10 +1084,10 @@ mod tests {
         let e = ArchiveListing::parse(&archive).unwrap_err();
         // Framing fails first because the new size does not match
         // file_size - 64 - index_offset.
+        let code = e.code();
         assert!(
-            e.code() == "FOOTER_OFFSET_INCONSISTENT" || e.code() == "INDEX_SIZE_OUT_OF_RANGE",
-            "got {}",
-            e.code()
+            code == "FOOTER_OFFSET_INCONSISTENT" || code == "INDEX_SIZE_OUT_OF_RANGE",
+            "got {code}"
         );
     }
 
@@ -1114,11 +1110,8 @@ mod tests {
             total - 1,
         ] {
             let e = ArchiveListing::parse(&archive[..len]).unwrap_err();
-            assert!(
-                is_container_parse_code(e.code()),
-                "len {len} produced {}",
-                e.code()
-            );
+            let code = e.code();
+            assert!(is_container_parse_code(code), "len {len} produced {code}");
         }
     }
 

@@ -249,4 +249,31 @@ mod tests {
         ids.dedup();
         assert_eq!(ids.len(), total, "duplicate EPF golden case id");
     }
+
+    /// A source that does not parse must still produce a fixture: the
+    /// divergence from the pinned bytes is what the runner reports.
+    #[test]
+    fn coverage_gap_canonical_fixture_records_a_parse_failure() {
+        let case = EpfGoldenCase {
+            id: "test/parse-failure",
+            description: "a source that does not parse",
+            requirements: &["REQ-EPF-014"],
+            source: "not-an-epf",
+            canonical: "",
+            sha256_hex: "",
+        };
+        let fixture = canonical_vector_fixture(&case);
+        assert!(
+            fixture.actual.starts_with(b"parse failed:"),
+            "unexpected actual bytes: {:?}",
+            fixture.actual
+        );
+    }
+
+    /// A pinned hex string with an odd length cannot be decoded.
+    #[test]
+    fn coverage_gap_hex_decode_rejects_an_odd_length_string() {
+        let err = hex_decode("abc").expect_err("an odd-length hex string must fail");
+        assert!(err.contains("odd length"), "{err}");
+    }
 }

@@ -570,4 +570,13 @@ mod tests {
             "sorted_operands must order ascending by key"
         );
     }
+
+    /// The reference document is built from real phoneme roots; a root
+    /// the repertoire rejects must fail loudly instead of producing an
+    /// empty reference map.
+    #[test]
+    #[should_panic(expected = "truth-table reference document must parse cleanly")]
+    fn coverage_gap_build_refs_rejects_an_unparseable_document() {
+        let _ = build_refs(&["g"]);
+    }
 }

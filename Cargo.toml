@@ -27,7 +27,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.90"
 license = "Apache-2.0"
-repository = "https://github.com/elang-lang/elang-rs"
+repository = "https://github.com/RockyDevWorks/elang-rs"
 authors = ["ELANG Project"]
 
 # Centralized, pinned dependency versions (T0012). Individual crates opt in with

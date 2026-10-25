@@ -40,6 +40,56 @@ release, the section is dated and a compare link added.
 5. The exact dependency set and pinned data hashes are archived with the release
    (T1619).
 
+## Building the release artifact
+
+The distributable source artifact is assembled by
+`scripts/build-release-artifacts.sh`:
+
+```sh
+# Build the artifact and its SHA-256 sidecar into
+# target/release-artifacts/elang-v0.1.0.tar.gz.
+scripts/build-release-artifacts.sh
+
+# Build twice and assert the two artifacts are byte-identical.
+scripts/build-release-artifacts.sh --verify
+```
+
+The artifact's bytes depend on the file **contents** only: entries are
+sorted by path, ownership is forced to `0:0`, every timestamp is forced to
+the Unix epoch, the per-entry mode is forced to `u=rwX,go=rX` so the
+archive does not inherit the building machine's umask (the executable bit
+is preserved for files that already have one), and the gzip header carries
+neither a filename nor a timestamp. Two builds of the same tree therefore
+produce the same SHA-256, and the script refuses to report success unless
+the archive's member names match the file list it was asked to pack.
+
+`--verify` builds the archive twice into scratch directories, compares the
+two digests, and then compares a third build — the one actually written to
+`--out-dir` — against them. A build that cannot be hashed, or a delivered
+artifact that differs from the verified one, fails the run.
+
+An `--out-dir` inside the repository is refused unless **the output
+directory itself** is git-ignored. Checking the directory rather than the
+archive path is deliberate: a glob rule such as `*.tar.gz` would ignore the
+archive but not the `.sha256` sidecar, and the sidecar would then enter the
+next build's file list and change the artifact.
+
+The script **creates no tag, publishes nothing, signs nothing and makes no
+network call**. The tag, the signature and the publication are the human
+release step (T1617 / T1620); this script exists so that step is one
+command and one decision rather than a hand-assembled directory.
+
+**Platform: Linux.** The script requires GNU `tar`, because GNU tar and
+BSD tar (macOS) do not write identical archives for the same inputs. It
+refuses to run elsewhere rather than silently emitting a
+platform-dependent artifact. Linux is the release platform — the
+`reproducible-build` CI workflow and the release itself run on ubuntu.
+
+`crates/elang-conformance/tests/release_packaging.rs` asserts the same
+property in CI: two builds are byte-identical, the archive contains every
+file the release claims to ship, and building it leaves the working tree
+untouched.
+
 ## Release gate (v0.1.0)
 
 A release is cut only when the final checklist in

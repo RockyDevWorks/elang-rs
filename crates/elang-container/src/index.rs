@@ -1245,10 +1245,12 @@ mod tests {
         let e = to_resource_index(&idx, 100).unwrap_err();
         // `ResourceEntry::new` range-checks against the archive size; the
         // codes it can raise here are index-range or limit-prefixed.
+        // The code is bound to a local so the diagnostic message is built
+        // even when the assertion holds.
+        let code = e.code();
         assert!(
-            is_index_or_path_code(e.code()) || e.code().starts_with("LIMIT"),
-            "got {}",
-            e.code()
+            is_index_or_path_code(code) || code.starts_with("LIMIT"),
+            "got {code}"
         );
     }
 
@@ -1289,10 +1291,10 @@ mod tests {
         let e = IndexEntry::new(&long, 32, 100, 200, COMPRESSION_ZSTD).unwrap_err();
         // `ResourcePath::new` rejects it with PATH_TOO_LONG; a path that fits
         // u16 but exceeds the ResourcePath ceiling takes this branch first.
+        let code = e.code();
         assert!(
-            e.code() == "PATH_TOO_LONG" || e.code() == "INDEX_ENTRY_MALFORMED",
-            "got {}",
-            e.code()
+            code == "PATH_TOO_LONG" || code == "INDEX_ENTRY_MALFORMED",
+            "got {code}"
         );
     }
 
@@ -1314,6 +1316,27 @@ mod tests {
         let e2 = IndexEntry::new("a.eld", 52, 10, 20, COMPRESSION_ZSTD).unwrap();
         let e = Index::with_entries(vec![e1, e2]).unwrap_err();
         assert_eq!(e.code(), "INDEX_PATH_NOT_SORTED");
+    }
+
+    #[test]
+    /// `index entry new rejects a path that does not fit the u16 length field`.
+    ///
+    /// The u16 length check runs *before* the `ResourcePath` ceiling, so a
+    /// path longer than 65535 bytes is reported as a malformed index entry
+    /// rather than as an over-long path.
+    fn index_entry_new_rejects_a_path_that_does_not_fit_the_u16_length_field() {
+        let long = "a".repeat(usize::from(u16::MAX) + 1);
+        let e = IndexEntry::new(&long, 32, 100, 200, COMPRESSION_ZSTD).unwrap_err();
+        assert_eq!(e.code(), "INDEX_ENTRY_MALFORMED");
+    }
+
+    #[test]
+    /// `index with entries rejects more entries than the resource ceiling`.
+    fn index_with_entries_rejects_more_entries_than_the_ceiling() {
+        let e = IndexEntry::new("a.eld", 32, 10, 20, COMPRESSION_ZSTD).unwrap();
+        let over = usize::try_from(elang_core::limits::MAX_RESOURCES).unwrap() + 1;
+        let err = Index::with_entries(vec![e; over]).unwrap_err();
+        assert_eq!(err.code(), "INDEX_COUNT_OUT_OF_RANGE");
     }
 
     #[test]
