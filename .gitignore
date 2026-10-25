@@ -28,6 +28,11 @@ clippy_*.log
 # auto-replayed on the next run. Never part of the build artifact.
 /crates/*/proptest-regressions
 
+# LLVM raw coverage profiles (.profraw). Emitted by cargo-llvm-cov / instrumented
+# test runs into the crate directory of the binary under test. Machine-local
+# measurement data, never part of the build artifact.
+*.profraw
+
 # Kiro spec execution metadata (local session/execution IDs + timestamps, not
 # project content).
 .kiro/specs/**/tasks.meta.json

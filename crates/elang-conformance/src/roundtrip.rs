@@ -268,4 +268,22 @@ mod tests {
     fn golden_eld_sources_canonicalise_and_reparse() {
         golden_eld_sources_canonicalise().unwrap_or_else(|e| panic!("{e}"));
     }
+
+    /// The mismatch path of the byte-identity assertion: two archives
+    /// that differ must be reported with the first differing offset.
+    #[test]
+    fn coverage_gap_assert_identical_reports_the_first_difference() {
+        let err = assert_identical(&[1, 2, 3], &[1, 9, 3], "probe")
+            .expect_err("different archives must be reported");
+        assert!(err.contains("archives differ"), "{err}");
+        assert!(err.contains("first difference at byte 1"), "{err}");
+
+        // A shorter right-hand side is a prefix of the left-hand side:
+        // there is no differing byte to point at, so the common length
+        // is reported instead.
+        let err = assert_identical(&[1, 2, 3], &[1], "probe")
+            .expect_err("different archives must be reported");
+        assert!(err.contains("len 3 vs 1"), "{err}");
+        assert!(err.contains("first difference at byte 1"), "{err}");
+    }
 }

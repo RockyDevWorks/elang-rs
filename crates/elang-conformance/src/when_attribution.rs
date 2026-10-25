@@ -1267,3 +1267,237 @@ fn extract_body_handles_generics_and_return_types() {
     assert_body("#[test] fn target<T>() { let _: T; }", "{ let _: T; }");
     assert_body("#[test] fn target<F: Fn() -> i32>(f: F) { f() }", "{ f() }");
 }
+
+// ----- Coverage-gap tests for the attribution scanner ---------------
+//
+// The guard above proves the *published* coverage table is attributed
+// correctly. These tests exercise the scanner's own defensive arms —
+// the paths that only fire on malformed or hostile input — so the
+// guard cannot silently stop detecting a mis-attributed row.
+
+#[cfg(test)]
+mod coverage_gap_tests {
+    use super::*;
+
+    /// A scratch directory outside the repository that removes itself
+    /// when it goes out of scope.
+    ///
+    /// The cleanup runs on drop, so it also happens when an assertion
+    /// fails — a failed test must not leave scratch files behind.
+    struct ScratchDir {
+        path: PathBuf,
+    }
+
+    impl Drop for ScratchDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
+
+    /// Create a fresh, uniquely named scratch directory.
+    ///
+    /// The counter keeps concurrently running tests apart: the test
+    /// harness runs tests in parallel threads of one process, and a
+    /// shared directory name would let one test delete another's files.
+    fn scratch_dir() -> ScratchDir {
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+        let unique = format!(
+            "elang-when-gap-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        );
+        let path = std::env::temp_dir().join(unique);
+        std::fs::create_dir_all(&path).expect("create scratch dir");
+        ScratchDir { path }
+    }
+
+    /// Write `source` into a scratch directory outside the repository
+    /// and return the file's path together with the guard that removes
+    /// the directory again.
+    fn scratch_file(name: &str, source: &str) -> (PathBuf, ScratchDir) {
+        let dir = scratch_dir();
+        let path = dir.path.join(name);
+        std::fs::write(&path, source).expect("write scratch file");
+        (path, dir)
+    }
+
+    /// The text of the assertion argument list at `span`.
+    fn span_text(text: &str, span: (usize, usize)) -> &str {
+        &text[span.0..span.1]
+    }
+
+    #[test]
+    fn coverage_gap_file_defining_finds_nothing_for_an_unknown_crate() {
+        // The crate directory does not exist, so neither `src/` nor
+        // `tests/` is walked and the scan returns `None`.
+        assert!(file_defining("elang-no-such-crate", "any_test").is_none());
+    }
+
+    #[test]
+    fn coverage_gap_extract_body_rejects_a_non_token_boundary_match() {
+        // `xfn target` contains the needle `fn target` but not at a
+        // token boundary, so the scanner must keep searching and
+        // finally give up rather than extracting the wrong body.
+        let (path, _guard) = scratch_file("non_boundary.rs", "xfn target() { let s = 1; }");
+        assert!(extract_body(&path, "target").is_none());
+    }
+
+    #[test]
+    fn coverage_gap_extract_body_rejects_a_bodyless_declaration() {
+        // A trait method has no body; the `;` at depth zero ends the
+        // scan instead of an opening brace.
+        let (path, _guard) = scratch_file("bodyless.rs", "fn target(&self);");
+        assert!(extract_body(&path, "target").is_none());
+    }
+
+    #[test]
+    fn coverage_gap_char_literal_end_handles_escapes_and_lifetimes() {
+        // A plain character literal.
+        assert_eq!(char_literal_end("'a'", 0), Some(3));
+        // An escape sequence whose body is not a single byte: the
+        // scanner walks past the escape and still finds the closing
+        // quote.
+        assert_eq!(char_literal_end("'\\u{1F600}'", 0), Some(11));
+        // An unterminated escape sequence runs off the end.
+        assert_eq!(char_literal_end("'\\", 0), None);
+        // `''` is not a character literal.
+        assert_eq!(char_literal_end("''", 0), None);
+        // A lifetime is not a character literal.
+        assert_eq!(char_literal_end("'a", 0), None);
+    }
+
+    #[test]
+    fn coverage_gap_string_literals_skips_comments_lifetimes_and_raw_strings() {
+        // A line comment hides everything up to the newline.
+        assert_eq!(
+            string_literals("// line comment\n\"plain\""),
+            vec!["plain".to_string()]
+        );
+        // A nested block comment hides the whole comment, including the
+        // nested terminator.
+        assert_eq!(
+            string_literals("/* outer /* inner */ still */ \"after\""),
+            vec!["after".to_string()]
+        );
+        // A raw string is captured with its content, not its delimiters.
+        assert_eq!(
+            string_literals("r#\"raw body\"#"),
+            vec!["raw body".to_string()]
+        );
+        // A lifetime does not open a bogus string.
+        assert_eq!(string_literals("'a \"after\""), vec!["after".to_string()]);
+        // An unterminated raw string is not a raw literal: the scanner
+        // falls through and recovers by reading the quote as an ordinary
+        // string, which then runs to the end of the text.
+        assert_eq!(
+            string_literals("r#\"unterminated"),
+            vec!["unterminated".to_string()]
+        );
+    }
+
+    #[test]
+    fn coverage_gap_assertion_arg_spans_skips_nested_comments_and_raw_strings() {
+        // A nested block comment before the assertion.
+        let text = "/* /* */ */ assert!(x)";
+        let spans = assertion_arg_spans(text);
+        assert_eq!(spans.len(), 1, "one assertion in `{text}`");
+        assert_eq!(span_text(text, spans[0]), "x");
+
+        // A raw string before the assertion.
+        let text = "r#\"raw\"# assert!(x)";
+        let spans = assertion_arg_spans(text);
+        assert_eq!(spans.len(), 1, "one assertion in `{text}`");
+        assert_eq!(span_text(text, spans[0]), "x");
+
+        // An unterminated raw string is not a string literal: the
+        // scanner falls through and finds no assertion.
+        let text = "r#\"unterminated";
+        assert!(assertion_arg_spans(text).is_empty());
+    }
+
+    #[test]
+    fn coverage_gap_assertion_arg_spans_tolerates_whitespace_and_bad_shapes() {
+        // Whitespace between the macro name and the `!`.
+        let text = "assert ! (x)";
+        let spans = assertion_arg_spans(text);
+        assert_eq!(spans.len(), 1, "one assertion in `{text}`");
+        assert_eq!(span_text(text, spans[0]), "x");
+
+        // Whitespace between the `!` and the argument list.
+        let text = "assert! (x)";
+        let spans = assertion_arg_spans(text);
+        assert_eq!(spans.len(), 1, "one assertion in `{text}`");
+        assert_eq!(span_text(text, spans[0]), "x");
+
+        // An unbalanced argument list yields no span at all.
+        assert!(assertion_arg_spans("assert!(x").is_empty());
+        // An assertion macro without an argument list yields no span.
+        assert!(assertion_arg_spans("assert!x").is_empty());
+        // An assertion macro name with no `!` yields no span.
+        assert!(assertion_arg_spans("assert (x)").is_empty());
+        // An unrelated macro call yields no span.
+        assert!(assertion_arg_spans("foo(x)").is_empty());
+    }
+
+    #[test]
+    fn coverage_gap_matching_paren_skips_comments_strings_and_lifetimes() {
+        // A line comment inside the argument list.
+        assert_eq!(matching_paren("(a // c\n)", 0), Some(8));
+        // A nested block comment inside the argument list.
+        assert_eq!(matching_paren("(/* /* */ */)", 0), Some(12));
+        // A raw string inside the argument list.
+        assert_eq!(matching_paren("(r#\"x\"#)", 0), Some(7));
+        // An unterminated raw string inside the argument list: the
+        // scanner recovers by reading the quote as an ordinary string.
+        assert_eq!(matching_paren("(r#\"unterminated\")", 0), Some(17));
+        // A lifetime inside the argument list.
+        assert_eq!(matching_paren("('a)", 0), Some(3));
+        // An unterminated argument list has no closing parenthesis.
+        assert_eq!(matching_paren("(x", 0), None);
+    }
+
+    #[test]
+    fn coverage_gap_task_tags_in_ignores_a_truncated_tag() {
+        // `T1` is too short to be a task tag.
+        assert!(task_tags_in("T1").is_empty());
+        // `T1x` is too short to be a task tag as well.
+        assert!(task_tags_in("T1x").is_empty());
+        // A well-formed tag is still recognised.
+        assert!(task_tags_in("T1001").contains("T1001"));
+    }
+
+    #[test]
+    fn coverage_gap_check_attribution_reports_a_missing_evidence_record() {
+        let row = CoverageRow {
+            requirement: "REQ-WHEN-999",
+            crate_name: "elang-conformance",
+            test: "some_test",
+            kind: CoverageKind::Positive,
+        };
+        let err = check_attribution(&row, Some("body"))
+            .expect_err("a requirement without an evidence record must fail");
+        assert!(
+            err.contains("no evidence record"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn coverage_gap_check_attribution_reports_a_missing_test_body() {
+        let row = CoverageRow {
+            requirement: "REQ-WHEN-001",
+            crate_name: "elang-conformance",
+            test: "some_test",
+            kind: CoverageKind::Positive,
+        };
+        let err = check_attribution(&row, None)
+            .expect_err("a row whose test body cannot be found must fail");
+        assert!(
+            err.contains("test body not found"),
+            "unexpected error: {err}"
+        );
+    }
+}

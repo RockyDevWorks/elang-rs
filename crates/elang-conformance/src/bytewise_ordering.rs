@@ -322,3 +322,12 @@ fn exercise_subtree_idempotent(c: &Condition, case_id: &str) {
 // non-test builds; without this guard the build would warn.
 #[allow(dead_code)]
 fn _repertoire_anchor(_r: &Repertoire) {}
+
+/// The anchor keeps the `Repertoire` import used in every build
+/// configuration. Calling it proves the anchor is live code rather than
+/// a declaration the compiler never sees.
+#[test]
+fn coverage_gap_repertoire_anchor_is_callable() {
+    let rep = elang_repertoire::repertoire::load().expect("pinned repertoire must load");
+    _repertoire_anchor(&rep);
+}
