@@ -191,8 +191,8 @@ The release-artifact packaging script
 (`scripts/build-release-artifacts.sh`) and the test-coverage expansion
 that raised the workspace's Codecov-equivalent line coverage to 99.09%
 were added on PR #71, after this record was written. They were reviewed
-by the CodeRabbit review bot, which raised **nine findings** on the
-coverage work and **five** on the packaging script. Every one was
+by the CodeRabbit review bot, which raised **eleven findings**:
+**seven** on the coverage work and **four** on the packaging script. Every one was
 addressed and the thread resolved; the dispositions are:
 
 | # | Source | Finding | Disposition |

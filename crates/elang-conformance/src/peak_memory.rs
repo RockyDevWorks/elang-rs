@@ -213,25 +213,25 @@ mod tests {
         assert!(parse_proc_self_status(body).is_none());
     }
 
-    /// `current` reads the live status file. The outcome depends on
-    /// the host — on Linux it yields a real sample, elsewhere it yields
-    /// `None` — but a sample that *is* returned must be a real
-    /// measurement.
+    /// On Linux the CI and release platforms always provide
+    /// `/proc/self/status`, so the sample must be present *and*
+    /// measured. Accepting `None` there would let `current()` break
+    /// without the test noticing — a regression in the reader would
+    /// ship a silently unmeasured peak-memory report.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn coverage_gap_current_returns_a_measurement_on_linux() {
+        let sample = current().expect("Linux provides /proc/self/status");
+        assert!(sample.is_measured());
+    }
+
+    /// Every other platform has no `/proc/self/status`, so `None` is
+    /// the correct answer there; a sample that *is* returned must still
+    /// be a real measurement.
+    #[cfg(not(target_os = "linux"))]
     #[test]
     fn coverage_gap_current_returns_a_measurement_when_proc_is_available() {
-        // On Linux the CI and release platforms always provide
-        // `/proc/self/status`, so the sample must be present *and*
-        // measured. Accepting `None` there would let `current()` break
-        // without the test noticing — a regression in the reader would
-        // ship a silently unmeasured peak-memory report. On every other
-        // platform the file does not exist and `None` is the correct
-        // answer, so the fallback stays optional there.
         let sample = current();
-        if cfg!(target_os = "linux") {
-            let sample = sample.expect("Linux provides /proc/self/status");
-            assert!(sample.is_measured());
-        } else {
-            assert!(sample.is_none_or(|s| s.is_measured()));
-        }
+        assert!(sample.is_none_or(|s| s.is_measured()));
     }
 }
