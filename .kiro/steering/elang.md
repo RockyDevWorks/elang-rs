@@ -1,7 +1,7 @@
 # ELANG — Kiro Project Steering and Engineering Contract
 
 > **Place this file at:** `.kiro/steering/elang.md` (or use as the authoritative input to generate topic-specific Kiro steering files).  
-> **Specification release:** `0.0.1-1` · **Container:** `0.1.0` · **EPF:** `0.1.0` · **ELD:** `0.1.0`  
+> **Specification release:** `0.1.0` · **Container:** `0.1.0` · **EPF:** `0.1.0` · **ELD:** `0.1.0`  
 > **Status:** implementation steering based on confirmed decisions. A few enumerated normative artifacts remain to be produced and reviewed; do not fabricate them.  
 > **Priority:** newest confirmed decisions in this file supersede older drafts, especially rules concerning `frequency`, `distribution`, allophone braces, IPA/Unicode and canonicalization.
 
@@ -20,7 +20,7 @@
 
 ELANG defines a `.elang` custom binary package, the KDL 2.0 `package.epf` descriptor, a KDL 2.0 phoneme inventory `.eld`, SHA-256 integrity, deterministic canonical encoding and a Rust reader/writer/validator SDK. Its first linguistic module is **phonemes** only. Do not invent syntax for lexicons, syllable inventories, phonotactics, morphology, syntax, semantics, prosody, grammar, dependency management, repository ownership, signatures, audio or GUI; these are future modules or separate projects. The phoneme `when` predicates may refer to generator-assigned syllable positions, but ELANG v0.1.0 does not define the syllabifier or generator.
 
-**Version domains are independent:** spec release `0.0.1-1`; binary container `0.1.0` (header major=0, minor=1); EPF `0.1.0`; ELD `0.1.0`; individual language release is strict `MAJOR.MINOR.PATCH`; canonical compression profile `elang-canonical-zstd-v1`. Reader initially supports binary 0.1 only. `Header/format.version` first two components MUST match header major/minor; patch cannot change binary grammar.
+**Version domains are independent:** spec release `0.1.0`; binary container `0.1.0` (header major=0, minor=1); EPF `0.1.0`; ELD `0.1.0`; individual language release is strict `MAJOR.MINOR.PATCH`; canonical compression profile `elang-canonical-zstd-v1`. Reader initially supports binary 0.1 only. `Header/format.version` first two components MUST match header major/minor; patch cannot change binary grammar.
 
 ### 1.1 Proposed Rust workspace (architecture recommendation, not a previously ratified crate naming contract)
 
@@ -404,4 +404,4 @@ Conformance suite name: **`elang-canonical-zstd-v1-conformance`**. Include:
 
 ---
 
-**Reference:** ELANG Granular Normative Technical Specification `0.0.1-1` and confirmed design decisions through October 2026. This steering document resolves conflicts in older drafts; it does not certify that open artifacts have already been completed.
+**Reference:** ELANG Granular Normative Technical Specification `0.1.0` and confirmed design decisions through October 2026. This steering document resolves conflicts in older drafts; it does not certify that open artifacts have already been completed.

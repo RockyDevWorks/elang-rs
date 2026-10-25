@@ -131,9 +131,9 @@ and this project uses independent version domains (see
   reproducibility is platform-specific to GNU tar.
 - **Release CI** — `.github/workflows/release.yml`. Tag-triggered on
   `v*`. On a `vMAJOR.MINOR.PATCH` tag push the workflow: re-runs the
-  verified package build with `--version ${{ steps.version.outputs.version }}`
-  derived from the tag, regenerates the release archive metadata, writes
-  a release-notes attestation that lists every artifact digest plus the
+  verified package build with `--version` derived from the tag,
+  regenerates the release archive metadata, writes a release-notes
+  attestation that lists every artifact digest plus the
   integrity-vs-authenticity disclaimer, and creates the GitHub Release
   with the tarball, its `.sha256` sidecar, the lockfile attestation
   (`Cargo.lock.sha256`), the resolved-dependency list, the repertoire
@@ -145,6 +145,23 @@ and this project uses independent version domains (see
 - **`docs/release/v0.1.0/README.md` Shipped table** now lists the two
   new T1617-prep entries (`package.yml` and `release.yml`) alongside
   the existing reproducible-build CI workflow.
+
+### Changed
+
+- **Specification release bumped to `0.1.0`** for the v0.1.0 first release
+  (was `0.0.1-1`). The dash-suffix on the previous value signalled that the
+  spec was a working draft of the v0.1.0 line; the v0.1.0 spec corpus is now
+  fully ratified, so the identifier now matches the release it ships in. Per
+  REQ-CORE-VERSION-001 the seven version domains stay independent — the
+  binary container, EPF schema, ELD schema, language release, canonical
+  compression profile and crate versions are not touched. Normative
+  sources updated (`.kiro/steering/elang.md`, `requirements.md` REQ-CORE-VERSION-001,
+  `tasks.md` baseline, `specs/registry/error-codes.json`), implementation
+  constants updated (`elang-core::{version_domains, version::domains}::SPEC_RELEASE`),
+  public docs updated (`README.md`, `docs/specification.md`,
+  `docs/public/versioning.md`), and the normative manifest regenerated
+  with a new `PINNED_SPEC_CHECKSUM`. Gated by
+  [ADR 0013](docs/decisions/0013-spec-release-bump-to-0.1.0.md).
 
 ### Fixed
 

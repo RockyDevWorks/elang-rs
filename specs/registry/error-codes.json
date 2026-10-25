@@ -1,6 +1,6 @@
 {
   "registry_version": 1,
-  "spec_release": "0.0.1-1",
+  "spec_release": "0.1.0",
   "diagnostic_schema": {
     "required": ["code", "category", "message"],
     "optional": ["stage", "resourcePath", "byteOffset", "kdlSpan"],
