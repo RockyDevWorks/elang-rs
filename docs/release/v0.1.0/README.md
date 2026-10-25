@@ -34,6 +34,8 @@ happens on a separate commit, gated by independent review.
 | **T1614** | Peak-memory measurement for worst-case accepted and rejected packages, plus a byte-reproducible **shape** variant. | `docs/peak-memory.md`, `docs/peak-memory.json`, `docs/peak-memory.shape.md`, `docs/peak-memory.shape.json`, `crates/elang-conformance/src/peak_memory.rs`, `crates/elang-conformance/src/bin/gen_peak_memory.rs` |
 | **T1615** | Reproducible-build CI workflow. Compares the artifact set plus the two shape files across two clean containers and emits `docs/release/v0.1.0/reproducible-build-evidence.md`. | `.github/workflows/reproducible-build.yml`, `crates/elang-conformance/tests/measurement_shape.rs` |
 | **T1616** | Independent review record + security checklist (human-signed; this branch prepares, does not sign). | `docs/release/v0.1.0/review-record.md`, `docs/release/v0.1.0/security-checklist.md` |
+| **T1617 (prep)** | **Package CI** — builds the distributable source artifact with `scripts/build-release-artifacts.sh --verify` on every PR and every push to `main`, then uploads the tarball + `.sha256` sidecar as a workflow artifact. Linux-only (GNU tar is required). | `.github/workflows/package.yml` |
+| **T1617 (prep)** | **Release CI** — tag-triggered (`v*`); re-runs the verified package build, generates `gen_release_archive` metadata, writes a release-notes attestation that lists every artifact digest plus the integrity-vs-authenticity disclaimer, and creates the GitHub Release with the tarball, sidecar, lockfile attestation and archive digests attached as release assets. Does **not** sign artifacts and does **not** claim publisher authenticity (T1616 / T1620). | `.github/workflows/release.yml` |
 | **T1618** | These release notes (with the integrity ≠ authenticity distinction). | `docs/release/v0.1.0/README.md` (this file) |
 | **T1619** | Archival checksum metadata for the release. | `docs/release/v0.1.0/`, `Cargo.lock.sha256` |
 
@@ -41,7 +43,7 @@ happens on a separate commit, gated by independent review.
 
 | Task | Why |
 |---|---|
-| **T1617** `v0.1.0` tag + signed release artifacts | User handles the tag entirely; this branch must not create it. The artifact *build* step is automated and CI-verified (`scripts/build-release-artifacts.sh`); only the tag, the signature and the publication remain. |
+| **T1617** `v0.1.0` tag + signed release artifacts | The **tag** and the **publisher-authenticity signature** are human-gated: a maintainer creates `v0.1.0` locally, signs it with the project signing key, and pushes the signed tag. This branch (PR #73) MUST NOT create the tag or push a signature. The **artifact build**, **byte-reproducibility verification**, and **GitHub Release publication** are all automated by `.github/workflows/release.yml` on tag push: the workflow re-runs the verified packaging script, writes the integrity-attestation release notes, and creates the release with the tarball + `.sha256` sidecar + lockfile attestation + archive digests as release assets. What stays human is the *trigger* and the *authenticity claim*, not the *publish* step. |
 | **T1620** Final v0.1.0 release declaration | Depends on T1616 + the tag + every gate; not part of this workstream. |
 
 ## Measured outputs vs. reproducible outputs

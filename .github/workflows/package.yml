@@ -1,0 +1,145 @@
+name: Package
+
+# Build, verify and upload the ELANG distributable source-release artifact.
+#
+# The artifact bytes depend on file *content* only (deterministic tar entry
+# order, mtime=epoch, uid/gid=0, no gzip header metadata), so two clean
+# builds of the same tree produce the same bytes. `scripts/build-release-artifacts.sh
+# --verify` exercises that property on every run: it builds twice into two
+# scratch directories, asserts the SHA-256 of the two tarballs match, then
+# re-hashes the delivered copy against the scratch copy and exits non-zero
+# if they disagree.
+#
+# # Why this is Linux-only
+#
+# GNU tar and BSD tar (macOS) do not write byte-identical archives for the
+# same input, so the packaging script refuses to run anywhere except Linux
+# — the release platform. Linux is therefore also the only sensible place
+# to *verify* the artifact. macOS / Windows builds run as normal tests in
+# `ci.yml`; the artifact itself is produced only on `ubuntu-24.04`.
+#
+# # What this uploads
+#
+# * `target/release-artifacts/elang-v<version>.tar.gz` — the
+#   distributable source artifact (tracked files +
+#   untracked-but-not-ignored files, sorted by path).
+# * `target/release-artifacts/elang-v<version>.tar.gz.sha256` — the
+#   sidecar in `sha256sum` format.
+#
+# The archive is uploaded as a workflow artifact so every PR and every
+# `main` push has a downloadable, hashable copy of the source release.
+# On a tag, `release.yml` re-uses the same script and uploads the same
+# files as release assets.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Least-privilege: read-only is enough; we only write to
+# `target/release-artifacts/` (git-ignored via `/target`) and upload to
+# the workflow's artifact store. No token is needed for either step
+# beyond what the runner provides.
+permissions:
+  contents: read
+
+concurrency:
+  group: package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Build + verify distributable artifact
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_INCREMENTAL: "0"
+      RUST_BACKTRACE: "0"
+      RUSTUP_TOOLCHAIN: stable
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # `persist-credentials: false` ensures the auto-provisioned
+          # GITHUB_TOKEN is not cached in `.git/config` after checkout.
+          # Subsequent `cargo` steps (and the `build-release-artifacts.sh`
+          # script) therefore have no token to leak even if a build step
+          # were tricked into exfiltrating credentials. Closes the
+          # `artipacked` zizmor warning for this workflow.
+          persist-credentials: false
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+
+      # `actions/cache` replaces `Swatinem/rust-cache` here: the latter is
+      # LGPL-3.0, which would require a copyleft-exception ADR per the
+      # deny.toml policy (and fails the dependency-review license allowlist
+      # in `security.yml` for any newly-added use). `actions/cache` is MIT
+      # and stays inside the existing allowlist. Same pattern as
+      # `fuzz.yml`. Cache key is the SHA-256 of `Cargo.lock`, so a dep
+      # bump invalidates the entry; `restore-keys` falls back to the most
+      # recent matching prefix on a miss.
+      - name: Cache cargo registry + target/
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/cache
+            ~/.cargo/registry/index
+            ~/.cargo/git
+            target
+          key: cargo-package-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-package-${{ runner.os }}-
+
+      - name: Build release binaries (locked)
+        # `--locked` ensures the resolved dependency set is pinned by the
+        # committed `Cargo.lock`; cargo refuses to run if the lockfile is
+        # out of date. Without this, a stale local Cargo.lock could let
+        # the artifact pin one dep set while the test gates pin another.
+        run: cargo build --locked --release --workspace --all-targets
+
+      - name: Generate release archive metadata
+        # Writes the resolved-dependency list, repertoire digests,
+        # conformance-fixture hashes and ARCHIVE.md index into
+        # docs/release/v0.1.0/, and emits the top-level Cargo.lock.sha256
+        # attestation. These files ride inside the distributable artifact
+        # so they have to exist on disk before the script runs.
+        run: |
+          set -euo pipefail
+          cargo run --locked --release --quiet -p elang-conformance --bin gen_release_archive
+
+      - name: Build + verify distributable artifact
+        # `--verify` builds the tarball three times: two into scratch
+        # directories whose digests must match (proves the script is
+        # deterministic), and one into the output directory whose
+        # digest must match the scratch copies. Exit non-zero on any
+        # mismatch.
+        #
+        # The output directory is the script's default
+        # (`target/release-artifacts/`) — passing `--out-dir dist`
+        # fails because `dist/` is not git-ignored and the script
+        # refuses to swallow itself into the next run's file list.
+        run: scripts/build-release-artifacts.sh --verify
+
+      - name: Show delivered artifact digest
+        run: |
+          set -euo pipefail
+          echo "Files inside the artifact:"
+          tar -tzf target/release-artifacts/elang-v*.tar.gz | wc -l
+          echo "Delivered digest:"
+          cat target/release-artifacts/elang-v*.tar.gz.sha256
+
+      - name: Upload distributable artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: elang-source-artifact
+          path: |
+            target/release-artifacts/*.tar.gz
+            target/release-artifacts/*.tar.gz.sha256
+          retention-days: 14
+          if-no-files-found: error
