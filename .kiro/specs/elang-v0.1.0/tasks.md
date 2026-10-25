@@ -444,14 +444,14 @@ _(`allophone_empty_block`, `phoneme_empty_block`, `phonemes_empty_block`, `empty
 
 ## Phase 15 — Fuzzing, property testing and security hardening
 
-- [ ] **T1501** Add fuzz target for header/footer/index parsing.
-- [ ] **T1502** Add fuzz target for resource path validation.
-- [ ] **T1503** Add fuzz target for Zstd frame-header and bounded decompression.
-- [ ] **T1504** Add fuzz target for KDL parser/AST construction.
-- [ ] **T1505** Add fuzz target for EPF schema validation.
-- [ ] **T1506** Add fuzz target for ELD structural validation.
-- [ ] **T1507** Add fuzz target for IPA tokenizer/tie-bar/modifier parser.
-- [ ] **T1508** Add fuzz target for condition AST, evaluator and canonical sorting key.
+- [x] **T1501** Add fuzz target for header/footer/index parsing.
+- [x] **T1502** Add fuzz target for resource path validation.
+- [x] **T1503** Add fuzz target for Zstd frame-header and bounded decompression.
+- [x] **T1504** Add fuzz target for KDL parser/AST construction.
+- [x] **T1505** Add fuzz target for EPF schema validation.
+- [x] **T1506** Add fuzz target for ELD structural validation.
+- [x] **T1507** Add fuzz target for IPA tokenizer/tie-bar/modifier parser.
+- [x] **T1508** Add fuzz target for condition AST, evaluator and canonical sorting key.
 - [x] **T1509** Add property tests for canonicalization idempotence.
 - [x] **T1510** Add property tests for parse/serialize roundtrips of validated models.
 - [x] **T1511** Add property tests for bytewise path and IPA ordering.

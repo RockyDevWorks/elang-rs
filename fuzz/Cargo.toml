@@ -20,9 +20,15 @@ libfuzzer-sys = "=0.4.13"
 elang-core = { path = "../crates/elang-core" }
 elang-container = { path = "../crates/elang-container" }
 elang-unicode = { path = "../crates/elang-unicode" }
+elang-kdl = { path = "../crates/elang-kdl" }
+elang-epf = { path = "../crates/elang-epf" }
+elang-eld = { path = "../crates/elang-eld" }
+elang-repertoire = { path = "../crates/elang-repertoire" }
 
 # Pin std-only fuzz targets by listing each target as its own [[bin]] with
 # `test = false`. libFuzzer drives the entry point; cargo test is not used.
+#
+# T1501/T1502 — container framing and resource-path validation.
 [[bin]]
 name = "container_structure"
 path = "fuzz_targets/container_structure.rs"
@@ -36,3 +42,49 @@ path = "fuzz_targets/resource_path.rs"
 test = false
 doc = false
 bench = false
+
+# T1503/T1504 — Zstd frame inspection + bounded decode, KDL parse/AST.
+[[bin]]
+name = "zstd_frame"
+path = "fuzz_targets/zstd_frame.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "kdl_parser"
+path = "fuzz_targets/kdl_parser.rs"
+test = false
+doc = false
+bench = false
+
+# T1505/T1506 — EPF and ELD schema validation.
+[[bin]]
+name = "epf_schema"
+path = "fuzz_targets/epf_schema.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "eld_schema"
+path = "fuzz_targets/eld_schema.rs"
+test = false
+doc = false
+bench = false
+
+# T1507/T1508 — IPA tokenizer and the condition AST/sorter/evaluator.
+[[bin]]
+name = "ipa_tokenizer"
+path = "fuzz_targets/ipa_tokenizer.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "phon_condition"
+path = "fuzz_targets/phon_condition.rs"
+test = false
+doc = false
+bench = false
+

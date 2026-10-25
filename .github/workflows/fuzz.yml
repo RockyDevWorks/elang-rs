@@ -47,12 +47,42 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # T1501/T1502 — container framing and resource-path validation.
           - target: container_structure
             budget: 60
             max_len: 4096
           - target: resource_path
             budget: 30
             max_len: 2048
+          # T1503 — Zstd frame-header inspection + bounded decode.
+          - target: zstd_frame
+            budget: 60
+            max_len: 4096
+          # T1504 — KDL parser/AST construction (lower budget: pure
+          # CPU-bound lexing, no I/O or external state).
+          - target: kdl_parser
+            budget: 30
+            max_len: 4096
+          # T1505 — EPF schema (capped at MAX_EPF_BYTES / 1 MiB inside
+          # the parser, so the fuzzer cannot drive it past the bound).
+          - target: epf_schema
+            budget: 45
+            max_len: 8192
+          # T1506 — ELD structural validation (repertoire cached, so
+          # the per-call cost is dominated by schema checks).
+          - target: eld_schema
+            budget: 45
+            max_len: 8192
+          # T1507 — IPA tokenizer (cheap; the comparison-key check
+          # after a successful parse is the regression-prone part).
+          - target: ipa_tokenizer
+            budget: 30
+            max_len: 256
+          # T1508 — condition AST, evaluator and canonical sort key
+          # (the evaluator is pure and cheap; the AST walk dominates).
+          - target: phon_condition
+            budget: 45
+            max_len: 8192
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install nightly toolchain
@@ -91,8 +121,10 @@ jobs:
         # seeds in so libFuzzer has starting inputs. The generated corpus
         # is left on disk for local follow-up, but not committed by CI.
         run: |
-          mkdir -p "fuzz/corpus/${{ matrix.target }}"
-          cp -r "fuzz/seeds/${{ matrix.target }}/." "fuzz/corpus/${{ matrix.target }}/"
+          if compgen -G "fuzz/seeds/${{ matrix.target }}/*" > /dev/null; then
+            mkdir -p "fuzz/corpus/${{ matrix.target }}"
+            cp -r "fuzz/seeds/${{ matrix.target }}/." "fuzz/corpus/${{ matrix.target }}/"
+          fi
       - name: Run fuzz target
         run: |
           set -euo pipefail
@@ -123,12 +155,34 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # T1501/T1502 — container framing and resource-path validation.
           - target: container_structure
             budget: 600
             max_len: 4096
           - target: resource_path
             budget: 300
             max_len: 2048
+          # T1503/T1504 — Zstd frame decode and KDL parsing.
+          - target: zstd_frame
+            budget: 600
+            max_len: 4096
+          - target: kdl_parser
+            budget: 300
+            max_len: 4096
+          # T1505/T1506 — EPF and ELD schema validation.
+          - target: epf_schema
+            budget: 450
+            max_len: 8192
+          - target: eld_schema
+            budget: 450
+            max_len: 8192
+          # T1507/T1508 — IPA tokenizer and condition machinery.
+          - target: ipa_tokenizer
+            budget: 300
+            max_len: 256
+          - target: phon_condition
+            budget: 450
+            max_len: 8192
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@2c76c034f9e32a5d6e2c104dc4df23a22476db04 # nightly branch HEAD
@@ -152,7 +206,9 @@ jobs:
       - name: Run fuzz campaign
         run: |
           mkdir -p fuzz/corpus/${{ matrix.target }}
-          cp -r fuzz/seeds/${{ matrix.target}}/. fuzz/corpus/${{ matrix.target }}/
+          if compgen -G "fuzz/seeds/${{ matrix.target }}/*" > /dev/null; then
+            cp -r "fuzz/seeds/${{ matrix.target }}/." "fuzz/corpus/${{ matrix.target }}/"
+          fi
           cargo +nightly fuzz run ${{ matrix.target }} \
             -- -max_total_time=${{ matrix.budget }} \
                -max_len=${{ matrix.max_len }} \
