@@ -120,11 +120,17 @@ libfuzzer_sys::fuzz_target!(|data: &[u8]| {
 
     // Step 3 — for every `when` block in the document, exercise the
     // three machinery layers.
-    for group in doc.groups() {
-        for root in group.roots() {
-            let Some(block) = root.when() else {
-                continue;
-            };
+    for (index, root) in doc
+        .groups()
+        .iter()
+        .flat_map(|group| group.roots())
+        .enumerate()
+    {
+        for block in root.when().into_iter().chain(
+            root.allophones()
+                .iter()
+                .filter_map(|allophone| allophone.when()),
+        ) {
             let Ok(when) = parse_block(block, &refs, &REPERTOIRE) else {
                 continue;
             };
@@ -136,21 +142,16 @@ libfuzzer_sys::fuzz_target!(|data: &[u8]| {
             }
 
             // Layer 3: the pure evaluator. The context is the
-            // document's own root sequence; the candidate is the
-            // root that owns this `when`, so the neighbour
-            // predicates (if any) see their own context.
-            if let Some(index) = root_keys
-                .iter()
-                .position(|k| k == &comparison_key(root.ipa().as_str()))
-            {
-                let ctx = EvalContext {
-                    roots: &root_keys,
-                    index,
-                    syllable_role: None,
-                    refs: &refs,
-                };
-                let _ = elang_eld::evaluate(&when, &ctx);
-            }
+            // document's own root sequence; root and allophone
+            // conditions share the owning root's index so neighbour
+            // predicates never use surface allophones.
+            let ctx = EvalContext {
+                roots: &root_keys,
+                index,
+                syllable_role: None,
+                refs: &refs,
+            };
+            let _ = elang_eld::evaluate(&when, &ctx);
         }
     }
 });

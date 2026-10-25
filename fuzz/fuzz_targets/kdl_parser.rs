@@ -1,7 +1,7 @@
 // Fuzz target for the KDL 2.0 parser and AST construction (Phase 15,
 // T1504).
 //
-// Drives arbitrary byte sequences through `elang_kdl::parse`, the
+// Drives arbitrary byte sequences through `elang_kdl::parse_with_budgets`, the
 // hand-rolled recursive-descent parser that every higher-layer
 // document format (EPF, ELD, integrity manifest) is built on.
 //
@@ -41,7 +41,7 @@
               lexer, parser and AST builder under test"
 )]
 
-use elang_kdl::{parse, BudgetTracker};
+use elang_kdl::{parse_with_budgets, BudgetTracker};
 
 libfuzzer_sys::fuzz_target!(|data: &[u8]| {
     // A fresh tracker per call: the archive-wide counters are the
@@ -49,33 +49,35 @@ libfuzzer_sys::fuzz_target!(|data: &[u8]| {
     // budget state into the next input.
     let mut budgets = BudgetTracker::new();
 
-    // `parse` is the public entry point: UTF-8 validation → lex →
+    // `parse_with_budgets` is the public entry point: UTF-8 validation → lex →
     // parse → AST. A structured `ParseError` is the expected outcome
     // for adversarial input; a panic is a defect.
-    let Ok(doc) = parse(data) else {
+    let Ok(doc) = parse_with_budgets(data, &mut budgets) else {
         return;
     };
+    if !doc.nodes.is_empty() {
+        debug_assert!(budgets.nodes_archive().current() > 0);
+    }
 
     // The AST was built. Walk it so the fuzzer also exercises the
     // traversal helpers that every consumer (EPF, ELD, integrity
     // manifest) depends on — a panic in an accessor is just as much a
     // defect as one in the parser.
     let mut nodes = 0usize;
-    for node in doc.nodes.iter() {
+    let mut pending: Vec<_> = doc.nodes.iter().collect();
+    while let Some(node) = pending.pop() {
         nodes = nodes.saturating_add(1);
         // `name`/`args`/`props`/`children` are the accessors the
         // schema validators call first.
         let _ = node.name();
         let _ = node.args().count();
         let _ = node.props().count();
-        let _ = node.children().map(|c| c.len());
+        if let Some(children) = node.children() {
+            pending.extend(children.iter());
+        }
     }
     // The node count must be bounded by the per-resource budget the
     // parser enforced; a value above the ceiling would mean the
     // budget was checked after allocation.
     debug_assert!(nodes <= elang_core::limits::MAX_NODES_PER_RESOURCE as usize);
-
-    // The archive-wide budget is a separate tracker dimension; drive
-    // it explicitly so both counters are exercised.
-    let _ = budgets.nodes_archive().current();
 });
