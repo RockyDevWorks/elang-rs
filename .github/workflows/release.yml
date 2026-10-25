@@ -1,0 +1,189 @@
+name: Release
+
+# Tag-triggered GitHub Release for ELANG.
+#
+# This workflow is the **machine half** of the release act. When a tag of
+# the form `v<semver>` is pushed, it builds the distributable source-release
+# artifact end-to-end on Linux (the release platform — GNU tar is required
+# for byte-reproducible archives, and BSD tar on macOS does not satisfy
+# that), verifies that the artifact is reproducible, generates the
+# release-archive metadata (dependency set, repertoire digests, conformance
+# fixture hashes, ARCHIVE index), and publishes everything as a GitHub
+# Release.
+#
+# # What this workflow DOES
+#
+# * Runs `scripts/build-release-artifacts.sh --verify` so the tarball is
+#   proven byte-reproducible before it is published.
+# * Generates `docs/release/v0.1.0/{dependencies.txt, repertoire.sha256,
+#   conformance-hashes.txt, ARCHIVE.md}` and `Cargo.lock.sha256` via
+#   `gen_release_archive`.
+# * Creates a GitHub Release whose body is an integrity attestation
+#   summary (NOT a publisher-authenticity claim).
+# * Attaches the tarball, its `.sha256` sidecar, the lockfile attestation,
+#   and the four release-archive digests as release assets.
+#
+# # What this workflow DOES NOT DO
+#
+# * It does NOT sign release artifacts. SHA-256 attests that the bytes
+#   you have match the bytes this CI run produced; it does not prove who
+#   produced them. Publisher authenticity requires a signed tag or an
+#   out-of-band trust mechanism, both of which are explicitly out of
+#   scope for v0.1.0. See `docs/release/v0.1.0/README.md`.
+# * It does NOT claim a registered media type, a URN-namespace
+#   ownership claim, or a distribution-platform listing. Those are
+#   outside v0.1.0's release model.
+# * It does NOT decide what should be released. Tag creation is a
+#   human-gated decision (T1617/T1620); the workflow fires only after
+#   the tag exists.
+#
+# # Concurrency
+#
+# Releases are never cancelled mid-flight. If two tags race, each gets
+# its own job — losing a release to `cancel-in-progress: true` would be
+# worse than running two parallel builds.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # to create the GitHub Release
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Cut ${{ github.ref_name }} release
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_INCREMENTAL: "0"
+      RUST_BACKTRACE: "0"
+      RUSTUP_TOOLCHAIN: stable
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # `gen_release_archive` reads the resolved dep set from
+          # `Cargo.lock` and computes its SHA-256, and `scripts/build-release-artifacts.sh`
+          # enumerates every tracked file. Both need the full history to
+          # produce a reproducible archive, so fetch with depth 0.
+          fetch-depth: 0
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache target/
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Compute version from tag
+        id: version
+        run: |
+          set -euo pipefail
+          # Strip the leading 'v' from the tag (e.g., v0.1.0 -> 0.1.0)
+          # so the artifact filename matches the version in the tag body.
+          VERSION="${GITHUB_REF_NAME#v}"
+          # Reject anything that doesn't look like semver. The CI lockfile
+          # and the workspace `[workspace.package].version` are the source
+          # of truth for the version; the tag is a label, not a value.
+          case "$VERSION" in
+            [0-9]*.[0-9]*.[0-9]*)
+              ;;
+            *)
+              echo "::error::tag ${GITHUB_REF_NAME} is not a semver-shaped version (expected vMAJOR.MINOR.PATCH)"
+              exit 1
+              ;;
+          esac
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Building ELANG release ${VERSION}"
+
+      - name: Build release binaries (locked)
+        run: cargo build --locked --release --workspace --all-targets
+
+      - name: Generate release archive metadata
+        # Writes the resolved-dependency list, repertoire digests,
+        # conformance-fixture hashes, ARCHIVE.md, and the top-level
+        # `Cargo.lock.sha256` attestation into the working tree.
+        run: |
+          set -euo pipefail
+          cargo run --locked --release --quiet -p elang-conformance --bin gen_release_archive
+
+      - name: Build + verify distributable artifact
+        # `--verify` proves the script is deterministic (two scratch
+        # builds must agree) and that the delivered copy matches the
+        # scratch copies. Exit non-zero on any mismatch.
+        run: |
+          set -euo pipefail
+          scripts/build-release-artifacts.sh --verify --out-dir dist --version "${{ steps.version.outputs.version }}"
+
+      - name: Build release-notes attestation
+        # The body of the GitHub Release. Records the resolved dep set
+        # hash, every artifact digest, and the integrity-vs-authenticity
+        # disclaimer; reads the version from the tag.
+        run: |
+          set -euo pipefail
+          {
+            echo "# ELANG ${{ steps.version.outputs.version }}"
+            echo
+            echo "Built from commit \`${GITHUB_SHA}\` on ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}@${GITHUB_REF_NAME}."
+            echo
+            echo "Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo
+            echo "## Artifacts"
+            echo
+            echo "| File | SHA-256 |"
+            echo "|------|---------|"
+            for f in dist/*.tar.gz dist/*.tar.gz.sha256 Cargo.lock.sha256; do
+              [ -f "$f" ] || continue
+              digest="$(sha256sum "$f" | cut -d' ' -f1)"
+              echo "| \`$(basename "$f")\` | \`${digest}\` |"
+            done
+            echo
+            echo "## Resolved dependency set"
+            echo
+            echo "\`Cargo.lock\` SHA-256: \`$(cut -d' ' -f1 Cargo.lock.sha256)\`"
+            echo
+            echo "The full per-dependency list is in the \`dependencies.txt\` release asset."
+            echo
+            echo "## Normative input digests"
+            echo
+            echo "Pinned Unicode 18.0 / IPA 2020 reference data: see the \`repertoire.sha256\` asset."
+            echo "Published conformance fixture hashes: see the \`conformance-hashes.txt\` asset."
+            echo
+            echo "## Integrity vs. publisher authenticity"
+            echo
+            echo "The SHA-256 digests above attest that the bytes you have match the"
+            echo "bytes this CI run produced. They do **not** prove who produced"
+            echo "those bytes; publisher authenticity requires a signed tag or an"
+            echo "out-of-band trust mechanism, neither of which the v0.1.0 release"
+            echo "claims. See \`docs/release/v0.1.0/README.md\` for the full model."
+          } > dist/RELEASE-NOTES.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ELANG ${{ steps.version.outputs.version }}
+          body_path: dist/RELEASE-NOTES.md
+          # `fail_on_unmatched_files: true` means a missing release asset
+          # fails the release. Better to abort a release than to publish
+          # a release without its lockfile attestation or sidecar.
+          fail_on_unmatched_files: true
+          files: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+            dist/RELEASE-NOTES.md
+            Cargo.lock.sha256
+            docs/release/v0.1.0/dependencies.txt
+            docs/release/v0.1.0/repertoire.sha256
+            docs/release/v0.1.0/conformance-hashes.txt
+            docs/release/v0.1.0/ARCHIVE.md

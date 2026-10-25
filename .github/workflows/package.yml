@@ -1,0 +1,113 @@
+name: Package
+
+# Build, verify and upload the ELANG distributable source-release artifact.
+#
+# The artifact bytes depend on file *content* only (deterministic tar entry
+# order, mtime=epoch, uid/gid=0, no gzip header metadata), so two clean
+# builds of the same tree produce the same bytes. `scripts/build-release-artifacts.sh
+# --verify` exercises that property on every run: it builds twice into two
+# scratch directories, asserts the SHA-256 of the two tarballs match, then
+# re-hashes the delivered copy against the scratch copy and exits non-zero
+# if they disagree.
+#
+# # Why this is Linux-only
+#
+# GNU tar and BSD tar (macOS) do not write byte-identical archives for the
+# same input, so the packaging script refuses to run anywhere except Linux
+# — the release platform. Linux is therefore also the only sensible place
+# to *verify* the artifact. macOS / Windows builds run as normal tests in
+# `ci.yml`; the artifact itself is produced only on `ubuntu-26.04`.
+#
+# # What this uploads
+#
+# * `dist/elang-v<version>.tar.gz` — the distributable source artifact
+#   (tracked files + untracked-but-not-ignored files, sorted by path).
+# * `dist/elang-v<version>.tar.gz.sha256` — the sidecar in `sha256sum` format.
+#
+# The archive is uploaded as a workflow artifact so every PR and every
+# `main` push has a downloadable, hashable copy of the source release.
+# On a tag, `release.yml` re-uses the same script and uploads the same
+# files as release assets.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Least-privilege: read-only is enough; we only write to `dist/` and
+# upload to the workflow's artifact store.
+permissions:
+  contents: read
+
+concurrency:
+  group: package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Build + verify distributable artifact
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_INCREMENTAL: "0"
+      RUST_BACKTRACE: "0"
+      RUSTUP_TOOLCHAIN: stable
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache target/
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Build release binaries (locked)
+        # `--locked` ensures the resolved dependency set is pinned by the
+        # committed `Cargo.lock`; cargo refuses to run if the lockfile is
+        # out of date. Without this, a stale local Cargo.lock could let
+        # the artifact pin one dep set while the test gates pin another.
+        run: cargo build --locked --release --workspace --all-targets
+
+      - name: Generate release archive metadata
+        # Writes the resolved-dependency list, repertoire digests,
+        # conformance-fixture hashes and ARCHIVE.md index into
+        # docs/release/v0.1.0/, and emits the top-level Cargo.lock.sha256
+        # attestation. These files ride inside the distributable artifact
+        # so they have to exist on disk before the script runs.
+        run: |
+          set -euo pipefail
+          cargo run --locked --release --quiet -p elang-conformance --bin gen_release_archive
+
+      - name: Build + verify distributable artifact
+        # `--verify` builds the tarball three times: two into scratch
+        # directories whose digests must match (proves the script is
+        # deterministic), and one into `dist/` whose digest must match
+        # the scratch copies (proves the delivered copy is the same
+        # bytes). Exit non-zero on any mismatch.
+        run: scripts/build-release-artifacts.sh --verify --out-dir dist
+
+      - name: Show delivered artifact digest
+        run: |
+          set -euo pipefail
+          echo "Files inside the artifact:"
+          tar -tzf dist/elang-v*.tar.gz | wc -l
+          echo "Delivered digest:"
+          cat dist/elang-v*.tar.gz.sha256
+
+      - name: Upload distributable artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: elang-source-artifact
+          path: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+          retention-days: 14
+          if-no-files-found: error

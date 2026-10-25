@@ -115,6 +115,37 @@ and this project uses independent version domains (see
   `cargo run -p elang-conformance --bin gen_canonical_goldens`; regeneration
   is byte-identical and no digest is hand-written.
 
+### Added
+
+- **Package CI** — `.github/workflows/package.yml`. On every PR and every
+  push to `main` the workflow builds the release binaries
+  (`cargo build --locked --release --workspace --all-targets`), generates
+  the release archive metadata
+  (`cargo run -p elang-conformance --bin gen_release_archive`), then
+  invokes `scripts/build-release-artifacts.sh --verify` to build the
+  distributable source artifact end-to-end and prove it byte-reproducible
+  on Linux (`ubuntu-26.04` — GNU tar is required). The tarball and its
+  `.sha256` sidecar are uploaded as a 14-day workflow artifact named
+  `elang-source-artifact`. macOS / Windows build + test coverage stays
+  in `ci.yml`; the artifact itself is Linux-only because byte-for-byte
+  reproducibility is platform-specific to GNU tar.
+- **Release CI** — `.github/workflows/release.yml`. Tag-triggered on
+  `v*`. On a `vMAJOR.MINOR.PATCH` tag push the workflow: re-runs the
+  verified package build with `--version ${{ steps.version.outputs.version }}`
+  derived from the tag, regenerates the release archive metadata, writes
+  a release-notes attestation that lists every artifact digest plus the
+  integrity-vs-authenticity disclaimer, and creates the GitHub Release
+  with the tarball, its `.sha256` sidecar, the lockfile attestation
+  (`Cargo.lock.sha256`), the resolved-dependency list, the repertoire
+  digests, the conformance fixture hashes, and the human-readable
+  `ARCHIVE.md` attached as release assets. Concurrency
+  `cancel-in-progress: false` so a release build never gets cancelled.
+  The workflow does **not** sign artifacts and does **not** claim
+  publisher authenticity; both remain T1616 / T1620 gates.
+- **`docs/release/v0.1.0/README.md` Shipped table** now lists the two
+  new T1617-prep entries (`package.yml` and `release.yml`) alongside
+  the existing reproducible-build CI workflow.
+
 ### Fixed
 
 - **Crate `repository` metadata pointed at a repository that does not
