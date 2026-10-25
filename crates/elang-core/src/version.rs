@@ -209,7 +209,7 @@ pub mod domains {
     };
 
     /// Spec release this implementation targets.
-    pub const SPEC_RELEASE: &str = "0.0.1-1";
+    pub const SPEC_RELEASE: &str = "0.1.0";
 
     /// Binary container version (typed).
     pub const CONTAINER: ContainerVersion = ContainerVersion::from_semver(SemVer::new(0, 1, 0));

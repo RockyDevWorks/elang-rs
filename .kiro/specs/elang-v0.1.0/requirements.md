@@ -22,7 +22,7 @@
 
 | ID | Level | Requirement | Owner | Tasks |
 |---|---|---|---|---|
-| REQ-CORE-VERSION-001 | MUST | Maintain independent version domains: spec `0.0.1-1`; container `0.1.0`; EPF `0.1.0`; ELD `0.1.0`; language release strict `MAJOR.MINOR.PATCH`; canonical profile `elang-canonical-zstd-v1`. | elang-core | T0201 |
+| REQ-CORE-VERSION-001 | MUST | Maintain independent version domains: spec `0.1.0`; container `0.1.0`; EPF `0.1.0`; ELD `0.1.0`; language release strict `MAJOR.MINOR.PATCH`; canonical profile `elang-canonical-zstd-v1`. | elang-core | T0201 |
 | REQ-CORE-VERSION-002 | MUST | Parse strict semver-like `MAJOR.MINOR.PATCH` with no leading zeros. | elang-core | T0202 |
 | REQ-CORE-VERSION-003 | MUST | `Header/format.version` first two components match header major/minor; patch MUST NOT change binary grammar. | elang-container | T1204 |
 | REQ-CORE-VERSION-004 | MUST | Reader supports binary `0.1` only. | elang-container | T0301, T0302 |

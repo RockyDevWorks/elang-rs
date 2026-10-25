@@ -8,7 +8,7 @@ language release, and the tooling evolve at their own pace.
 
 | Domain | Value | Governs |
 |--------|-------|---------|
-| Specification release | `0.0.1-1` | The normative spec this code targets. |
+| Specification release | `0.1.0` | The normative spec this code targets. |
 | Binary container | `0.1.0` | Header major `0`, minor `1`. |
 | EPF (`package.epf`) | `0.1.0` | The descriptor schema. |
 | ELD (phoneme inventory) | `0.1.0` | The `.eld` schema. |

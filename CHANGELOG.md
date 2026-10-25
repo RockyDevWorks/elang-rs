@@ -115,6 +115,23 @@ and this project uses independent version domains (see
   `cargo run -p elang-conformance --bin gen_canonical_goldens`; regeneration
   is byte-identical and no digest is hand-written.
 
+### Changed
+
+- **Specification release bumped to `0.1.0`** for the v0.1.0 first release
+  (was `0.0.1-1`). The dash-suffix on the previous value signalled that the
+  spec was a working draft of the v0.1.0 line; the v0.1.0 spec corpus is now
+  fully ratified, so the identifier now matches the release it ships in. Per
+  REQ-CORE-VERSION-001 the seven version domains stay independent — the
+  binary container, EPF schema, ELD schema, language release, canonical
+  compression profile and crate versions are not touched. Normative
+  sources updated (`.kiro/steering/elang.md`, `requirements.md` REQ-CORE-VERSION-001,
+  `tasks.md` baseline, `specs/registry/error-codes.json`), implementation
+  constants updated (`elang-core::{version_domains, version::domains}::SPEC_RELEASE`),
+  public docs updated (`README.md`, `docs/specification.md`,
+  `docs/public/versioning.md`), and the normative manifest regenerated
+  with a new `PINNED_SPEC_CHECKSUM`. Gated by
+  [ADR 0013](docs/decisions/0013-spec-release-bump-to-0.1.0.md).
+
 ### Fixed
 
 - **Crate `repository` metadata pointed at a repository that does not

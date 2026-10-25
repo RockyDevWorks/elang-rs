@@ -264,7 +264,7 @@ pub const RELEASE: &str = "v0.1.0";
 /// a declaration that the release is published — the `v0.1.0` tag is the
 /// release act, and it is created separately (T1617).
 pub const PINNED_SPEC_CHECKSUM: &str =
-    "681022fbdd9a91d4e017c187884de7e6912409bee4267399464f8e4dc7d72e46";
+    "baca9f75d622ca6986d0aed4923964bd729e48e88afe00e0d21dbbd76296e50b";
 
 /// Errors produced by [`build_manifest`] and [`verify`].
 #[derive(Debug)]
