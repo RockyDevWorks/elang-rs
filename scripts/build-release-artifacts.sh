@@ -133,14 +133,16 @@ ARTIFACT_NAME="elang-v${VERSION}.tar.gz"
 # includes untracked-but-not-ignored files, so an output directory that
 # lives inside the repository and is NOT git-ignored would put the artifact
 # this script writes into the *next* run's list — tar would then pack a
-# partial copy of the artifact into itself. Require the output path to be
-# git-ignored, or place it outside the repository.
+# partial copy of the artifact into itself. The check is performed on the
+# directory itself: a glob rule such as `*.tar.gz` would ignore the archive
+# but not the `.sha256` sidecar, so checking the directory is the only way
+# to guarantee both artifacts stay out of the next run's file list.
 OUT_ABS="$(realpath -m -- "$OUT_DIR")"
 case "$OUT_ABS/" in
 "$REPO_ROOT"/*)
 	REL="${OUT_ABS#"$REPO_ROOT"}"
 	REL="${REL#/}"
-	if ! git check-ignore -q --no-index -- "${REL:+$REL/}$ARTIFACT_NAME"; then
+	if ! git check-ignore -q --no-index -- "${REL:+$REL/}"; then
 		die "--out-dir inside the repository must be git-ignored: $OUT_DIR"
 	fi
 	;;
@@ -247,7 +249,15 @@ build() {
 	fi
 
 	# sha256sum checkable format: "<hex>  <filename>"
-	printf '%s  %s\n' "$(sha256_of "$tarball")" "$ARTIFACT_NAME" \
+	#
+	# The digest is captured before it is written. Inlining it into the
+	# `printf` would swallow a failure of `sha256_of`: the command
+	# substitution would yield an empty string, the sidecar would be
+	# written with an empty digest, and the build would still report
+	# success.
+	local digest
+	digest="$(sha256_of "$tarball")" || return 1
+	printf '%s  %s\n' "$digest" "$ARTIFACT_NAME" \
 		>"$out_dir/${ARTIFACT_NAME}.sha256"
 
 	printf '%s\n' "$tarball"
@@ -285,6 +295,18 @@ printf 'sha256:       %s\n' "$A_SUM"
 printf 'files:        %s\n' "$FILE_COUNT"
 
 # The verified artifact is written to --out-dir as well, so the caller ends
-# up holding the exact bytes that were proven reproducible.
+# up holding the exact bytes that were proven reproducible. The delivered
+# artifact is re-hashed and compared with the scratch build: the two
+# scratch builds agreeing proves the build is deterministic, but says
+# nothing about the third build that is actually delivered. Comparing the
+# digest closes that gap.
 OUT="$(build "$OUT_DIR")"
+OUT_SUM="$(sha256_of "$OUT")"
+if [ "$OUT_SUM" != "$A_SUM" ]; then
+	printf 'build-release-artifacts: NOT reproducible (delivered artifact differs)\n  scratch:  %s\n  delivered: %s\n' \
+		"$A_SUM" "$OUT_SUM" >&2
+	exit 1
+fi
+
 printf 'artifact:     %s\n' "$OUT"
+printf 'sha256:       %s\n' "$OUT_SUM"
