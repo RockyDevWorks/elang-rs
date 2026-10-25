@@ -36,7 +36,7 @@ libFuzzer and drives it through one parser chain. The target name maps
 |---------------------|--------|----------------------------------------------------------------------------------------------------------|
 | `container_structure` | T1501  | `Header::decode`, `Footer::decode`, `Index::decode` against arbitrary bytes                            |
 | `resource_path`       | T1502  | UTF-8 → NFC → `ResourcePath::new` chain against arbitrary bytes                                      |
-| `zstd_frame`          | T1503  | Zstd frame-header inspection + bounded streaming decode via `DecodeBudget::generic()`                  |
+| `zstd_frame`          | T1503  | Zstd frame-header inspection + bounded streaming decode with a 1 MiB per-resource ceiling             |
 | `kdl_parser`          | T1504  | KDL 2.0 parser and AST construction, with both per-resource and archive-wide `BudgetTracker`s         |
 | `epf_schema`          | T1505  | EPF schema validation, including the 1 MiB `MAX_EPF_BYTES` input-size cap                              |
 | `eld_schema`          | T1506  | ELD structural validation (groups, roots, allophones, IPA, romanization, tie-bar uniqueness)          |
@@ -44,8 +44,8 @@ libFuzzer and drives it through one parser chain. The target name maps
 | `phon_condition`      | T1508  | condition AST builder, canonical key + sort helpers, depth introspection, and pure evaluator           |
 
 Targets T1501 + T1502 landed in PR #55; T1503–T1508 land in this PR. The
-remaining Phase 15 tasks (T1509–T1520, property tests and supply-chain
-audit) follow in subsequent PRs.
+remaining Phase 15 tasks (T1512–T1520, resource-limit tests and
+supply-chain audit) follow in subsequent PRs.
 
 The fuzz crate is wired so each target is its own `[[bin]]` entry in
 `fuzz/Cargo.toml` and its own row in the `smoke` / `nightly` matrices of

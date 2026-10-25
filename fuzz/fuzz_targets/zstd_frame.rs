@@ -8,9 +8,9 @@
 //   `FrameHeader` (or a structured `ContainerError`). Performs no
 //   allocation past the header, so it is cheap to call on every input.
 // - `frame::decode`  — inspects, then streams the body through libzstd
-//   against a `DecodeBudget` capped at the per-resource ceiling
-//   (`MAX_GENERIC_RESOURCE_BYTES`). The per-resource and aggregate
-//   budgets are what stop a decompression bomb: a frame declaring 1
+//   against a `DecodeBudget` capped at 1 MiB per resource for fuzzing.
+//   The per-resource and aggregate budgets stop a decompression bomb:
+//   a frame declaring 1
 //   KiB that expands to 1 GiB is killed at the cap rather than after
 //   allocating its expansion.
 //
@@ -47,8 +47,9 @@ libfuzzer_sys::fuzz_target!(|data: &[u8]| {
 
     // Bounded decode: charge against a fresh per-call budget so a
     // fuzz input cannot exhaust the aggregate of every other input.
-    // The per-resource ceiling is the generic 1 GiB; the fuzzer
-    // short-circuits on budget errors long before that matters.
-    let mut budget = DecodeBudget::generic();
+    // The per-resource ceiling is 1 MiB, so one iteration cannot
+    // retain more than that in decoded output. Larger declared sizes
+    // are rejected before body decoding, after header inspection.
+    let mut budget = DecodeBudget::new(1 << 20);
     let _ = frame::decode(data, &mut budget);
 });
