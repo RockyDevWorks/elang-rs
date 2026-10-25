@@ -1,0 +1,12 @@
+{
+  "description": "A golden package passes the declared reader level",
+  "fixture": "valid/matrix/full/inspect",
+  "input": "archive.elang",
+  "modes": [
+    "inspect"
+  ],
+  "outcome": "pass",
+  "requirements": [
+    "REQ-CONF-003"
+  ]
+}

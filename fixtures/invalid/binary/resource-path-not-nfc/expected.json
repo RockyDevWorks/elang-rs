@@ -1,0 +1,17 @@
+{
+  "description": "An indexed resource path is not in Unicode NFC (stage 5).",
+  "errorCode": "PATH_NOT_NFC",
+  "fixture": "invalid/binary/resource-path-not-nfc",
+  "input": "archive.elang",
+  "modes": [
+    "inspect",
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-BIN-011",
+    "REQ-BIN-012"
+  ],
+  "stage": 5
+}

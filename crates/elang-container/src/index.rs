@@ -261,6 +261,18 @@ impl Index {
                 "index is shorter than the 16-byte index header",
             ));
         }
+        // MAX_INDEX_BYTES is the upper bound on the index region. The
+        // reader rejects anything larger before iterating entry bytes,
+        // so a maliciously large index cannot pin the parser in an
+        // O(bytes) walk.
+        let max_index_bytes =
+            usize::try_from(elang_core::limits::MAX_INDEX_BYTES).unwrap_or(usize::MAX);
+        if bytes.len() > max_index_bytes {
+            return Err(index_err(
+                "INDEX_SIZE_OUT_OF_RANGE",
+                "index exceeds the 32 MiB ceiling",
+            ));
+        }
         if !bytes.starts_with(&INDEX_MAGIC) {
             return Err(index_err("INDEX_BAD_MAGIC", "index magic mismatch"));
         }
@@ -1179,6 +1191,46 @@ mod tests {
         b.extend_from_slice(&[0u8; 20]);
         let e = Index::decode(&b).unwrap_err();
         assert_eq!(e.code(), "INDEX_ENTRY_MALFORMED");
+    }
+
+    #[test]
+    /// `index decode rejects an index above the 32 MiB ceiling`.
+    ///
+    /// `MAX_INDEX_BYTES` is a declared ceiling; before this check it was
+    /// declared but never enforced, so a maliciously large index region
+    /// would be walked entry-by-entry without rejection.
+    fn index_decode_rejects_an_index_above_the_ceiling() {
+        let ceiling = usize::try_from(elang_core::limits::MAX_INDEX_BYTES).unwrap_or(usize::MAX);
+        // A buffer one byte over the ceiling, built with the correct
+        // magic and version so the size check is what rejects it and
+        // not a later structural check.
+        let mut b = Vec::with_capacity(ceiling + 1);
+        b.extend_from_slice(&INDEX_MAGIC);
+        b.extend_from_slice(&[0u8; 4]);
+        b.extend_from_slice(&INDEX_VERSION.to_le_bytes());
+        b.extend_from_slice(&ENTRY_FORMAT.to_le_bytes());
+        b.extend_from_slice(&0u32.to_le_bytes());
+        b.resize(ceiling + 1, 0u8);
+        let e = Index::decode(&b).unwrap_err();
+        assert_eq!(e.code(), "INDEX_SIZE_OUT_OF_RANGE");
+    }
+
+    #[test]
+    /// `index decode accepts an index at exactly the ceiling`.
+    fn index_decode_accepts_an_index_at_the_ceiling() {
+        let ceiling = usize::try_from(elang_core::limits::MAX_INDEX_BYTES).unwrap_or(usize::MAX);
+        let mut b = Vec::with_capacity(ceiling);
+        b.extend_from_slice(&INDEX_MAGIC);
+        b.extend_from_slice(&[0u8; 4]);
+        b.extend_from_slice(&INDEX_VERSION.to_le_bytes());
+        b.extend_from_slice(&ENTRY_FORMAT.to_le_bytes());
+        b.extend_from_slice(&0u32.to_le_bytes());
+        b.resize(ceiling, 0u8);
+        // Zero entries means the entry cursor is at the header end and
+        // the trailing bytes are a malformed index — which is the
+        // *next* check, proving the size check did not fire first.
+        let e = Index::decode(&b).unwrap_err();
+        assert_ne!(e.code(), "INDEX_SIZE_OUT_OF_RANGE");
     }
 
     #[test]

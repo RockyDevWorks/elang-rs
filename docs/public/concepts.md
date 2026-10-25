@@ -17,7 +17,7 @@ independent Zstandard frame. A compliant v0.1.0 package contains:
 | Resource | Role |
 |----------|------|
 | `Header/format.version` | Container format version string (`0.1.0`). |
-| `mimetype` | Exact media type `application/vnd.elang`. |
+| `Header/mimetype` | Exact media type `application/vnd.elang`. |
 | `package.epf` | KDL 2.0 descriptor: version domains, metadata, manifest. |
 | `META-INF/integrity.kdl` | SHA-256 manifest over the other resources. |
 | `*.eld` | The phoneme inventory (one per package). |

@@ -29,7 +29,7 @@ fn main() {
     let (bytes, digest) = normative_manifest::write_manifest(&root).expect("write manifest");
     eprintln!(
         "wrote {MANIFEST_PATH}: {} artifacts, {} bytes, sha256 {digest}",
-        normative_manifest::ARTIFACTS.len(),
+        normative_manifest::artifact_entries().len(),
         bytes.len()
     );
     eprintln!(

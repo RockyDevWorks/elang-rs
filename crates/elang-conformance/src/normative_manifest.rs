@@ -37,6 +37,62 @@ pub struct Artifact {
     pub path: &'static str,
 }
 
+/// The OA-14 canonical ELD golden corpus (Phase 11, T1121), expanded at
+/// manifest-build time from [`crate::canonical_goldens::CASES`].
+///
+/// Each case directory holds the authored (deliberately non-canonical)
+/// source, the byte-exact canonical golden and the conformance
+/// expected-result record. The `.sha256` sidecar next to the golden is
+/// derived and therefore excluded, exactly as for the OA-11 fixtures.
+///
+/// Deriving the corpus scope from `CASES` means the freeze and the
+/// generator share a single reviewed source of truth: a case cannot be
+/// added to (or removed from) the corpus without the freeze scope
+/// following it, and a typo in a hand-maintained list of case directories
+/// is impossible by construction.
+const OA14_CANONICAL_DIR: &str = "fixtures/valid/canonical";
+const OA14_CASE_FILES: &[&str] = &["expected.json", "golden/canonical.eld", "input.eld"];
+
+/// Expand the OA-14 canonical ELD corpus into one entry per file, derived
+/// from [`crate::canonical_goldens::CASES`].
+///
+/// Each entry is `(id, repo_relative_path)`. The id is the literal
+/// `"OA-14"`. The path is `<dir>/<case_id>/<file>`. The order matches
+/// the iteration order of `CASES`; [`artifact_entries`] sorts by path so
+/// the manifest is deterministic regardless.
+pub fn oa14_artifact_entries() -> Vec<(String, String)> {
+    crate::canonical_goldens::CASES
+        .iter()
+        .flat_map(|case| {
+            OA14_CASE_FILES.iter().map(move |f| {
+                (
+                    "OA-14".to_string(),
+                    format!("{OA14_CANONICAL_DIR}/{}/{f}", case.id),
+                )
+            })
+        })
+        .collect()
+}
+
+/// The full effective artifact corpus: every entry in the static
+/// [`ARTIFACTS`] list plus the OA-14 canonical ELD corpus.
+///
+/// Used by `build_manifest` and `verify_manifest_bytes` as the
+/// authoritative source for "every artifact the freeze covers".
+/// [`ARTIFACTS`] remains a `const` because the integration test asserts
+/// it stays free of duplicates and excludes the manifest itself; the
+/// expansion into the runtime corpus is a deterministic function of
+/// [`crate::canonical_goldens::CASES`] and the crate-private
+/// `OA14_CASE_FILES` table.
+pub fn artifact_entries() -> Vec<(String, String)> {
+    let mut entries: Vec<(String, String)> = ARTIFACTS
+        .iter()
+        .map(|a| (a.id.to_string(), a.path.to_string()))
+        .collect();
+    entries.extend(oa14_artifact_entries());
+    entries
+}
+
 /// The normative artifact corpus for v0.1.0. The list is the source of truth
 /// for freeze scope; changes require a PR to this array and a regeneration of
 /// the manifest (and `PINNED_SPEC_CHECKSUM`).
@@ -88,6 +144,10 @@ pub const ARTIFACTS: &[Artifact] = &[
     Artifact {
         id: "OA-11",
         path: "specs/registry/binary-reference-vectors.json",
+    },
+    Artifact {
+        id: "OA-14",
+        path: "specs/registry/eld-canonical-vectors.json",
     },
     Artifact {
         id: "OA-10",
@@ -188,15 +248,23 @@ pub const RELEASE: &str = "v0.1.0";
 /// Pinned SHA-256 of the canonical (RFC 8785 JCS) bytes of the generated
 /// manifest at the current ratified state.
 ///
-/// This value pins the *mechanism* for the v0.1.0 freeze; it is **not** a
-/// declaration that v0.1.0 is frozen. The corpus it covers is the ratified
-/// OA-1..OA-16 artifacts minus OA-14, which is still open. ADR 0011 requires
-/// the manifest and this constant to be regenerated during final T0123, once
-/// OA-14 (canonical ELD goldens) has landed and entered the corpus. The
-/// release-tag half of OA-17 stays blocked by OA-14 and is not implemented
-/// here.
+/// This value pins the **complete v0.1.0 normative corpus**: the ratified
+/// OA-1..OA-16 artifacts *plus* the OA-14 canonical ELD golden corpus
+/// (`specs/registry/eld-canonical-vectors.json` and, for each of the
+/// thirteen published cases, the authored source, the byte-exact golden
+/// and the conformance record).
+///
+/// ADR 0011 §6 made this the final T0123 step: the freeze mechanism
+/// shipped with a *provisional* digest covering OA-1..OA-16 minus OA-14,
+/// and required the manifest to be regenerated once OA-14 landed so the
+/// canonical ELD goldens entered the corpus and the digest was
+/// re-derived. That regeneration is this value.
+///
+/// The digest attests that the corpus bytes have not changed. It is **not**
+/// a declaration that the release is published — the `v0.1.0` tag is the
+/// release act, and it is created separately (T1617).
 pub const PINNED_SPEC_CHECKSUM: &str =
-    "0c553bbdd8f50c93d9bd718b5830f4c496fd73b68b6b88ef36265f104e198a3e";
+    "681022fbdd9a91d4e017c187884de7e6912409bee4267399464f8e4dc7d72e46";
 
 /// Errors produced by [`build_manifest`] and [`verify`].
 #[derive(Debug)]
@@ -345,14 +413,15 @@ fn write_jcs_string(s: &str, out: &mut String) {
 /// manifest as both a [`serde_json::Value`] and the canonical JCS bytes. The
 /// returned value is sorted and deterministic.
 pub fn build_manifest(release_root: &Path) -> Result<(serde_json::Value, Vec<u8>), ManifestError> {
-    let mut entries: Vec<(String, String, String)> = Vec::with_capacity(ARTIFACTS.len());
-    for a in ARTIFACTS {
-        let full = release_root.join(a.path);
+    let corpus = artifact_entries();
+    let mut entries: Vec<(String, String, String)> = Vec::with_capacity(corpus.len());
+    for (id, path) in &corpus {
+        let full = release_root.join(path);
         let bytes = fs::read(&full).map_err(|e| ManifestError::Io {
             path: full.clone(),
             message: e.to_string(),
         })?;
-        entries.push((a.id.to_string(), a.path.to_string(), sha256_hex(&bytes)));
+        entries.push((id.clone(), path.clone(), sha256_hex(&bytes)));
     }
 
     // Build the artifact array with stable ordering (by path) so the value is
@@ -463,13 +532,13 @@ fn verify_manifest_bytes(committed: &[u8], release_root: &Path) -> Result<(), Ma
             message: "missing `artifacts` array".to_string(),
         })?;
     let mut disk_entries: BTreeMap<(String, String), String> = BTreeMap::new();
-    for a in ARTIFACTS {
-        let full = release_root.join(a.path);
+    for (id, path) in artifact_entries() {
+        let full = release_root.join(&path);
         let bytes = fs::read(&full).map_err(|e| ManifestError::Io {
             path: full.clone(),
             message: e.to_string(),
         })?;
-        disk_entries.insert((a.id.to_string(), a.path.to_string()), sha256_hex(&bytes));
+        disk_entries.insert((id, path), sha256_hex(&bytes));
     }
     for entry in artifacts {
         let id = entry
@@ -499,7 +568,7 @@ fn verify_manifest_bytes(committed: &[u8], release_root: &Path) -> Result<(), Ma
             .ok_or_else(|| ManifestError::Parse {
                 path: manifest_path.clone(),
                 message: format!(
-                    "artifact `{}` ({}) is in the manifest but not in ARTIFACTS",
+                    "artifact `{}` ({}) is in the manifest but not in the artifact corpus",
                     path, id
                 ),
             })?;
@@ -519,7 +588,7 @@ fn verify_manifest_bytes(committed: &[u8], release_root: &Path) -> Result<(), Ma
         return Err(ManifestError::Parse {
             path: manifest_path,
             message: format!(
-                "ARTIFACTS contains entries not present in the manifest: {}",
+                "artifact corpus contains entries not present in the manifest: {}",
                 leftover.join(", ")
             ),
         });
@@ -662,14 +731,8 @@ mod tests {
         fs::create_dir_all(&test_root).expect("create test root");
 
         // Create dummy artifact files so build_manifest succeeds.
-        // We must populate the repo-relative paths that ARTIFACTS references.
-        for a in crate::normative_manifest::ARTIFACTS {
-            let full = test_root.join(a.path);
-            if let Some(parent) = full.parent() {
-                fs::create_dir_all(parent).expect("create parent dir");
-            }
-            fs::write(&full, b"dummy content").expect("write dummy artifact");
-        }
+        // We must populate the repo-relative paths the corpus references.
+        populate_artifacts(&test_root);
 
         let (jcs, digest) =
             crate::normative_manifest::write_manifest(&test_root).expect("write_manifest");
@@ -740,14 +803,12 @@ mod tests {
         }
         fs::write(&manifest_path, &real_manifest).expect("write manifest copy");
 
-        // Populate artifact paths that ARTIFACTS references with dummy
-        // content (NOT matching the real artifact digests).  This guarantees
-        // every manifest entry will mismatch.
-        for a in crate::normative_manifest::ARTIFACTS {
-            let full = test_root.join(a.path);
-            if let Some(parent) = full.parent() {
-                fs::create_dir_all(parent).expect("create parent dir");
-            }
+        // Populate the corpus paths with dummy content (NOT matching the
+        // real artifact digests).  This guarantees every manifest entry
+        // will mismatch.
+        populate_artifacts(&test_root);
+        for (_id, path) in crate::normative_manifest::artifact_entries() {
+            let full = test_root.join(&path);
             fs::write(&full, b"wrong content").expect("write dummy artifact");
         }
 
@@ -756,9 +817,9 @@ mod tests {
             matches!(
                 err,
                 ManifestError::DigestMismatch { path, .. }
-                    if super::ARTIFACTS
+                    if super::artifact_entries()
                         .iter()
-                        .any(|a| path == test_root.join(a.path))
+                        .any(|(_, p)| path == test_root.join(p))
             ),
             "expected an artifact digest mismatch for a known artifact path"
         );
@@ -769,12 +830,13 @@ mod tests {
     // write_manifest I/O error paths (create_dir_all / fs::write failures)
     // -----------------------------------------------------------------------
 
-    /// Populate every artifact referenced by `ARTIFACTS` inside `test_root`
-    /// with dummy content so `build_manifest` can read them all.
+    /// Populate every artifact referenced by the effective corpus
+    /// (`ARTIFACTS` plus the OA-14 canonical ELD expansion) inside
+    /// `test_root` with dummy content.
     fn populate_artifacts(test_root: &std::path::Path) {
         use std::fs;
-        for a in crate::normative_manifest::ARTIFACTS {
-            let full = test_root.join(a.path);
+        for (_id, path) in crate::normative_manifest::artifact_entries() {
+            let full = test_root.join(&path);
             if let Some(parent) = full.parent() {
                 fs::create_dir_all(parent).expect("create parent dir");
             }
@@ -849,9 +911,10 @@ mod tests {
         use std::fs;
         let test_root = scratch_root("test_verify_bytes_missing_artifact");
         // Populate all but the first artifact; the disk_entries loop hits Io.
-        let missing = crate::normative_manifest::ARTIFACTS[0].path;
-        for a in crate::normative_manifest::ARTIFACTS.iter().skip(1) {
-            let full = test_root.join(a.path);
+        let corpus = crate::normative_manifest::artifact_entries();
+        let missing = corpus[0].1.clone();
+        for (_id, path) in corpus.iter().skip(1) {
+            let full = test_root.join(path);
             if let Some(parent) = full.parent() {
                 fs::create_dir_all(parent).expect("create parent dir");
             }

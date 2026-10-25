@@ -1,0 +1,12 @@
+{
+  "description": "A when block with exactly MAX_PREDICATES_PER_WHEN predicates is accepted",
+  "fixture": "valid/budget/when-predicates-at-limit",
+  "input": "input.eld",
+  "modes": [
+    "inspect"
+  ],
+  "outcome": "pass",
+  "requirements": [
+    "REQ-WHEN-008"
+  ]
+}

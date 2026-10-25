@@ -1,0 +1,15 @@
+{
+  "description": "A repeated group name is rejected as ELD_GROUP_INVALID",
+  "errorCode": "ELD_GROUP_INVALID",
+  "fixture": "invalid/eld/reject-duplicate-group",
+  "input": "input.eld",
+  "modes": [
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-ELD-003",
+    "REQ-ELD-005"
+  ],
+  "stage": 12
+}

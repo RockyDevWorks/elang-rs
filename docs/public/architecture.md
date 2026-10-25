@@ -1,33 +1,53 @@
 # Architecture
 
 The reference implementation (`elang-rs`) is a Rust workspace split into small,
-focused crates with a strict acyclic dependency graph rooted at `elang-core`.
-Parsing, semantic validation, and serialization are kept separate so each can be
-fuzzed, benchmarked, and reviewed independently.
+focused crates with a strict acyclic dependency graph rooted at **two** root
+crates — `elang-core` and `elang-unicode` — neither of which depends on any
+other crate in the workspace. Parsing, semantic validation, and serialization
+are kept separate so each can be fuzzed, benchmarked, and reviewed independently.
 
 ## Crate graph
 
+Approximate layering (the exact edges are listed below):
+
 ```text
-                         elang-core
-            (IDs, errors, limits, checked math, models)
-                              ▲
-     ┌───────────┬────────────┼───────────┬──────────────┐
-     │           │            │           │              │
- elang-kdl  elang-container  elang-repertoire            │
-     ▲           ▲            ▲           ▲               │
-     │           │            │           │               │
- ┌───┴───┬───────┘        ┌───┴────┐      │               │
- │       │                │        │      │               │
-elang-epf elang-integrity elang-eld┘──────┘               │
-     ▲       ▲                ▲                            │
-     └───────┴────────┬───────┘                           │
-                      │                                    │
-               elang-conformance                           │
-                      ▲                                    │
-                      └──────────── elang-cli ─────────────┘
+  application layer:   elang-cli
+  tooling layer:       elang-conformance
+  pipeline layer:      elang-reader        elang-writer
+  format layer:        elang-container   elang-epf   elang-eld   elang-integrity
+  parser layer:        elang-kdl         elang-repertoire
+  root crates:         elang-core        elang-unicode
 ```
 
-Edges point from a dependent crate to its dependency.
+The authoritative dependency listing, read from each crate's `Cargo.toml`
+(`[dependencies]` section). Edges point from a dependent crate to its
+dependency:
+
+```text
+elang-cli          ──▶ elang-reader, elang-writer, elang-conformance,
+                        elang-container, elang-core, elang-epf, elang-eld,
+                        elang-integrity, elang-repertoire
+elang-conformance  ──▶ elang-reader, elang-writer, elang-container, elang-core,
+                        elang-epf, elang-eld, elang-integrity, elang-kdl,
+                        elang-repertoire, elang-unicode
+elang-reader       ──▶ elang-container, elang-core, elang-epf, elang-eld,
+                        elang-integrity, elang-kdl, elang-repertoire
+elang-writer       ──▶ elang-container, elang-core, elang-epf, elang-eld,
+                        elang-integrity, elang-unicode
+elang-eld          ──▶ elang-core, elang-kdl, elang-repertoire
+elang-epf          ──▶ elang-core, elang-kdl, elang-unicode
+elang-integrity    ──▶ elang-core, elang-kdl, elang-unicode
+elang-container    ──▶ elang-core, elang-unicode
+elang-repertoire   ──▶ elang-core, elang-unicode
+elang-kdl          ──▶ elang-core
+elang-core         ──▶ (none)
+elang-unicode      ──▶ (none)
+```
+
+`elang-unicode` is a **second root crate**, a sibling of `elang-core` — not a
+dependency of it. `elang-core` has no dependencies at all, and `elang-unicode`
+has no dependencies at all. Several crates depend on both: `elang-container`,
+`elang-repertoire`, `elang-epf`, `elang-integrity`, and `elang-writer`.
 
 ## Crates
 
@@ -41,6 +61,8 @@ Edges point from a dependent crate to its dependency.
 | `elang-epf` | `package.epf` schema and validation. |
 | `elang-integrity` | Integrity manifest parsing and SHA-256 verification. |
 | `elang-eld` | Phoneme model, IPA parser, `when` AST/evaluator, canonical ELD writer. |
+| `elang-reader` | Integrated 12-stage `inspect`/`verify`/`validate` pipeline, bounded resource retrieval, read-only validated-data accessors. |
+| `elang-writer` | Builds `.elang` archives from a validated EPF, a validated ELD, and additional permitted resources. |
 | `elang-conformance` | Fixture runner and golden comparisons. |
 | `elang-cli` | CLI commands, diagnostics output, safe unpack. |
 
@@ -50,8 +72,8 @@ Edges point from a dependent crate to its dependency.
   names, and language identifiers are types whose construction is fallible —
   "valid but unrepresentable-if-invalid." Holding the type means the value passed
   validation.
-- **Separation of concerns.** Parsing, semantic validation, and serialization are
-  distinct phases and distinct crates.
+- **Separation of concerns.** Parsing, semantic validation, and serialization
+  are distinct phases and distinct crates.
 - **One source of truth for limits.** A single `limits` module defines every
   budget; parsers read from it.
 - **Typed, stable errors.** A category enum plus stable string codes, propagated

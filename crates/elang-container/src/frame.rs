@@ -40,7 +40,9 @@
 //! 6. Frame checksum required (T0403).
 //! 7. Exactly one frame, complete, nothing after it (T0406, T0407).
 
-use elang_core::limits::{MAX_GENERIC_RESOURCE_BYTES, MAX_UNCOMPRESSED_AGGREGATE_BYTES};
+use elang_core::limits::{
+    MAX_GENERIC_RESOURCE_BYTES, MAX_UNCOMPRESSED_AGGREGATE_BYTES, MAX_ZSTD_WINDOW_BYTES,
+};
 use elang_core::{Category, Error, Result};
 use zstd_safe::{
     CCtx, CParameter, DCtx, InBuffer, OutBuffer, MAGICNUMBER, MAGIC_SKIPPABLE_MASK,
@@ -52,10 +54,12 @@ use zstd_safe::{
 /// A larger window is not merely wasteful, it is a denial-of-service vector:
 /// libzstd allocates a history buffer proportional to the window before
 /// producing any output byte.
+///
+/// The byte-level ceiling lives in `elang_core::limits::MAX_ZSTD_WINDOW_BYTES`;
+/// the `windowLog` value below is the bit-shift form of the same constant
+/// and exists only so callers that want the log form (for libzstd's
+/// `ZSTD_d_windowLogMax`) do not have to compute it from the byte form.
 pub const MAX_WINDOW_LOG: u32 = 27;
-
-/// Window ceiling in bytes: exactly `1 << MAX_WINDOW_LOG`.
-pub const MAX_WINDOW_BYTES: u64 = 1 << MAX_WINDOW_LOG;
 
 /// The locked libzstd version, encoded `MAJOR*10_000 + MINOR*100 + PATCH`.
 ///
@@ -86,7 +90,7 @@ pub struct FrameHeader {
     /// Declared decompressed size. Always known: ELANG rejects frames
     /// without a content-size field, so this is never a sentinel.
     pub content_size: u64,
-    /// Window size in bytes. At most [`MAX_WINDOW_BYTES`].
+    /// Window size in bytes. At most [`MAX_ZSTD_WINDOW_BYTES`].
     pub window_size: u64,
     /// Total frame size on disk, excluding any bytes beyond the frame.
     pub compressed_size: u64,
@@ -300,10 +304,10 @@ pub fn inspect(bytes: &[u8]) -> Result<FrameHeader> {
     if single_segment {
         window_size = content_size;
     }
-    if window_size > MAX_WINDOW_BYTES {
+    if window_size > MAX_ZSTD_WINDOW_BYTES {
         return Err(frame_err(
             "FRAME_WINDOW_TOO_LARGE",
-            format!("frame window {window_size} exceeds the {MAX_WINDOW_BYTES}-byte ceiling"),
+            format!("frame window {window_size} exceeds the {MAX_ZSTD_WINDOW_BYTES}-byte ceiling"),
         ));
     }
 

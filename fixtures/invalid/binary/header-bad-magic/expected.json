@@ -1,0 +1,17 @@
+{
+  "description": "The 8-byte header magic is corrupted (stage 1).",
+  "errorCode": "HEADER_BAD_MAGIC",
+  "fixture": "invalid/binary/header-bad-magic",
+  "input": "archive.elang",
+  "modes": [
+    "inspect",
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-BIN-001",
+    "REQ-BIN-002"
+  ],
+  "stage": 1
+}

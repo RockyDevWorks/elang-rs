@@ -1,0 +1,18 @@
+{
+  "description": "The footer's 8 reserved bytes must be zero (stage 3).",
+  "errorCode": "FOOTER_RESERVED_NONZERO",
+  "fixture": "invalid/binary/footer-reserved-nonzero",
+  "input": "archive.elang",
+  "modes": [
+    "inspect",
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-BIN-004",
+    "REQ-BIN-005",
+    "REQ-BIN-006"
+  ],
+  "stage": 3
+}

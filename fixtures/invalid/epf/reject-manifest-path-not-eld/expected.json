@@ -1,0 +1,15 @@
+{
+  "description": "A manifest path without the `.eld` extension is rejected",
+  "errorCode": "EPF_MANIFEST_PATH_NOT_INDEXED",
+  "fixture": "invalid/epf/reject-manifest-path-not-eld",
+  "input": "input.epf",
+  "modes": [
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-EPF-012"
+  ],
+  "stage": 10
+}

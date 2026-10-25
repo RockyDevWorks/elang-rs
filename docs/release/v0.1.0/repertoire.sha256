@@ -1,0 +1,20 @@
+# ELANG v0.1.0 — pinned Unicode 18.0 / IPA 2020 reference data
+# Integrity only: these digests do not establish publisher authenticity.
+#
+5f5711c0ba33423e924f5869ef563851c725b218704262b80b90406e87304b54  specs/schema/ipa-v1.json
+437e2c26248eb7fca0cc87cb824818f46f54fc54a1672f4ac640299f5e0475b3  specs/schema/elang-ipa-repertoire-v1.schema.json
+0736451de439ae7baf1425136617da495e09ee5afbe6e394374db7009ea08950  specs/sources/ucd-18.0.0/UnicodeData.txt
+c759b100e9ae8960ae6b50fc5765950a7581fd9f30d4ef95f68f25a6d97e818e  specs/sources/ucd-18.0.0/CompositionExclusions.txt
+d6b151d2d40ee9b1876d26f417980f45ffae47b6055ccf7203cb31f07a030f94  specs/sources/ucd-18.0.0/DerivedGeneralCategory.txt
+98ac7f67d985fe781e317f6182e885e94cabb0c314769e6dd73e48b226931ccd  specs/sources/ucd-18.0.0/DerivedNormalizationProps.txt
+25a50d816764b04abfb4a646d3eb2b2a803284c3873d9a06757b94fe4513dde3  specs/sources/ucd-18.0.0/NormalizationTest.txt
+151ffa30985975164435af0facf8759807179ac7624e0cde121c640f5c929f27  specs/sources/ucd-18.0.0/SOURCES.md
+882a0e4df2ad8c45c53752ecfecc506647e5e39b47dc83646fca925ce84f5fc9  specs/sources/unitipa-ipa-chart-2020.pdf
+5ee8a589308d32c9d47b8285cf0a7182b9cf95fafcd991deeecb38834873bfe4  specs/sources/SOURCES.md
+#
+# Published registry files
+681022fbdd9a91d4e017c187884de7e6912409bee4267399464f8e4dc7d72e46  specs/registry/normative-manifest.json
+e3162b97e5e6bfaece1790b5d163d41413c8e21c72b238918346487891f80395  specs/registry/binary-reference-vectors.json
+a22f7847cf4d307e38f0381bfd0f5fcfc58af3e5d31291a1239effe0edc1be25  specs/registry/eld-canonical-vectors.json
+7f5ccd627c284a33ea21cf8fe92f5adfbe74e91b6d20a42fc5a8d61261a3253d  specs/registry/error-codes.json
+9ed94d1877f088c9b15acdd3c5cfb3260136dda9e855d1afbf2faff0f968b78f  specs/registry/ipa-tie-bar-vectors.json

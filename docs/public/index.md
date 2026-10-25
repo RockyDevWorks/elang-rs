@@ -23,14 +23,14 @@ Every compliant phoneme-only package contains exactly these logical resources:
 
 ```text
 Header/format.version
-mimetype
+Header/mimetype
 package.epf
 META-INF/integrity.kdl
 Linguistics/phonemes.eld   # path is configurable via the EPF manifest
 ```
 
 - **`Header/format.version`** — the container format version string.
-- **`mimetype`** — the exact media type `application/vnd.elang`.
+- **`Header/mimetype`** — the exact media type `application/vnd.elang`.
 - **`package.epf`** — a [KDL 2.0](https://kdl.dev) descriptor naming the language
   and its resources.
 - **`META-INF/integrity.kdl`** — a SHA-256 manifest over the uncompressed bytes

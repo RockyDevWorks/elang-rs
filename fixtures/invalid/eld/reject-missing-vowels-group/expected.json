@@ -1,0 +1,14 @@
+{
+  "description": "A document without the mandatory `vowels` group is rejected",
+  "errorCode": "ELD_GROUP_INVALID",
+  "fixture": "invalid/eld/reject-missing-vowels-group",
+  "input": "input.eld",
+  "modes": [
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-ELD-003"
+  ],
+  "stage": 12
+}

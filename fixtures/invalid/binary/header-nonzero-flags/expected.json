@@ -1,0 +1,17 @@
+{
+  "description": "The header's flags field must be zero in v0.1.0 (stage 2).",
+  "errorCode": "HEADER_NONZERO_FLAGS",
+  "fixture": "invalid/binary/header-nonzero-flags",
+  "input": "archive.elang",
+  "modes": [
+    "inspect",
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-BIN-002",
+    "REQ-BIN-018"
+  ],
+  "stage": 2
+}

@@ -1,0 +1,12 @@
+{
+  "description": "An EPF document exactly MAX_EPF_BYTES long is accepted",
+  "fixture": "valid/budget/epf-bytes-at-limit",
+  "input": "input.epf",
+  "modes": [
+    "inspect"
+  ],
+  "outcome": "pass",
+  "requirements": [
+    "REQ-PKG-004"
+  ]
+}

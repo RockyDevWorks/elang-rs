@@ -1,0 +1,15 @@
+{
+  "description": "The manifest carries an entry the index does not list (stage 9).",
+  "errorCode": "INTEGRITY_EXTRA_ENTRY",
+  "fixture": "invalid/integrity/extra-entry",
+  "input": "archive.elang",
+  "modes": [
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-INTEGRITY-002"
+  ],
+  "stage": 9
+}

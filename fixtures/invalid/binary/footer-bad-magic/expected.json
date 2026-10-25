@@ -1,0 +1,18 @@
+{
+  "description": "The 8-byte footer magic is corrupted (stage 3).",
+  "errorCode": "FOOTER_BAD_MAGIC",
+  "fixture": "invalid/binary/footer-bad-magic",
+  "input": "archive.elang",
+  "modes": [
+    "inspect",
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-BIN-004",
+    "REQ-BIN-005",
+    "REQ-BIN-006"
+  ],
+  "stage": 3
+}

@@ -469,25 +469,25 @@ _(`allophone_empty_block`, `phoneme_empty_block`, `phonemes_empty_block`, `empty
 
 ## Phase 16 — Documentation, examples, benchmarks and release
 
-- [ ] **T1601** Publish versioned ELANG core/container normative spec with byte layouts.
-- [ ] **T1602** Publish EPF normative grammar and canonical serialization reference.
-- [ ] **T1603** Publish ELD normative grammar and every locked IPA/roman/condition rule.
-- [ ] **T1604** Publish Unicode 18.0/IPA 2026 repertoire data, schema and SHA-256.
-- [ ] **T1605** Publish integrity-manifest grammar and hashing procedure.
-- [ ] **T1606** Publish error-code registry and diagnostics examples.
-- [ ] **T1607** Publish `inspect`, `verify`, `validate` mode semantics and security model.
-- [ ] **T1608** Publish Rust crate API docs and end-to-end quickstart.
-- [ ] **T1609** Publish CLI usage, exit codes, JSON diagnostics and troubleshooting.
-- [ ] **T1610** Publish example language package source and canonical `.elang` artifact.
-- [ ] **T1611** Publish migration/version-compatibility policy for future 0.2+ releases.
-- [ ] **T1612** Publish conformance fixture corpus and machine-readable expected outputs.
-- [ ] **T1613** Benchmark parse/index inspection, verification, ELD validation, canonical pack and random access.
-- [ ] **T1614** Measure peak memory for worst-case accepted and rejected packages.
-- [ ] **T1615** Verify reproducible release build and canonical golden hashes in clean CI.
-- [ ] **T1616** Complete independent spec/code/test review and security checklist.
+- [x] **T1601** Publish versioned ELANG core/container normative spec with byte layouts.
+- [x] **T1602** Publish EPF normative grammar and canonical serialization reference.
+- [x] **T1603** Publish ELD normative grammar and every locked IPA/roman/condition rule.
+- [x] **T1604** Publish Unicode 18.0/IPA 2026 repertoire data, schema and SHA-256.
+- [x] **T1605** Publish integrity-manifest grammar and hashing procedure.
+- [x] **T1606** Publish error-code registry and diagnostics examples.
+- [x] **T1607** Publish `inspect`, `verify`, `validate` mode semantics and security model.
+- [x] **T1608** Publish Rust crate API docs and end-to-end quickstart.
+- [x] **T1609** Publish CLI usage, exit codes, JSON diagnostics and troubleshooting.
+- [x] **T1610** Publish example language package source and canonical `.elang` artifact.
+- [x] **T1611** Publish migration/version-compatibility policy for future 0.2+ releases.
+- [x] **T1612** Publish conformance fixture corpus and machine-readable expected outputs.
+- [x] **T1613** Benchmark parse/index inspection, verification, ELD validation, canonical pack and random access.
+- [x] **T1614** Measure peak memory for worst-case accepted and rejected packages.
+- [x] **T1615** Verify reproducible release build and canonical golden hashes in clean CI.
+- [x] **T1616** Complete independent spec/code/test review and security checklist. → Three independent read-only reviewers (spec/conformance, adversarial code, security/test-adequacy) reviewed the branch; all findings are dispositioned in `docs/release/v0.1.0/review-record.md` (41 findings: 36 from the independent reviewers, one found by the cross-platform CI run, and four raised by the CodeRabbit review bot on PR #68) and the security-claim table in `docs/release/v0.1.0/security-checklist.md`. The release-gate assessment is recorded honestly: conditions (b) every MUST covered and (c) multi-platform reproducible build are **not** met (open tasks T0420, T0510, T1319); condition (a) closes only when the human tags. The human sign-off block remains **unsigned** and is a prerequisite for T1617/T1620.
 - [ ] **T1617** Tag `v0.1.0`, build signed release artifacts where release infrastructure permits.
-- [ ] **T1618** Publish release notes explicitly distinguishing integrity from publisher authenticity.
-- [ ] **T1619** Archive exact dependencies, pinned Unicode/IPA data and conformance hashes.
+- [x] **T1618** Publish release notes explicitly distinguishing integrity from publisher authenticity.
+- [x] **T1619** Archive exact dependencies, pinned Unicode/IPA data and conformance hashes.
 - [ ] **T1620** Declare v0.1.0 ready only after all blockers, test gates and normative artifacts pass.
 
 **Acceptance:** independently installable/documented Rust SDK and CLI, published normative data, conformance evidence and repeatable builds.

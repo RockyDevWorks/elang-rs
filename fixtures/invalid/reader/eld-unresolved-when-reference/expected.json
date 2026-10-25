@@ -1,0 +1,16 @@
+{
+  "description": "A structurally valid package whose ELD `when` block references an undeclared phoneme (stage 12).",
+  "errorCode": "WHEN_REFERENCE_UNRESOLVED",
+  "fixture": "invalid/reader/eld-unresolved-when-reference",
+  "input": "archive.elang",
+  "modes": [
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-CONF-003",
+    "REQ-READER-002",
+    "REQ-READER-005"
+  ],
+  "stage": 12
+}

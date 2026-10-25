@@ -117,7 +117,9 @@ Every resource is exactly **one independent, standard Zstd frame** with the fram
 **content size present** and the frame **checksum present**. The following are
 rejected:
 
-- external or shared dictionaries, or any dictionary-ID dependency,
+- external or shared dictionaries, or a frame that declares a **non-zero**
+  dictionary ID (a zero dictionary ID is valid and is what the canonical
+  profile emits),
 - concatenated frames, skippable frames, incomplete frames, trailing bytes,
 - a window larger than 128 MiB.
 
@@ -138,5 +140,7 @@ fresh compression context and a single `ZSTD_compress2()` call using fixed
 settings: level 9, `nbWorkers=0`, `checksumFlag=1`, `contentSizeFlag=1`,
 `dictIDFlag=0`, `windowLog=27`, long-distance matching off, and no dictionary.
 This makes canonical frames byte-identical across runs and platforms. The
-canonical writer may buffer a single resource to perform that one call; the
-reader always stays streaming.
+writer is **not** streaming: it holds every resource and the whole assembled
+archive in memory to perform one `ZSTD_compress2()` call per resource. The
+reader likewise keeps the whole archive in memory, but decodes one frame at a
+time under a shared aggregate budget.

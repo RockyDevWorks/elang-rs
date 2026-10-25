@@ -1,0 +1,15 @@
+{
+  "description": "An EPF document one byte past MAX_EPF_BYTES is rejected",
+  "errorCode": "LIMIT_EPF_BYTES",
+  "fixture": "invalid/budget/epf-bytes-over-limit",
+  "input": "input.epf",
+  "modes": [
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-PKG-004"
+  ],
+  "stage": 10
+}

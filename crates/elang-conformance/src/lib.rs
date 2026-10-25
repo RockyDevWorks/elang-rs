@@ -43,6 +43,7 @@
     clippy::panic
 )]
 
+pub mod benchmarks;
 pub mod binary_vectors;
 pub mod bytewise_ordering;
 pub mod canonical_goldens;
@@ -58,6 +59,7 @@ pub mod meta_tests;
 pub mod negatives;
 pub mod normative_manifest;
 pub mod parser_budgets;
+pub mod peak_memory;
 pub mod requirement_coverage_data;
 pub mod roundtrip;
 pub mod roundtrip_proptest;

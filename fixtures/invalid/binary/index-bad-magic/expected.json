@@ -1,0 +1,16 @@
+{
+  "description": "The 8-byte index magic is corrupted (stage 5).",
+  "errorCode": "INDEX_BAD_MAGIC",
+  "fixture": "invalid/binary/index-bad-magic",
+  "input": "archive.elang",
+  "modes": [
+    "inspect",
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-BIN-009"
+  ],
+  "stage": 5
+}

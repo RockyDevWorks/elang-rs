@@ -1,0 +1,267 @@
+# Reproducible build verification for ELANG v0.1.0 (T1615).
+#
+# Build the release artifacts in a clean container, record every output
+# the conformance generators produce, wipe the build directory, rebuild
+# from scratch in the same container, and assert that every byte of
+# every output reproduces. The conformance corpus, the normative
+# manifest, the example package and the binary reference vectors are
+# all produced by the release-mode crates whose own behaviour is what
+# the release gate cares about — so this is a real end-to-end
+# reproducibility check, not a unit test of one generator.
+#
+# # What is compared, and what is not
+#
+# Two of the generators — `gen_benchmarks` and `gen_peak_memory` —
+# produce *measurements*, not artifacts: wall-clock durations and
+# kernel-resident-set high-water marks. Those numbers are a function
+# of the machine and the moment the run happened, so two clean builds
+# on the same runner will legitimately disagree. Comparing them
+# byte-for-byte would be a check that can only ever fail.
+#
+# So those two generators each get a `--shape` mode that writes the
+# same report with every measured number replaced by a sentinel:
+#
+# * `docs/benchmarks.shape.{md,json}`
+# * `docs/peak-memory.shape.{md,json}`
+#
+# The shape keeps the deterministic half of the report — the benchmark
+# ids, the iteration counts, the environment block, the methodology
+# text, the scenario ids, the expectations, the outcomes and the
+# stable error codes — and drops the measured half. That IS
+# reproducible, and comparing it catches the failure this job exists
+# to catch: the *set and structure* of the outputs changing between
+# builds.
+#
+# The measured reports themselves are still generated on every run, so
+# the harness is proven to work, and their shape hashes are recorded in
+# the evidence file.
+#
+# The job uses:
+# * `cargo build --locked` — the resolved dependency set is pinned by
+#   the committed `Cargo.lock`; cargo refuses to run if the lockfile is
+#   out of date. (`--frozen` adds `--offline` on top of `--locked`,
+#   which would force an already-populated `~/.cargo/registry` cache;
+#   we keep network access so a clean runner can resolve the lockfile
+#   exactly.)
+# * `CARGO_INCREMENTAL=0` — no non-deterministic codegen artefacts.
+# * A pinned rustup default of `stable`.
+# * A pinned Ubuntu runner (no `-latest` mutation).
+#
+# Outputs are compared with sha256sum; a mismatch is a CI failure.
+
+name: Reproducible build
+
+on:
+  push:
+    branches:
+      - main
+      - doc/**
+  pull_request:
+  workflow_dispatch:
+
+# Least-privilege: this job only reads the repo and uploads artefacts.
+permissions:
+  contents: read
+
+concurrency:
+  group: reproducible-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  reproducible-build:
+    name: Double clean build + canonical-golden re-verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_INCREMENTAL: "0"
+      RUST_BACKTRACE: "0"
+      # Pin the rustup default used by the toolchain installer.
+      RUSTUP_TOOLCHAIN: stable
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache target/
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Build (first pass)
+        run: cargo build --locked --release --workspace --all-targets
+
+      - name: Run generators (first pass)
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          # Conformance corpus (goldens, index, schema).
+          cargo run --locked --release --quiet -p elang-conformance --bin gen_canonical_goldens
+          cargo run --locked --release --quiet -p elang-conformance --bin gen_epf_canonical_goldens
+          cargo run --locked --release --quiet -p elang-conformance --bin gen_conformance_corpus
+          cargo run --locked --release --quiet -p elang-conformance --bin gen_example_package
+          # Normative manifest (pinned checksum source).
+          cargo run --locked --release --quiet -p elang-conformance --bin gen_normative_manifest
+          # Performance + memory reports: the measured variant, and the
+          # shape variant that is actually byte-comparable.
+          cargo run --locked --release --quiet -p elang-conformance --bin gen_benchmarks
+          cargo run --locked --release --quiet -p elang-conformance --bin gen_benchmarks -- --shape
+          cargo run --locked --release --quiet -p elang-conformance --bin gen_peak_memory
+          cargo run --locked --release --quiet -p elang-conformance --bin gen_peak_memory -- --shape
+          # Binary reference vectors (OA-11).
+          cargo run --locked --release --quiet -p elang-conformance --bin gen_binary_vectors
+          # Record every file under the snapshot directories that is
+          # supposed to be reproducible.
+          tar -cf artifacts/run-1.tar \
+              specs/registry/normative-manifest.json \
+              specs/registry/binary-reference-vectors.json \
+              fixtures/ \
+              examples/hello-en/ \
+              docs/benchmarks.shape.md docs/benchmarks.shape.json \
+              docs/peak-memory.shape.md docs/peak-memory.shape.json \
+              fixtures/corpus_index.json \
+              fixtures/expected-result.schema.json
+          # Record a content manifest: the SHA-256 of every file in the
+          # reproducible set, sorted by path. Comparing *contents* rather
+          # than the tar bytes matters: a tar archive embeds each file's
+          # mtime, so two byte-identical trees can still produce
+          # different archives.
+          find specs/registry/normative-manifest.json \
+               specs/registry/binary-reference-vectors.json \
+               fixtures examples/hello-en \
+               docs/benchmarks.shape.md docs/benchmarks.shape.json \
+               docs/peak-memory.shape.md docs/peak-memory.shape.json \
+               \( -type f \) -print0 | sort -z | xargs -0 sha256sum \
+               > artifacts/run-1.sha256
+
+      - name: Wipe target/
+        run: rm -rf target
+
+      - name: Build (second pass)
+        run: cargo build --locked --release --workspace --all-targets
+
+      - name: Run generators (second pass)
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          cargo run --locked --release --quiet -p elang-conformance --bin gen_canonical_goldens
+          cargo run --locked --release --quiet -p elang-conformance --bin gen_epf_canonical_goldens
+          cargo run --locked --release --quiet -p elang-conformance --bin gen_conformance_corpus
+          cargo run --locked --release --quiet -p elang-conformance --bin gen_example_package
+          cargo run --locked --release --quiet -p elang-conformance --bin gen_normative_manifest
+          cargo run --locked --release --quiet -p elang-conformance --bin gen_benchmarks
+          cargo run --locked --release --quiet -p elang-conformance --bin gen_benchmarks -- --shape
+          cargo run --locked --release --quiet -p elang-conformance --bin gen_peak_memory
+          cargo run --locked --release --quiet -p elang-conformance --bin gen_peak_memory -- --shape
+          cargo run --locked --release --quiet -p elang-conformance --bin gen_binary_vectors
+          tar -cf artifacts/run-2.tar \
+              specs/registry/normative-manifest.json \
+              specs/registry/binary-reference-vectors.json \
+              fixtures/ \
+              examples/hello-en/ \
+              docs/benchmarks.shape.md docs/benchmarks.shape.json \
+              docs/peak-memory.shape.md docs/peak-memory.shape.json \
+              fixtures/corpus_index.json \
+              fixtures/expected-result.schema.json
+          # Record a content manifest: the SHA-256 of every file in the
+          # reproducible set, sorted by path. Comparing *contents* rather
+          # than the tar bytes matters: a tar archive embeds each file's
+          # mtime, so two byte-identical trees can still produce
+          # different archives.
+          find specs/registry/normative-manifest.json \
+               specs/registry/binary-reference-vectors.json \
+               fixtures examples/hello-en \
+               docs/benchmarks.shape.md docs/benchmarks.shape.json \
+               docs/peak-memory.shape.md docs/peak-memory.shape.json \
+               \( -type f \) -print0 | sort -z | xargs -0 sha256sum \
+               > artifacts/run-2.sha256
+
+      - name: Compare the two snapshots
+        run: |
+          set -euo pipefail
+          # Compare the *contents* of the two artifact sets, not the tar
+          # archives. `tar` embeds each file's mtime, so `diff -q` on the
+          # two `.tar` files reports a difference whenever the two runs
+          # touched a file in a different order — even when every byte of
+          # content is identical. The `.sha256` manifests below record
+          # only path and content hash, which is what "reproducible" is
+          # actually supposed to mean.
+          if ! diff -u artifacts/run-1.sha256 artifacts/run-2.sha256; then
+            echo "::error::The two clean builds produced different bytes."
+            mkdir -p artifacts/diff/run-1 artifacts/diff/run-2
+            tar -xf artifacts/run-1.tar -C artifacts/diff/run-1
+            tar -xf artifacts/run-2.tar -C artifacts/diff/run-2
+            diff -ruN artifacts/diff/run-1 artifacts/diff/run-2 | head -200 || true
+            exit 1
+          fi
+          echo "Both clean builds produced byte-identical artefacts."
+
+      - name: Verify the committed lockfile digest
+        run: |
+          set -euo pipefail
+          # `Cargo.lock.sha256` is a committed attestation of the resolved
+          # dependency graph. Nothing else checked it, so a silent lockfile
+          # edit would go unnoticed until the next release.
+          sha256sum -c Cargo.lock.sha256
+
+      - name: Re-verify canonical golden hashes
+        run: |
+          set -euo pipefail
+          # Every published canonical ELD golden + the example package
+          # must reproduce byte-for-byte. The drift test
+          # `corpus_publication.rs` enforces this in the unit suite; this
+          # job re-runs it in the release build to be sure the *release*
+          # crate does too.
+          cargo test --locked --release -p elang-conformance --test corpus_publication
+          cargo test --locked --release -p elang-conformance --test example_package
+          cargo test --locked --release -p elang-conformance --test canonical_goldens
+          cargo test --locked --release -p elang-conformance --test normative_manifest
+
+      - name: Record the reproduced hashes
+        run: |
+          set -euo pipefail
+          mkdir -p docs/release/v0.1.0
+          {
+            echo "# ELANG v0.1.0 reproducible-build evidence"
+            echo
+            echo "Generated by the \`reproducible-build\` CI workflow on"
+            echo "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
+            echo
+            echo "Every file listed here was produced twice from a clean \`target/\`"
+            echo "and matched byte-for-byte."
+            echo
+            echo "The benchmark and peak-memory entries are the **shape** variants:"
+            echo "the deterministic half of those reports, with every measured"
+            echo "number replaced by a sentinel. The measured benchmark and"
+            echo "peak-memory reports are regenerated each run as evidence and"
+            echo "excluded from the byte-for-byte comparison because their"
+            echo "numbers depend on the machine and the moment of the run."
+            echo
+            tar -xf artifacts/run-1.tar
+            echo
+            echo "## SHA-256"
+            echo
+            echo '```'
+            find specs/registry/normative-manifest.json \
+                 specs/registry/binary-reference-vectors.json \
+                 fixtures examples/hello-en \
+                 docs/benchmarks.shape.md docs/benchmarks.shape.json \
+                 docs/peak-memory.shape.md docs/peak-memory.shape.json \
+                 \( -type f \) -print0 | sort -z | xargs -0 sha256sum
+            echo '```'
+          } > docs/release/v0.1.0/reproducible-build-evidence.md
+
+      - name: Upload the two build snapshots
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: reproducible-build-snapshots
+          path: |
+            artifacts/
+            docs/release/v0.1.0/reproducible-build-evidence.md
+          retention-days: 14
+          if-no-files-found: ignore

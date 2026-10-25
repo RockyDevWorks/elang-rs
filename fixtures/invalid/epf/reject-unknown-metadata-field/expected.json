@@ -1,0 +1,15 @@
+{
+  "description": "An unknown metadata field is rejected as EPF_UNKNOWN_NODE",
+  "errorCode": "EPF_UNKNOWN_NODE",
+  "fixture": "invalid/epf/reject-unknown-metadata-field",
+  "input": "input.epf",
+  "modes": [
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-EPF-011"
+  ],
+  "stage": 10
+}

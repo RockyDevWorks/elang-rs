@@ -1,0 +1,13 @@
+{
+  "description": "A root phoneme with exactly 16 allophones (the C-07 maximum) parses cleanly",
+  "fixture": "valid/eld/accept-sixteen-allophones",
+  "input": "input.eld",
+  "modes": [
+    "inspect"
+  ],
+  "outcome": "pass",
+  "requirements": [
+    "REQ-ELD-009",
+    "REQ-ELD-010"
+  ]
+}

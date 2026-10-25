@@ -1,0 +1,15 @@
+{
+  "description": "An unsupported `eld` version is rejected as EPF_BAD_VERSION",
+  "errorCode": "EPF_BAD_VERSION",
+  "fixture": "invalid/epf/reject-wrong-eld-version",
+  "input": "input.epf",
+  "modes": [
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-EPF-004"
+  ],
+  "stage": 10
+}

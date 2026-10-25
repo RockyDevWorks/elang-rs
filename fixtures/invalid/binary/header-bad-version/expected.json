@@ -1,0 +1,17 @@
+{
+  "description": "The header's major version is unsupported (stage 2).",
+  "errorCode": "HEADER_BAD_VERSION",
+  "fixture": "invalid/binary/header-bad-version",
+  "input": "archive.elang",
+  "modes": [
+    "inspect",
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-BIN-002",
+    "REQ-BIN-018"
+  ],
+  "stage": 2
+}

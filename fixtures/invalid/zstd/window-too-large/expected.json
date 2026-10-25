@@ -1,0 +1,16 @@
+{
+  "description": "A frame declaring an oversized window is rejected",
+  "errorCode": "FRAME_WINDOW_TOO_LARGE",
+  "fixture": "invalid/zstd/window-too-large",
+  "input": "archive.elang",
+  "modes": [
+    "inspect",
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-FRAME-004"
+  ],
+  "stage": 7
+}

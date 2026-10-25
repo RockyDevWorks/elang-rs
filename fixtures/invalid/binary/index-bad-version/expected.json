@@ -1,0 +1,16 @@
+{
+  "description": "The index version field is unsupported (stage 5).",
+  "errorCode": "INDEX_BAD_VERSION",
+  "fixture": "invalid/binary/index-bad-version",
+  "input": "archive.elang",
+  "modes": [
+    "inspect",
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-BIN-009"
+  ],
+  "stage": 5
+}

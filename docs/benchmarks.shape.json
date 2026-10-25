@@ -1,0 +1,30 @@
+{
+  "generated_at_unix": 0,
+  "elapsed_ns": 0,
+  "environment": {
+    "target_triple": null,
+    "cpu_brand": null,
+    "kernel_release": null,
+    "profile": null,
+    "rustc_version": null
+  },
+
+  "input": {
+    "path": "examples/hello-en/hello-en.elang",
+    "bytes": 1117,
+    "sha256": "3b0cfc2e05155421a1c81f3e25597cc1edefdf32b368ab0af7a4a1c4be317273"
+  },
+
+  "iterations": 50,
+  "warmup": 5,
+
+  "results": [
+    {"id":"inspect","description":"Parse header/footer/index and build the resource listing (stages 1-7, no decompression).","iterations":50,"median_ns":null,"median_us":null,"min_ns":null,"max_ns":null,"total_ns":null},
+    {"id":"verify","description":"Decode every resource within budget and recompute its SHA-256 (stages 8-11).","iterations":50,"median_ns":null,"median_us":null,"min_ns":null,"max_ns":null,"total_ns":null},
+    {"id":"validate","description":"Full ELD semantic validation on top of resource integrity (stages 8-12).","iterations":50,"median_ns":null,"median_us":null,"min_ns":null,"max_ns":null,"total_ns":null},
+    {"id":"canonical-pack","description":"Build a canonical `.elang` archive (canonical EPF + ELD, integrity manifest, Zstd frames, index, footer).","iterations":50,"median_ns":null,"median_us":null,"min_ns":null,"max_ns":null,"total_ns":null},
+    {"id":"random-access","description":"Retrieve one indexed resource from a verified package by index (no re-verification).","iterations":50,"median_ns":null,"median_us":null,"min_ns":null,"max_ns":null,"total_ns":null}
+  ],
+
+  "memory": {"measured":true,"vmhwm_kib":null,"vmrss_kib":null,"vmpeak_kib":null,"vmhwm_mib":null,"vmpeak_mib":null}
+}

@@ -1,0 +1,14 @@
+{
+  "description": "An allophone reusing its root's IPA is rejected",
+  "errorCode": "ELD_IPA_DUPLICATE",
+  "fixture": "invalid/eld/reject-allophone-duplicate-ipa",
+  "input": "input.eld",
+  "modes": [
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-ELD-015"
+  ],
+  "stage": 12
+}

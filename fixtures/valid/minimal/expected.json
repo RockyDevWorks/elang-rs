@@ -1,0 +1,36 @@
+{
+  "description": "Smallest semantically complete .elang package (T1402).",
+  "fixture": "valid/minimal",
+  "golden": [
+    {
+      "path": "archive.elang",
+      "sha256": "fa28ce47b5d9cf81d13fde0d716e84c8444c6167350e2d1f6c4bf78031151cf7"
+    },
+    {
+      "path": "header.bin",
+      "sha256": "ee15caa934ffa9220a103c5b83276df6c4e13120d2caa51089febb0c55900bdf"
+    },
+    {
+      "path": "index.bin",
+      "sha256": "862c450e6177de0f8ef9e88246823e05329c21d6d160f694516a8b66995fd57a"
+    },
+    {
+      "path": "footer.bin",
+      "sha256": "42708594e10e1c3f48670a1954586fcca97d3167c0ef62f83e66cd86a4e49efa"
+    }
+  ],
+  "input": "archive.elang",
+  "modes": [
+    "inspect"
+  ],
+  "outcome": "pass",
+  "requirements": [
+    "REQ-PKG-001",
+    "REQ-PKG-002",
+    "REQ-PKG-003",
+    "REQ-CONF-002",
+    "REQ-READER-002",
+    "REQ-EPF-001",
+    "REQ-ELD-001"
+  ]
+}

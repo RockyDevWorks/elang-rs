@@ -90,4 +90,106 @@ and this project uses independent version domains (see
   (the KDL surface parser is the implementation of OA-8/OA-9/OA-16's
   normative grammar, not a new normative artifact).
 
-[Unreleased]: https://github.com/elang-lang/elang-rs/compare/HEAD
+- **Phase 16 (Issue #26) — Documentation, examples, benchmarks, release archival.**
+  Closes T0123, T1601–T1616, T1618, and T1619 as one PR
+  (`doc/26-documentation-examples-benchmarks-and-release`). The v0.1.0 tag,
+  the signed release artifacts, and the final v0.1.0 declaration remain on
+  the human side of the gate (T1617, T1620 — deferred per the agreed split).
+  T1616 is now closed: three independent reviewers (specification
+  conformance, adversarial code, security/test-adequacy) were dispatched
+  with fresh contexts; all 41 findings are dispositioned in
+  `docs/release/v0.1.0/review-record.md` and the security-claim table
+  in `docs/release/v0.1.0/security-checklist.md`. The release-gate
+  assessment is recorded honestly: conditions (b) every MUST covered and
+  (c) multi-platform reproducible build remain unmet on the open-task list
+  (T0420, T0510, T1319); condition (a) closes only when the human tags.
+  The human sign-off block in both documents remains **unsigned** and is a
+  prerequisite for T1617/T1620.
+  - **Review-bot findings #38–#41 (CodeRabbit on PR #68).** The published
+    conformance corpus now records the **reader modes that actually observe
+    each fixture's outcome**: a rejection at stage *S* lists only the modes
+    whose pipeline ceiling reaches *S* (it previously listed modes that
+    *accept* the input, so five records told an independent implementation to
+    expect rejections it would never see). The published schema,
+    `fixtures/README.md` and the corpus records now agree on
+    **fixture-directory-relative** paths for both `input` and
+    `golden[].path` — the convention every pre-existing, manifest-covered
+    record already used, so the OA-14 canonical goldens and
+    `PINNED_SPEC_CHECKSUM` are byte-identical. The corpus drift test re-runs
+    the real generator into a scratch tree and compares every emitted file
+    byte-for-byte against the committed corpus, and `gen_example_package`
+    gained `--out-dir`, so the integration test no longer overwrites the
+    published example artefacts while `cargo test` runs.
+  - **T0123:** the normative manifest corpus now includes the **40 OA-14
+    artifacts** — `specs/registry/eld-canonical-vectors.json` plus the
+    13 canonical ELD golden fixtures at three files each
+    (`input.eld`, `golden/canonical.eld`, `expected.json`). Total
+    artifact count grew from **31 to 71**. The derived `.sha256`
+    sidecars are deliberately **not** frozen in the manifest; they are
+    regenerated from the frozen bytes and are asserted to be absent by
+    `derived_sha256_sidecars_are_not_frozen` in
+    `crates/elang-conformance/tests/normative_manifest.rs`. `PINNED_SPEC_CHECKSUM` was regenerated
+    to
+    `681022fbdd9a91d4e017c187884de7e6912409bee4267399464f8e4dc7d72e46`
+    and the doc comment now describes the expanded corpus. New integration
+    tests (`tests/normative_manifest.rs`) pin OA-14 coverage; the existing
+    module unit tests were migrated off the narrower `ARTIFACTS` list to a
+    single `artifact_entries()` source of truth.
+  - **T1601–T1607:** the public format docs under `docs/public/format/`
+    remain the authoritative normative reference; this PR reconciles
+    cross-references (two broken `../../` paths in `format/canonical.md`
+    corrected to `../../../`) and the "mimetype" → "Header/mimetype" naming
+    in `index.md` and `concepts.md` to match the reader's bootstrap path
+    constant.
+  - **T1608:** crate-level rustdoc is present on every library crate, and
+    `crates/elang-reader/examples/quickstart.rs` is a runnable end-to-end
+    quickstart that exercises `inspect`/`verify`/`validate` plus random
+    access on the published example archive. Run it with
+    `cargo run --example quickstart -p elang-reader`.
+  - **T1609:** `docs/public/cli.md` now matches the real CLI surface — the
+    `pack --epf/--eld/--output/--profile/--format-version` flag set, the
+    `unpack --output/--force` flags, the `canonicalize-eld` one-operand
+    stdout-only behaviour, and the documented exit-code table (`0` success,
+    `1` operation failure, `2` usage error). The CLI gained a global
+    `--json` flag that emits a single stable JSON envelope on stdout;
+    `crates/elang-cli/src/json.rs` carries the schema and
+    `crates/elang-cli/tests/json_output.rs` pins it. The doc update also
+    introduces the integrity-vs-authenticity distinction — the JSON
+    envelope proves the CLI produced the output, not that the *package* is
+    authentic.
+  - **T1610:** `examples/hello-en/` is the published worked example: a
+    minimal English phoneme inventory with one consonant and one vowel, the
+    `package.epf` source, the canonical `.elang` archive, its `.sha256`
+    sidecar and the conformance `expected.json`. The
+    `gen_example_package` binary regenerates the archive from the sources
+    byte-identically, and `tests/example_package.rs` pins the
+    reproducibility invariant.
+  - **T1611:** `docs/release/v0.1.0/migration-policy.md` codifies the v0.1.0
+    contract and the procedure for any future breaking change.
+  - **T1612:** `gen_conformance_corpus` publishes the in-crate conformance
+    catalog onto disk under `fixtures/valid/...` and `fixtures/invalid/...`,
+    with `corpus_index.json`, `expected-result.schema.json` and
+    `fixtures/CORPUS.md` as the human-readable companion. The corpus drift
+    test (`tests/corpus_publication.rs`) re-runs the generator for the
+    metadata and fails if the committed corpus diverges.
+  - **T1613, T1614:** `docs/benchmarks.md`/`docs/peak-memory.md` carry the
+    deterministic benchmark results (5 ops × 50 iterations × 5 warm-ups,
+    median wall-clock; Linux `VmHWM` peak memory) generated by
+    `gen_benchmarks` and `gen_peak_memory`. The harness is hand-rolled and
+    dependency-free; non-Linux peak-memory is documented as methodology
+    only.
+  - **T1615:** `.github/workflows/reproducible-build.yml` runs a
+    clean-container double build, compares SHA-256 hashes of every
+    generated artifact, and re-verifies the canonical goldens — pinned to
+    `ubuntu-latest` with `CARGO_INCREMENTAL=0` and `cargo build --frozen`.
+  - **T1618:** `docs/release/v0.1.0/README.md` is the release notes draft
+    with a "prepared, not declared" status banner, the per-task landing
+    table, the integrity-vs-authenticity distinction and the frozen-archive
+    list. T1616, T1617 and T1620 are explicitly out of scope.
+  - **T1619:** `gen_release_archive` writes the archival checksum metadata
+    (`Cargo.lock.sha256`, `docs/release/v0.1.0/dependencies.txt`,
+    `docs/release/v0.1.0/repertoire.sha256`,
+    `docs/release/v0.1.0/conformance-hashes.txt`). The normative manifest
+    is published separately at `specs/registry/normative-manifest.json`.
+
+[Unreleased]: https://github.com/RockyDevWorks/elang-rs/compare/HEAD

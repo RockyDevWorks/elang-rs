@@ -1,0 +1,17 @@
+{
+  "description": "The header's 16 reserved bytes must be zero (stage 2).",
+  "errorCode": "HEADER_RESERVED_NONZERO",
+  "fixture": "invalid/binary/header-reserved-nonzero",
+  "input": "archive.elang",
+  "modes": [
+    "inspect",
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-BIN-002",
+    "REQ-BIN-018"
+  ],
+  "stage": 2
+}

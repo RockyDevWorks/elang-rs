@@ -44,13 +44,13 @@ resource is decoded.
 
 | Constant | Value | Source | What happens when exceeded |
 |---|---|---|---|
-| `MAX_COMPRESSED_ARCHIVE_BYTES` | 6 GiB (6 × 2³⁰) | §3.5 | `Category::Container` + `*_TOO_LARGE` (the container crate uses `elang_core::Error` codes rather than a per-crate enum; the specific codes are recorded in `crates/elang-container/src/header.rs::decode` etc.) |
-| `RECOMMENDED_COMPRESSED_ARCHIVE_BYTES` | 2 GiB (warning, not hard) | §3.5 | Diagnostic, not rejection |
+| `MAX_COMPRESSED_ARCHIVE_BYTES` | 6 GiB (6 × 2³⁰) | §3.5 | **Writer-side only.** `crates/elang-writer/src/build.rs` rejects an archive over the ceiling with `LIMIT_ARCHIVE_BYTES`. **The reader does not enforce it** — the reader bounds expansion through `MAX_UNCOMPRESSED_AGGREGATE_BYTES` and the per-resource ceilings instead. Reader-side enforcement and the recommended-size warning are tracked as open task **T0420** (`REQ-FRAME-012`, status *Partial* in `docs/traceability.md`). |
+| `RECOMMENDED_COMPRESSED_ARCHIVE_BYTES` | 2 GiB (warning, not hard) | §3.5 | **Not implemented.** The constant is declared in `crates/elang-core/src/limits.rs` but has no call sites: no diagnostic is emitted today. Deferred to the writer under **T0420**. |
 | `MAX_UNCOMPRESSED_AGGREGATE_BYTES` | 8 GiB (8 × 2³⁰) | §3.5 | `BoundedCounter::record` clamps to ceiling and returns `Category::Limit` |
 | `MAX_RESOURCES` | 25,000 entries | §3.5 | `Category::Index` + index-too-large code |
 | `MAX_INDEX_BYTES` | 32 MiB (32 × 2²⁰) | §3.5 | `Category::Index` + index-too-large code |
 | `MIN_INDEX_BYTES` | 16 bytes | §3.5 | `Category::Index` + index-too-small code |
-| `MAX_ZSTD_WINDOW_BYTES` | 128 MiB (128 × 2²⁰) | §3.5 | `Category::Zstd` + window-too-large code |
+| `MAX_ZSTD_WINDOW_BYTES` | 128 MiB (128 × 2²⁰) | §3.5 | `Category::Frame` + `FRAME_WINDOW_TOO_LARGE`, raised by `crates/elang-container/src/frame.rs` when the frame header declares a larger window. This constant is the single source of truth; the frame layer derives its `windowLog` form from it. |
 
 The 6 GiB / 8 GiB split is the documented decompression-bomb
 mitigation: even at the worst-case compression ratio of ~1.34, a
@@ -71,12 +71,17 @@ Each resource is bounded independently of the archive-wide budget.
 | any undeclared generic | 1 GiB | `MAX_GENERIC_RESOURCE_BYTES` | arbitrary opaque payload |
 
 A resource whose **declared** uncompressed size already exceeds the
-ceiling is rejected *before* decoding starts — `ResourceEntry::reserve`
-runs the cross-check with `checked_add`, so an `offset +
-compressed_size` overflow is impossible. The aggregate budget is
-primed with the declared size; overproduction during decoding is
-caught separately by `BoundedCounter::record` so a liar (declares
-small, produces large) cannot exceed the budget.
+ceiling is rejected *before* decoding starts. `ResourceEntry::new`
+(`crates/elang-core/src/index.rs`) performs that ceiling check and
+runs the `offset + compressed_size` cross-check with `checked_add`,
+so an arithmetic overflow is impossible. The archive-level aggregate
+is summed separately in `crates/elang-container/src/layout.rs`.
+Overproduction during decoding is caught by `BoundedCounter::record`,
+so a liar (declares small, produces large) cannot exceed the budget.
+
+(`ResourceEntry::reserve` is the `ByteBudget`-charging helper for the
+same entry. It is exercised by the core crate's tests but is not on
+the production path; the production checks are the ones named above.)
 
 ## Resource-path constraints
 
@@ -104,8 +109,12 @@ The extraction CLI additionally:
 - Rejects overwrite of an existing file (no clobber).
 - Rejects traversal escape (`../` in a relative path is rejected by
   the validator above, but a symlink in the output directory is not).
-- Does not follow symlinks during extraction (output is created
-  with `O_NOFOLLOW` semantics where the platform supports it).
+- Does not follow symlinks during extraction. The target file is
+  created with `OpenOptions::create_new(true)` (`O_CREAT | O_EXCL`),
+  which fails on an existing symlink, and every intermediate
+  directory component is checked with `symlink_metadata` and
+  canonicalised before use. The code does **not** use `O_NOFOLLOW`;
+  see the TOCTOU note in "Resource-path constraints" below.
 - Uses `Path::join` + canonicalization check before any `create` call.
 
 ## KDL parser budgets
@@ -199,9 +208,9 @@ untrusted (a sandbox, a container with no network, a VM).
 The reader allocates the per-resource buffers and aggregate
 counters based on the archive's *declared* sizes. A caller who
 has a tighter budget (e.g., "no archive over 100 MiB for this
-endpoint") must pre-check the `Header::archive_size()` and reject
-*before* invoking the reader. The reader itself honours only the
-documented `MAX_*` ceilings.
+endpoint") must check the length of the archive bytes it is about to
+pass to `Package::open` and reject *before* invoking the reader. The
+reader itself honours only the documented `MAX_*` ceilings.
 
 ### No concurrency model
 

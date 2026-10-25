@@ -1,0 +1,16 @@
+{
+  "description": "A skippable frame is rejected",
+  "errorCode": "FRAME_SKIPPABLE",
+  "fixture": "invalid/zstd/skippable-frame",
+  "input": "archive.elang",
+  "modes": [
+    "inspect",
+    "verify",
+    "validate"
+  ],
+  "outcome": "fail",
+  "requirements": [
+    "REQ-FRAME-006"
+  ],
+  "stage": 7
+}

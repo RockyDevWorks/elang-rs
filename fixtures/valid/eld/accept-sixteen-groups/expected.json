@@ -1,0 +1,13 @@
+{
+  "description": "An inventory with exactly 16 groups (the C-03 maximum) parses cleanly",
+  "fixture": "valid/eld/accept-sixteen-groups",
+  "input": "input.eld",
+  "modes": [
+    "inspect"
+  ],
+  "outcome": "pass",
+  "requirements": [
+    "REQ-ELD-003",
+    "REQ-ELD-004"
+  ]
+}
