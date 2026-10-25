@@ -2,7 +2,7 @@
 
 > **Suggested location:** `.kiro/specs/elang-v0.1.0/tasks.md`  
 > **Scope:** ELANG Rust format, library, CLI, specs, conformance and releases **only**. Excludes ELANG Studio, ELANG Hub, AION, HORIZON and ARKHE.  
-> **Baseline:** ELANG spec `0.0.1-1`, container/EPF/ELD `0.1.0`.  
+> **Baseline:** ELANG spec `0.1.0`, container/EPF/ELD `0.1.0`.  
 > **Instructions:** Check tasks only after code + tests + documentation + review meet acceptance criteria. `[ ]` means not verified, not necessarily not started. Subtasks are deliberately granular and dependency ordered. Mark **BLOCKER** items before coding against unsettled normative data.
 
 > **Progress log:**

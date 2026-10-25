@@ -1,6 +1,6 @@
 # ELANG Specification (reference index)
 
-> **Specification release:** `0.0.1-1` · **Container/EPF/ELD:** `0.1.0`
+> **Specification release:** `0.1.0` · **Container/EPF/ELD:** `0.1.0`
 >
 > This document is the navigation index into the ELANG normative rules. The
 > single source of truth for engineering decisions is the steering contract at

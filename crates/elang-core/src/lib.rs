@@ -36,7 +36,7 @@ pub use version::{
 /// Retained for back-compat; [`version::domains`] is the typed home.
 pub mod version_domains {
     /// ELANG specification release this implementation targets.
-    pub const SPEC_RELEASE: &str = "0.0.1-1";
+    pub const SPEC_RELEASE: &str = "0.1.0";
 
     /// Binary container format version (header major.minor).
     pub const CONTAINER_VERSION: &str = "0.1.0";
@@ -60,7 +60,7 @@ mod tests {
 
     #[test]
     fn version_domains_are_locked() {
-        assert_eq!(SPEC_RELEASE, "0.0.1-1");
+        assert_eq!(SPEC_RELEASE, "0.1.0");
         assert_eq!(CONTAINER_VERSION, "0.1.0");
         assert_eq!(CONTAINER_MAJOR, 0);
         assert_eq!(CONTAINER_MINOR, 1);
