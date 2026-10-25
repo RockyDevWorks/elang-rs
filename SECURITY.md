@@ -61,8 +61,34 @@ The fuzzing, property-based, resource-exhaustion and extraction-security
 testing strategy — including the `cargo-fuzz` (libFuzzer) harnesses, the
 proptest property tests, the per-target smoke budgets and the nightly
 campaign schedule — is documented in
-[`docs/security-testing.md`](docs/security-testing.md). Recorded fuzz
-campaign results, fuzz-derived regression fixtures and triage history are
-not yet committed. Current committed infrastructure consists of the
-[fuzz harnesses](fuzz/fuzz_targets/), [initial seeds](fuzz/seeds/) and
-[smoke and nightly campaign workflow](.github/workflows/fuzz.yml).
+[`docs/security-testing.md`](docs/security-testing.md). The end-to-end
+fuzz-finding triage procedure (finding → reproduction → regression test →
+audit-trail index) is documented in
+[`docs/fuzz-triage.md`](docs/fuzz-triage.md). The explicit numeric
+limits enforced by the parser, the limits the parser does *not*
+enforce, and the authenticity/non-repudiation gaps a defensive
+deployment must layer above the reader are documented in
+[`docs/security-limits.md`](docs/security-limits.md).
+
+## Security limits and remaining trust limitations (T1520)
+
+The numeric limits the reader enforces (6 GiB compressed / 8 GiB
+uncompressed aggregate, 25,000 resources, 64-deep KDL nesting,
+2 M nodes per resource, etc.) live in
+[`crates/elang-core/src/limits.rs`](crates/elang-core/src/limits.rs)
+and are documented exhaustively in
+[`docs/security-limits.md`](docs/security-limits.md). The reader
+also has explicit non-goals: no rate limiting, no sandboxing, no
+streaming partial verification, no persistence of rejected inputs.
+A defensive deployment that wants any of those must layer them
+above the reader. See the "Defensive deployment checklist" section
+of `security-limits.md` for the full list.
+
+The reader proves the archive's bytes are internally consistent;
+it does **not** prove the archive came from a trusted publisher.
+SHA-256 integrity matches without signatures is tamper-evidence,
+not tamper-prevention. URN-like language identifiers are naming
+conventions, not verified ownership claims. The media type
+`application/vnd.elang` is *proposed*, not IANA-registered. All
+four limitations are stated explicitly in `security-limits.md` so
+a reader cannot miss them.
