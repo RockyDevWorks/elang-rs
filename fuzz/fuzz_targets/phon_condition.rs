@@ -122,34 +122,36 @@ libfuzzer_sys::fuzz_target!(|data: &[u8]| {
     // three machinery layers.
     for group in doc.groups() {
         for root in group.roots() {
-            let Some(block) = root.when() else {
-                continue;
-            };
-            let Ok(when) = parse_block(block, &refs, &REPERTOIRE) else {
-                continue;
-            };
-
-            // Layer 1 + 2: canonical sorting key and depth
-            // introspection, over the whole AST.
-            for child in when.children() {
-                exercise_tree(child);
-            }
-
-            // Layer 3: the pure evaluator. The context is the
-            // document's own root sequence; the candidate is the
-            // root that owns this `when`, so the neighbour
-            // predicates (if any) see their own context.
-            if let Some(index) = root_keys
-                .iter()
-                .position(|k| k == &comparison_key(root.ipa().as_str()))
-            {
-                let ctx = EvalContext {
-                    roots: &root_keys,
-                    index,
-                    syllable_role: None,
-                    refs: &refs,
+            for block in root.when().into_iter().chain(
+                root.allophones()
+                    .iter()
+                    .filter_map(|allophone| allophone.when()),
+            ) {
+                let Ok(when) = parse_block(block, &refs, &REPERTOIRE) else {
+                    continue;
                 };
-                let _ = elang_eld::evaluate(&when, &ctx);
+
+                // Layer 1 + 2: canonical sorting key and depth
+                // introspection, over the whole AST.
+                for child in when.children() {
+                    exercise_tree(child);
+                }
+
+                // Layer 3: the pure evaluator. Root and allophone
+                // conditions both use the enclosing root's index,
+                // so neighbour predicates see the underlying sequence.
+                if let Some(index) = root_keys
+                    .iter()
+                    .position(|k| k == &comparison_key(root.ipa().as_str()))
+                {
+                    let ctx = EvalContext {
+                        roots: &root_keys,
+                        index,
+                        syllable_role: None,
+                        refs: &refs,
+                    };
+                    let _ = elang_eld::evaluate(&when, &ctx);
+                }
             }
         }
     }
