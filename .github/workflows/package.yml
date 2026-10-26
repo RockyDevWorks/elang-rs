@@ -16,7 +16,7 @@ name: Package
 # same input, so the packaging script refuses to run anywhere except Linux
 # — the release platform. Linux is therefore also the only sensible place
 # to *verify* the artifact. macOS / Windows builds run as normal tests in
-# `ci.yml`; the artifact itself is produced only on `ubuntu-24.04`.
+# `ci.yml`; the artifact itself is produced only on `ubuntu-26.04`.
 #
 # # What this uploads
 #
