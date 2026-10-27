@@ -82,6 +82,12 @@ const KNOWN_NON_CODES: &[&str] = &[
     // Emitted by elang-repertoire::ipa / elang-core::model::when.
     "IPA_EMPTY",
     "WHEN_GROUP_ARITY",
+    // Environment-variable names read by elang-server's binary (Issue #76).
+    // They are SCREAMING_SNAKE_CASE like a diagnostic code but are runtime
+    // configuration, never emitted as a code.
+    "ELANG_SERVER_PORT",
+    "ELANG_SERVER_MAX_BODY_BYTES",
+    "ELANG_SERVER_TIMEOUT_MS",
 ];
 
 fn workspace_root() -> PathBuf {

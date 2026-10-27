@@ -13,6 +13,7 @@ members = [
     "crates/elang-cli",
     "crates/elang-unicode",
     "crates/elang-writer",
+    "crates/elang-server",
 ]
 # Phase 15, T1501+ (Issue #25): the `fuzz/` crate uses cargo-fuzz and is
 # built on nightly with sanitizer instrumentation and a different lint
@@ -83,6 +84,17 @@ proptest = "=1.12.0"
 # the production binary never links `kdl`. ADR 0010's "hand-rolled"
 # rationale stands; this is a cross-check, not a replacement.
 kdl = "=6.7.1"
+# HTTP service for the Hub integration (Issue #76, Phase 16). The
+# `elang-server` crate wraps `elang-reader`'s 12-stage inspect/verify/
+# validate pipeline in a small Axum 0.8 router so elang-hub's
+# `SdkClient` (REPO: `RockyDevWorks/elang-hub` `src/lib/sdk/client.ts`)
+# can call the SDK over `POST /{inspect,verify,validate}`. Pinning
+# exact versions keeps the supply-chain diff reviewable; `tokio`'s
+# feature set is intentionally minimal (`net` + `macros` + `rt-multi-thread`)
+# because the binary only needs to bind a TCP listener and serve axum.
+axum = "=0.8.9"
+tokio = { version = "=1.54.1", features = ["macros", "net", "rt-multi-thread"] }
+tower-http = { version = "=0.7.1", features = ["limit"] }
 
 # Workspace-wide lint policy (T0215). Untrusted-input safety is enforced by
 # denying panic-prone constructs. These are inherited via `[lints] workspace = true`.

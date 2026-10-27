@@ -1,0 +1,46 @@
+[package]
+name = "elang-server"
+description = "ELANG v0.1.0 HTTP service: thin Axum wrapper around the elang-reader 12-stage inspect/verify/validate pipeline, exposing the SDK wire contract expected by elang-hub's SdkClient."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+# The three SDK modes all run `Package::open` (stages 1-7) plus a
+# subset of stages 8-12. The server is a thin wrapper — no validation
+# logic lives here.
+elang-reader.workspace = true
+# Versions, error categories and stage constants are needed by the
+# response/error mapping (`stage_to_label`, `map_category`).
+elang-core.workspace = true
+# HTTP framework. Pinned exact via the workspace.
+axum.workspace = true
+# Async runtime. `net` for `TcpListener`, `macros` for `#[tokio::main]`,
+# `rt-multi-thread` for axum's worker model.
+tokio.workspace = true
+# Body-size cap middleware. `RequestBodyLimitLayer` returns 413 on
+# overflow, which the Hub maps to `request_too_large`.
+tower-http.workspace = true
+# JSON response shape. Both already pinned in the workspace.
+serde.workspace = true
+serde_json.workspace = true
+
+[[bin]]
+name = "elang-server"
+path = "src/main.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[dev-dependencies]
+# Integration tests build a real `axum::Router` and drive it with
+# `tower::ServiceExt::oneshot`, which needs the `tower` dev-dep.
+tower = { version = "=0.5.2", features = ["util"] }
+
