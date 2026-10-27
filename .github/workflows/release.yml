@@ -48,8 +48,12 @@ on:
     tags:
       - 'v*'
 
+# `contents: write` is granted only to the `release` job that publishes
+# the GitHub Release; other jobs (none today, but future ones) inherit
+# `contents: read` from the workflow default. Tightens the GitHub Code
+# Scanning `Token-Permissions` check.
 permissions:
-  contents: write   # to create the GitHub Release
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
@@ -60,6 +64,10 @@ jobs:
     name: Cut ${{ github.ref_name }} release
     runs-on: ubuntu-26.04
     timeout-minutes: 60
+    # Override the workflow-level `contents: read` only for the job that
+    # actually publishes the GitHub Release (`softprops/action-gh-release`).
+    permissions:
+      contents: write
     env:
       CARGO_TERM_COLOR: never
       CARGO_INCREMENTAL: "0"
