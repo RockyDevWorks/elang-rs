@@ -104,6 +104,16 @@ jobs:
           # the `cargo-fuzz` harness runtime licensed
           # `(MIT OR Apache-2.0) AND NCSA`.
           allow-licenses: Apache-2.0, Apache-2.0 WITH LLVM-exception, MIT, BSD-2-Clause, BSD-3-Clause, ISC, Unicode-3.0, Unicode-DFS-2016, Zlib, NCSA
+          # Narrow exception: `pathspec` (MPL-2.0) is a hard transitive
+          # dependency of `zensical==0.0.73` (the docs site generator);
+          # every released pathspec is MPL-2.0 and Zensical's
+          # `requires_dist` pins it. The wheel is a build-time-only
+          # Python module for the docs workflow — it is never linked
+          # into `elang-server` or any other shipped binary, so the
+          # file-level copyleft has no reach outside pathspec itself.
+          # We do NOT add MPL-2.0 to the global `allow-licenses` so
+          # future MPL-licensed dependencies still trip the check.
+          allow-dependencies-licenses: pkg:pypi/pathspec
 
   scorecard:
     name: OpenSSF Scorecard
