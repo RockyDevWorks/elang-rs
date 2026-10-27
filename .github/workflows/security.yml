@@ -32,17 +32,26 @@ jobs:
       security-events: write
       actions: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec  # stable
+      - name: Cache cargo registry + target/
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370  # v4
         with:
           languages: rust
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v4
+        uses: github/codeql-action/autobuild@9b3254085494b55a0f7c4c2b3d2d52cc712ce370  # v4
       - name: Analyze
-        uses: github/codeql-action/analyze@v4
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370  # v4
         with:
           category: "/language:rust"
 
@@ -53,9 +62,9 @@ jobs:
       contents: read
       issues: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
       - name: RustSec advisory audit
-        uses: rustsec/audit-check@v2
+        uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998  # v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -65,9 +74,9 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
       - name: Supply-chain policy check
-        uses: EmbarkStudios/cargo-deny-action@v2
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25  # v2
         with:
           command: check
           # Enforces the full deny.toml policy: known advisories, crate bans,
@@ -84,41 +93,64 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
       - name: Dependency Review
-        uses: actions/dependency-review-action@v5
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294  # v5
         with:
           fail-on-severity: low
-          comment-summary-in-pr: on-failure
+          # `always` (not `on-failure`) keeps this sticky comment in sync
+          # with the current check state. With `on-failure` the comment is
+          # written only when the job fails and is never refreshed on a
+          # later pass, so a fixed license violation keeps showing up as a
+          # live failure and misleads reviewers.
+          comment-summary-in-pr: always
           # Keep in step with deny.toml's license allowlist. NCSA was
           # added in Phase 15 (Issue #25, T1501+) for `libfuzzer-sys`,
           # the `cargo-fuzz` harness runtime licensed
           # `(MIT OR Apache-2.0) AND NCSA`.
           allow-licenses: Apache-2.0, Apache-2.0 WITH LLVM-exception, MIT, BSD-2-Clause, BSD-3-Clause, ISC, Unicode-3.0, Unicode-DFS-2016, Zlib, NCSA
+          # Narrow exception: `pathspec` (MPL-2.0) is a hard transitive
+          # dependency of `zensical==0.0.73` (the docs site generator);
+          # every released pathspec is MPL-2.0 and Zensical's
+          # `requires_dist` pins it. The wheel is a build-time-only
+          # Python module for the docs workflow — it is never linked
+          # into `elang-server` or any other shipped binary, so the
+          # file-level copyleft has no reach outside pathspec itself.
+          # We do NOT add MPL-2.0 to the global `allow-licenses` so
+          # future MPL-licensed dependencies still trip the check.
+          allow-dependencies-licenses: pkg:pypi/pathspec
 
   scorecard:
     name: OpenSSF Scorecard
     runs-on: ubuntu-latest
-    # Supply-chain posture scoring. Runs on pushes to main and on schedule;
-    # results are uploaded to the Security tab.
-    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # Supply-chain posture scoring. Runs on pushes to main, on PRs
+    # targeting main, on schedule, and on manual dispatch; results
+    # are uploaded to the Security tab.
+    #
+    # Note: the upstream `ossf/scorecard-action` README marks the
+    # `pull_request` trigger as experimental. For fork PRs the
+    # `GITHUB_TOKEN` only has read-only `security-events` /
+    # `id-token` permissions and the SARIF upload step will warn and
+    # skip publishing — the analysis still runs locally. Same-org
+    # PRs (the normal case here) get the full publish path.
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     permissions:
       contents: read
       security-events: write
       id-token: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
         with:
           persist-credentials: false
       - name: Run analysis
         # scorecard-action does not publish a floating `v2` tag, so pin to a
         # full release tag (latest stable at time of writing).
-        uses: ossf/scorecard-action@v2.5.0
+        uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e  # v2.5.0
         with:
           results_file: results.sarif
           results_format: sarif
           publish_results: true
       - name: Upload SARIF to code scanning
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370  # v4
         with:
           sarif_file: results.sarif

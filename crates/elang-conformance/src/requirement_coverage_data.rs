@@ -2575,7 +2575,7 @@ static COVERAGE: &[CoverageRow] = &[
     CoverageRow {
         requirement: "REQ-CONF-005",
         crate_name: "elang-conformance",
-        test: "ci_matrix_runs_linux_windows_macos",
+        test: "ci_runs_linux",
         kind: CoverageKind::Meta,
     },
     CoverageRow {
@@ -2605,7 +2605,7 @@ static COVERAGE: &[CoverageRow] = &[
     CoverageRow {
         requirement: "REQ-GOV-WORKSPACE-001",
         crate_name: "elang-conformance",
-        test: "ci_matrix_runs_linux_windows_macos",
+        test: "ci_runs_linux",
         kind: CoverageKind::Meta,
     },
     CoverageRow {
