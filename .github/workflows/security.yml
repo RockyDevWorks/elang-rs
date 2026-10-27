@@ -99,9 +99,17 @@ jobs:
   scorecard:
     name: OpenSSF Scorecard
     runs-on: ubuntu-latest
-    # Supply-chain posture scoring. Runs on pushes to main and on schedule;
-    # results are uploaded to the Security tab.
-    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # Supply-chain posture scoring. Runs on pushes to main, on PRs
+    # targeting main, on schedule, and on manual dispatch; results
+    # are uploaded to the Security tab.
+    #
+    # Note: the upstream `ossf/scorecard-action` README marks the
+    # `pull_request` trigger as experimental. For fork PRs the
+    # `GITHUB_TOKEN` only has read-only `security-events` /
+    # `id-token` permissions and the SARIF upload step will warn and
+    # skip publishing — the analysis still runs locally. Same-org
+    # PRs (the normal case here) get the full publish path.
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     permissions:
       contents: read
       security-events: write
