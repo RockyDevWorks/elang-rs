@@ -333,10 +333,7 @@ mod tests {
     fn map_code_eld_family_is_eld_invalid() {
         // Use real registered codes so the conformance registry test
         // (which scans the source tree) does not flag these literals.
-        assert_eq!(
-            map_code(Category::EldSchema, "ELD_EMPTY"),
-            "eld_invalid"
-        );
+        assert_eq!(map_code(Category::EldSchema, "ELD_EMPTY"), "eld_invalid");
         assert_eq!(
             map_code(Category::Unicode, "UNICODE_NONCHARACTER"),
             "eld_invalid"
@@ -345,10 +342,7 @@ mod tests {
             map_code(Category::Ipa, "IPA_EXCLUDED_NOTATION"),
             "eld_invalid"
         );
-        assert_eq!(
-            map_code(Category::Roman, "ROMAN_BAD_FORMAT"),
-            "eld_invalid"
-        );
+        assert_eq!(map_code(Category::Roman, "ROMAN_BAD_FORMAT"), "eld_invalid");
         assert_eq!(map_code(Category::When, "WHEN_EMPTY"), "eld_invalid");
     }
 
