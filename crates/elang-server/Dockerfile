@@ -23,7 +23,7 @@
 # `docker build --build-arg RUST_IMAGE=...` for local experiments.
 ARG RUST_IMAGE=rust:1.99-bookworm@sha256:48b7f435b8fc6378ce43b44f15e3a47fd8919b2825f835c39bd4bd3da50af5b8
 # Use the numeric Debian alias so Renovate can order tag upgrades.
-ARG DEBIAN_IMAGE=debian:12-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8
+ARG DEBIAN_IMAGE=debian:13-slim@sha256:62bd423aeee912639ca8ee681c2b762cb3e25137e0a92b20be455898a9f034ad
 
 FROM ${RUST_IMAGE} AS build
 WORKDIR /build
