@@ -39,7 +39,23 @@ pub enum ServerError {
     Timeout,
     /// `503` — internal server error. Maps to `service_unavailable`
     /// on the Hub side.
-    Internal(String),
+    ///
+    /// The variant carries no message: anything held in an `Internal`
+    /// value would only be useful for server-side logging, but exposing
+    /// it in the response could leak panic payloads, internal paths, or
+    /// other operator-only data. Construct via [`ServerError::internal`],
+    /// which logs the supplied context to stderr and returns the unit
+    /// variant.
+    Internal,
+}
+
+/// Construct an [`ServerError::Internal`] after logging the supplied
+/// context to stderr. The context never reaches the client — only the
+/// generic "Service is temporarily unavailable." message does.
+#[must_use]
+pub fn internal(context: &str) -> ServerError {
+    eprintln!("elang-server: internal error: {context}");
+    ServerError::Internal
 }
 
 impl ServerError {
@@ -78,11 +94,11 @@ impl ServerError {
                 path: None,
                 diagnostics: Vec::new(),
             },
-            Self::Internal(msg) => SdkFailure {
+            Self::Internal => SdkFailure {
                 ok: false,
                 stage: "inspect",
                 code: "service_unavailable",
-                message: msg.clone(),
+                message: "Service is temporarily unavailable.".into(),
                 path: None,
                 diagnostics: Vec::new(),
             },
@@ -98,7 +114,7 @@ impl IntoResponse for ServerError {
             Self::UnsupportedMediaType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
             Self::Timeout => StatusCode::GATEWAY_TIMEOUT,
-            Self::Internal(_) => StatusCode::SERVICE_UNAVAILABLE,
+            Self::Internal => StatusCode::SERVICE_UNAVAILABLE,
             // Deliberately 200 OK for SDK failures — see type docs.
             Self::Sdk(_) => StatusCode::OK,
         };

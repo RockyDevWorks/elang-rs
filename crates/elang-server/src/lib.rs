@@ -72,6 +72,17 @@ pub const MAX_BODY_BYTES_CEILING: usize = 256 * 1024 * 1024;
 /// `timeout` SDK code. Override with `ELANG_SERVER_TIMEOUT_MS`.
 pub const DEFAULT_TIMEOUT_MS: u64 = 30_000;
 
+/// Default max concurrent in-flight SDK requests (4).
+///
+/// Caps the number of `Package::open` / `verify` / `validate` jobs that
+/// can run at once. A `Semaphore` permit moves into the closure and is
+/// released only when the work ends — so a handler timeout cannot orphan
+/// the underlying blocking job past the permit limit. The value is
+/// conservative: at the 256 MiB body cap, 4 concurrent ≈ 1 GiB worst
+/// case, leaving headroom inside the Fly.io `shared-cpu-1x / 256 MB`
+/// allocation. Override with `ELANG_SERVER_MAX_CONCURRENT`.
+pub const DEFAULT_MAX_CONCURRENT_REQUESTS: usize = 4;
+
 /// Build the Axum router with all routes wired and the body-size cap
 /// applied as a layer.
 ///

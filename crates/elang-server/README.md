@@ -107,11 +107,12 @@ Transport-level failures still use their proper status:
 
 ## Configuration
 
-| Env var                        | Default   | Range                     | Purpose                                  |
-|--------------------------------|-----------|---------------------------|------------------------------------------|
-| `ELANG_SERVER_PORT`            | `8080`    | valid `u16`               | TCP listen port                          |
-| `ELANG_SERVER_MAX_BODY_BYTES`  | `10485760` | `1`–`268435456` (10 MiB)  | Request body cap; `413` above it         |
-| `ELANG_SERVER_TIMEOUT_MS`      | `30000`   | any `u64`                 | Per-request handler budget; `504` above it |
+| Env var                         | Default    | Range                          | Purpose                                       |
+|---------------------------------|------------|--------------------------------|-----------------------------------------------|
+| `ELANG_SERVER_PORT`             | `8080`     | valid `u16`                    | TCP listen port                               |
+| `ELANG_SERVER_MAX_BODY_BYTES`   | `10485760` | `1`–`268435456` (256 MiB cap)  | Request body cap; `413` above it              |
+| `ELANG_SERVER_TIMEOUT_MS`       | `30000`    | any `u64`                      | Per-request handler budget; `504` above it    |
+| `ELANG_SERVER_MAX_CONCURRENT`   | `4`        | `1`+ (saturates to 1)          | Max concurrent in-flight SDK requests         |
 
 ## Running locally
 
@@ -146,16 +147,18 @@ stripped binary (~2 MB) and runs as a non-root user.
 ## Deploying to Fly.io
 
 ```bash
-cd crates/elang-server
-fly launch --copy-config --no-deploy   # creates the app, prompts for a name
-fly deploy
+# From the workspace root (fly.toml lives at the root, not in the crate)
+fly launch --no-deploy   # creates the app, prompts for a name
+fly deploy               # builds + deploys
 ```
 
 `fly.toml` pins the region (`iad`), the machine size
 (`shared-cpu-1x` / 256 MB), and the health check (`GET /healthz`,
 every 15 s). `auto_stop_machines = false` — auto-stop would add a cold
 start to every interactive validation request, and the free allowance
-covers an always-on machine at this size.
+covers an always-on machine at this size. The Dockerfile referenced
+by `fly.toml` (`crates/elang-server/Dockerfile`) expects the workspace
+root as its build context, which is why `fly.toml` itself lives here.
 
 Once deployed, point the Hub at it:
 

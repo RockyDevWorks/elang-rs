@@ -8,7 +8,8 @@
 use std::env;
 
 use elang_server::{
-    router, state::AppState, DEFAULT_MAX_BODY_BYTES, DEFAULT_TIMEOUT_MS, MAX_BODY_BYTES_CEILING,
+    router, state::AppState, DEFAULT_MAX_BODY_BYTES, DEFAULT_MAX_CONCURRENT_REQUESTS,
+    DEFAULT_TIMEOUT_MS, MAX_BODY_BYTES_CEILING,
 };
 
 /// Bind address default if `ELANG_SERVER_PORT` is unset or invalid.
@@ -32,7 +33,12 @@ async fn main() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(DEFAULT_TIMEOUT_MS);
 
-    let state = AppState::new(timeout_ms);
+    let max_concurrent: usize = env::var("ELANG_SERVER_MAX_CONCURRENT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DEFAULT_MAX_CONCURRENT_REQUESTS);
+
+    let state = AppState::with_concurrency(timeout_ms, max_concurrent);
     let app = router(state, max_body_bytes);
     let listener = match tokio::net::TcpListener::bind(("0.0.0.0", port)).await {
         Ok(l) => l,
@@ -44,7 +50,8 @@ async fn main() {
 
     eprintln!(
         "elang-server listening on 0.0.0.0:{port} \
-         (max body {max_body_bytes} bytes, timeout {timeout_ms} ms)"
+         (max body {max_body_bytes} bytes, timeout {timeout_ms} ms, \
+         max concurrent {max_concurrent})"
     );
 
     if let Err(e) = axum::serve(listener, app).await {

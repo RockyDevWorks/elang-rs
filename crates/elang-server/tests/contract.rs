@@ -28,7 +28,9 @@ use axum::{
     body::{to_bytes, Body},
     http::{Request, StatusCode},
 };
-use elang_server::{router, state::AppState, DEFAULT_MAX_BODY_BYTES};
+use elang_server::{
+    router, state::AppState, DEFAULT_MAX_BODY_BYTES, DEFAULT_MAX_CONCURRENT_REQUESTS,
+};
 use tower::ServiceExt;
 
 /// Repo-root path resolved from this crate's manifest.
@@ -46,12 +48,18 @@ fn fixture_archive() -> Vec<u8> {
 
 /// Build a router with a generous body cap and 30 s timeout.
 fn build_app() -> axum::Router {
-    router(AppState::new(30_000), DEFAULT_MAX_BODY_BYTES)
+    router(
+        AppState::with_concurrency(30_000, DEFAULT_MAX_CONCURRENT_REQUESTS),
+        DEFAULT_MAX_BODY_BYTES,
+    )
 }
 
 /// Build a router with a deliberately tiny body cap for size-limit tests.
 fn build_app_tiny_limit(max_bytes: usize) -> axum::Router {
-    router(AppState::new(30_000), max_bytes)
+    router(
+        AppState::with_concurrency(30_000, DEFAULT_MAX_CONCURRENT_REQUESTS),
+        max_bytes,
+    )
 }
 
 /// Send a `POST` against the supplied router with raw octet-stream bytes.

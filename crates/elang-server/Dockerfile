@@ -2,6 +2,15 @@
 #
 # Multi-stage Dockerfile for the elang-server HTTP service.
 #
+# ⚠ BUILD CONTEXT — this Dockerfile expects the workspace root as its
+# build context. The `COPY Cargo.toml Cargo.lock ./` and `COPY crates
+# crates` steps rely on those files being at the context root; pointing
+# the build at `crates/elang-server/` will fail at the first COPY. The
+# workspace-root `fly.toml` configures Fly.io accordingly
+# (`dockerfile = "crates/elang-server/Dockerfile"` with context = repo
+# root); for local dev use `docker build -f crates/elang-server/Dockerfile
+# -t elang-server:local .` from the workspace root.
+#
 # Build stage pulls from the workspace root so the same pinned dependency
 # versions the CI matrix uses are the ones baked into the image — no
 # `Cargo.lock` drift between local builds and CI. Runtime stage copies a
@@ -14,7 +23,8 @@ FROM ${RUST_IMAGE} AS build
 WORKDIR /build
 
 # Copy the workspace manifest and lockfile first so dependency resolution
-# caches independently of source changes.
+# caches independently of source changes (a source-only edit does NOT
+# invalidate this layer — only changes to `Cargo.toml` / `Cargo.lock` do).
 COPY Cargo.toml Cargo.lock ./
 COPY crates crates
 
@@ -45,6 +55,7 @@ EXPOSE 8080
 # Defaults match the binary's own env-var contract (see README).
 ENV ELANG_SERVER_PORT=8080 \
     ELANG_SERVER_MAX_BODY_BYTES=10485760 \
-    ELANG_SERVER_TIMEOUT_MS=30000
+    ELANG_SERVER_TIMEOUT_MS=30000 \
+    ELANG_SERVER_MAX_CONCURRENT=4
 
 ENTRYPOINT ["/usr/local/bin/elang-server"]

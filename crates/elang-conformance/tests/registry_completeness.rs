@@ -88,6 +88,7 @@ const KNOWN_NON_CODES: &[&str] = &[
     "ELANG_SERVER_PORT",
     "ELANG_SERVER_MAX_BODY_BYTES",
     "ELANG_SERVER_TIMEOUT_MS",
+    "ELANG_SERVER_MAX_CONCURRENT",
 ];
 
 fn workspace_root() -> PathBuf {

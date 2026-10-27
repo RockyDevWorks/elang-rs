@@ -3,18 +3,24 @@
 //! All three SDK handlers share the same shape:
 //!
 //! 1. Validate `Content-Type: application/octet-stream`.
-//! 2. Move the body bytes into a [`tokio::task::spawn_blocking`] closure
-//!    that calls the matching [`elang_reader::Package`] method.
-//! 3. Wrap the work in [`tokio::time::timeout`] so a hung request cannot
+//! 2. Acquire a [`tokio::sync::Semaphore`] permit from [`AppState`] so
+//!    the blocking work cannot orphan past the configured concurrency
+//!    cap, even after a handler timeout.
+//! 3. Move the body bytes (as `Bytes`, no extra copy) into a
+//!    [`tokio::task::spawn_blocking`] closure that calls the matching
+//!    [`elang_reader::Package`] method.
+//! 4. Wrap the work in [`tokio::time::timeout`] so a hung request cannot
 //!    pin a worker indefinitely.
-//! 4. Map the SDK's [`elang_core::error::Error`] to a Hub-shaped
+//! 5. Map the SDK's [`elang_core::error::Error`] to a Hub-shaped
 //!    [`crate::response::SdkFailure`] via [`crate::error::ServerError`].
 //!
 //! CPU-bound work (binary container parsing, SHA-256 verification, ELD
 //! semantic validation) must not run on a tokio worker thread — that would
 //! stall every concurrent request on the same worker. The `spawn_blocking`
-//! hop moves it to tokio's blocking thread pool, whose size grows with
-//! load and is bounded only by the available CPU parallelism.
+//! hop moves it to tokio's blocking thread pool, which by default can grow
+//! up to 512 threads; the `Semaphore` permit acquired in step 2 caps the
+//! number of concurrent jobs to the configured limit so the pool cannot be
+//! exhausted by a client that repeatedly triggers timeouts.
 
 use std::time::Duration;
 
@@ -29,7 +35,7 @@ use axum::{
 use elang_reader::{Inspected, Package, Validated, Verified};
 
 use crate::{
-    error::ServerError,
+    error::{internal, ServerError},
     response::{SdkInspectSuccess, SdkValidateSuccess, SdkVerifySuccess},
     state::AppState,
 };
@@ -46,18 +52,44 @@ pub async fn healthz() -> Response {
 }
 
 /// Run the supplied blocking work on tokio's blocking pool, with a
-/// per-request wall-clock timeout from [`AppState::timeout_ms`].
+/// per-request wall-clock timeout from [`AppState::timeout_ms`] and a
+/// bounded-concurrency permit from [`AppState::permits`].
+///
+/// The permit is acquired *inside* the timeout budget, so a saturated
+/// server queues rather than immediately rejecting. The permit is then
+/// moved into the blocking closure, which means it is released only when
+/// the SDK work genuinely finishes — not when the timeout fires. A request
+/// that times out therefore leaves its orphaned job counted against the
+/// concurrency cap, which is exactly what prevents an attacker from
+/// pinning every blocking-pool thread by repeatedly triggering timeouts.
 async fn run_with_timeout<F, T>(state: &AppState, work: F) -> Result<T, ServerError>
 where
     F: FnOnce() -> Result<T, ServerError> + Send + 'static,
     T: Send + 'static,
 {
-    let join = tokio::task::spawn_blocking(work);
     let budget = Duration::from_millis(state.timeout_ms());
-    tokio::time::timeout(budget, join)
-        .await
-        .map_err(|_| ServerError::Timeout)?
-        .map_err(|je| ServerError::Internal(format!("worker join failed: {je}")))?
+    let permits = state.permits();
+
+    let outcome = tokio::time::timeout(budget, async move {
+        let permit = permits
+            .acquire_owned()
+            .await
+            .map_err(|_| internal("concurrency semaphore closed unexpectedly"))?;
+        let joined = tokio::task::spawn_blocking(move || {
+            // Hold the permit for the entire blocking job.
+            let _permit = permit;
+            work()
+        })
+        .await;
+        joined.map_err(|je| internal(&format!("worker join failed: {je}")))
+    })
+    .await;
+
+    match outcome {
+        Err(_elapsed) => Err(ServerError::Timeout),
+        Ok(Err(e)) => Err(e),
+        Ok(Ok(r)) => r,
+    }
 }
 
 /// Validate `Content-Type: application/octet-stream`. Other content types
@@ -87,9 +119,8 @@ pub async fn inspect(
     body: Bytes,
 ) -> Result<Json<SdkInspectSuccess>, ServerError> {
     validate_content_type(&headers)?;
-    let bytes = body.to_vec();
     let inspected: Inspected = run_with_timeout(&state, move || {
-        let pkg = Package::open(&bytes).map_err(ServerError::from)?;
+        let pkg = Package::open(&body).map_err(ServerError::from)?;
         Ok::<_, ServerError>(pkg.inspect())
     })
     .await?;
@@ -112,9 +143,8 @@ pub async fn verify(
     body: Bytes,
 ) -> Result<Json<SdkVerifySuccess>, ServerError> {
     validate_content_type(&headers)?;
-    let bytes = body.to_vec();
     let verified: Verified = run_with_timeout(&state, move || {
-        Package::open(&bytes)
+        Package::open(&body)
             .map_err(ServerError::from)?
             .verify()
             .map_err(ServerError::from)
@@ -140,9 +170,8 @@ pub async fn validate(
     body: Bytes,
 ) -> Result<Json<SdkValidateSuccess>, ServerError> {
     validate_content_type(&headers)?;
-    let bytes = body.to_vec();
     let validated: Validated = run_with_timeout(&state, move || {
-        Package::open(&bytes)
+        Package::open(&body)
             .map_err(ServerError::from)?
             .validate()
             .map_err(ServerError::from)

@@ -90,10 +90,13 @@ kdl = "=6.7.1"
 # `SdkClient` (REPO: `RockyDevWorks/elang-hub` `src/lib/sdk/client.ts`)
 # can call the SDK over `POST /{inspect,verify,validate}`. Pinning
 # exact versions keeps the supply-chain diff reviewable; `tokio`'s
-# feature set is intentionally minimal (`net` + `macros` + `rt-multi-thread`)
-# because the binary only needs to bind a TCP listener and serve axum.
+# feature set is intentionally minimal (`net` + `macros` + `rt-multi-thread`
+# + `time` + `sync`). `time` is needed for `tokio::time::timeout` in the
+# SDK handlers; `sync` provides `tokio::sync::Semaphore` for the
+# bounded-concurrency guard against unbounded orphaned blocking work
+# after a handler timeout.
 axum = "=0.8.9"
-tokio = { version = "=1.54.1", features = ["macros", "net", "rt-multi-thread"] }
+tokio = { version = "=1.54.1", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
 tower-http = { version = "=0.7.1", features = ["limit"] }
 
 # Workspace-wide lint policy (T0215). Untrusted-input safety is enforced by
