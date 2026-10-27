@@ -1,0 +1,11 @@
+# Pinned zensical install for the docs workflow.
+# Used as `pip install --require-hashes -r .github/requirements-docs.txt`;
+# the --require-hashes flag makes pip verify every wheel's sha256, which
+# is what Scorecard's pipCommand check wants (10/10).
+#
+# Hash is the `manylinux_2_17_x86_64` wheel because the docs workflow
+# is Linux-only; bump the version and regenerate the hash by fetching
+# https://pypi.org/pypi/zensical/<version>/json and reading
+# .urls[] .digests.sha256 for the matching wheel filename.
+zensical==0.0.73 \
+    --hash=sha256:78b45462e8925f8eb1d45aeed09dea1450c57d2533bfc28214af4a4a9e910e9e
