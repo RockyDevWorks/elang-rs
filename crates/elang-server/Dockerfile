@@ -17,12 +17,13 @@
 # single stripped binary; the resulting image is ≈ 30 MB compressed.
 
 # Pinned to the multi-arch manifest digest so the image content is
-# reproducible across rebuilds. Dependabot (docker ecosystem in
-# `.github/dependabot.yml`) will propose a refresh PR whenever the
-# digest changes upstream. The defaults remain overridable via
+# reproducible across rebuilds. Renovate's custom regex manager in
+# `renovate.json` discovers both ARG values and proposes tag and digest
+# updates. The defaults remain overridable via
 # `docker build --build-arg RUST_IMAGE=...` for local experiments.
 ARG RUST_IMAGE=rust:1.99-bookworm@sha256:48b7f435b8fc6378ce43b44f15e3a47fd8919b2825f835c39bd4bd3da50af5b8
-ARG DEBIAN_IMAGE=debian:bookworm-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8
+# Use the numeric Debian alias so Renovate can order tag upgrades.
+ARG DEBIAN_IMAGE=debian:12-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8
 
 FROM ${RUST_IMAGE} AS build
 WORKDIR /build

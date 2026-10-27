@@ -91,13 +91,13 @@ kdl = "=6.7.1"
 # can call the SDK over `POST /{inspect,verify,validate}`. Pinning
 # exact versions keeps the supply-chain diff reviewable; `tokio`'s
 # feature set is intentionally minimal (`net` + `macros` + `rt-multi-thread`
-# + `time` + `sync`). `time` is needed for `tokio::time::timeout` in the
+# + `time` + `sync` + `signal`). `time` is needed for `tokio::time::timeout` in the
 # SDK handlers; `sync` provides `tokio::sync::Semaphore` for the
 # bounded-concurrency guard against unbounded orphaned blocking work
-# after a handler timeout.
+# after a handler timeout; `signal` enables graceful shutdown on SIGTERM/Ctrl-C.
 axum = "=0.8.9"
-tokio = { version = "=1.54.1", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
-tower-http = { version = "=0.7.1", features = ["limit"] }
+tokio = { version = "=1.54.1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tower-http = { version = "=0.7.1", features = ["limit", "timeout"] }
 
 # Workspace-wide lint policy (T0215). Untrusted-input safety is enforced by
 # denying panic-prone constructs. These are inherited via `[lints] workspace = true`.

@@ -13,7 +13,7 @@ use std::collections::HashMap;
 
 use crate::{
     state::AppState, DEFAULT_MAX_BODY_BYTES, DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_TIMEOUT_MS,
-    MAX_BODY_BYTES_CEILING,
+    MAX_BODY_BYTES_CEILING, MAX_CONCURRENT_REQUESTS_CEILING,
 };
 
 /// Bind address default if `ELANG_SERVER_PORT` is unset or invalid.
@@ -67,12 +67,13 @@ where
     let mut cfg = Config::defaults();
 
     cfg.port = Config::parse_or(&map, "ELANG_SERVER_PORT", DEFAULT_PORT);
-    cfg.timeout_ms = Config::parse_or(&map, "ELANG_SERVER_TIMEOUT_MS", DEFAULT_TIMEOUT_MS);
+    cfg.timeout_ms = Config::parse_or(&map, "ELANG_SERVER_TIMEOUT_MS", DEFAULT_TIMEOUT_MS).max(1);
     cfg.max_concurrent = Config::parse_or(
         &map,
         "ELANG_SERVER_MAX_CONCURRENT",
         DEFAULT_MAX_CONCURRENT_REQUESTS,
-    );
+    )
+    .clamp(1, MAX_CONCURRENT_REQUESTS_CEILING);
 
     // Body size: clamp into [1, MAX_BODY_BYTES_CEILING] even if the
     // env-var parse succeeded. This catches both `0` (which would
@@ -143,6 +144,25 @@ mod tests {
         // below `usize::MAX` so the string parse succeeds.
         let cfg = parse_config([("ELANG_SERVER_MAX_BODY_BYTES", "999999999999")]);
         assert_eq!(cfg.max_body_bytes, MAX_BODY_BYTES_CEILING);
+    }
+
+    #[test]
+    fn timeout_and_concurrency_are_clamped_to_supported_bounds() {
+        let cfg = parse_config([
+            ("ELANG_SERVER_TIMEOUT_MS", "0"),
+            ("ELANG_SERVER_MAX_CONCURRENT", "0"),
+        ]);
+        assert_eq!(cfg.timeout_ms, 1);
+        assert_eq!(cfg.max_concurrent, 1);
+
+        for limit in [MAX_CONCURRENT_REQUESTS_CEILING, usize::MAX] {
+            let cfg = parse_config([("ELANG_SERVER_MAX_CONCURRENT", limit.to_string())]);
+            assert_eq!(cfg.max_concurrent, MAX_CONCURRENT_REQUESTS_CEILING);
+            assert_eq!(
+                build_state(&cfg).permits().available_permits(),
+                MAX_CONCURRENT_REQUESTS_CEILING
+            );
+        }
     }
 
     #[test]

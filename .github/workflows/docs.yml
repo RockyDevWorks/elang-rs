@@ -42,14 +42,8 @@ jobs:
         with:
           python-version: "3.x"
 
-      # Pinned in `.github/requirements-docs.txt` to an exact version with the
-      # wheel's sha256 — `pip install --require-hashes -r ...` verifies the
-      # hash on download, which is what Scorecard's `pipCommand not pinned
-      # by hash` check wants (10/10). Single-line `--hash=...` installs
-      # score 9 at best in Scorecard's regex parser, so the requirements
-      # file is the durable fix. The hash is the `manylinux_2_17_x86_64`
-      # wheel (this workflow is Linux-only); bumping zensical means
-      # regenerating the hash from pypi.org/pypi/zensical/<version>/json.
+      # Pin Zensical and its complete dependency closure, with hashes for
+      # universal and Linux x86_64 wheels; regenerate from PyPI release metadata.
       - name: Install Zensical
         run: pip install --require-hashes -r .github/requirements-docs.txt
 
