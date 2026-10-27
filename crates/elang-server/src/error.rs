@@ -186,3 +186,179 @@ pub fn map_code(category: Category, code: &str) -> &'static str {
         Category::Canonical => "eld_invalid",
     }
 }
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    reason = "unit tests for the error mapper; panics on regression"
+)]
+mod tests {
+    use super::*;
+    use axum::body::to_bytes;
+    use axum::http::StatusCode;
+
+    async fn body_of(r: Response) -> (StatusCode, serde_json::Value) {
+        let (parts, body) = r.into_parts();
+        let bytes = to_bytes(body, usize::MAX).await.expect("read body");
+        let json: serde_json::Value = serde_json::from_slice(&bytes).expect("valid JSON body");
+        (parts.status, json)
+    }
+
+    #[tokio::test]
+    async fn into_response_payload_too_large() {
+        let (status, json) = body_of(ServerError::PayloadTooLarge.into_response()).await;
+        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(json["ok"], false);
+        assert_eq!(json["code"], "request_too_large");
+        assert!(json["message"].is_string());
+    }
+
+    #[tokio::test]
+    async fn into_response_unsupported_media_type() {
+        let (status, json) = body_of(ServerError::UnsupportedMediaType.into_response()).await;
+        assert_eq!(status, StatusCode::UNSUPPORTED_MEDIA_TYPE);
+        assert_eq!(json["ok"], false);
+        assert_eq!(json["code"], "unknown");
+    }
+
+    #[tokio::test]
+    async fn into_response_bad_request() {
+        let (status, json) =
+            body_of(ServerError::BadRequest("missing body".into()).into_response()).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(json["ok"], false);
+        assert_eq!(json["code"], "unknown");
+        assert_eq!(json["message"], "missing body");
+    }
+
+    #[tokio::test]
+    async fn into_response_timeout() {
+        let (status, json) = body_of(ServerError::Timeout.into_response()).await;
+        assert_eq!(status, StatusCode::GATEWAY_TIMEOUT);
+        assert_eq!(json["ok"], false);
+        assert_eq!(json["code"], "timeout");
+    }
+
+    #[tokio::test]
+    async fn into_response_internal_uses_generic_message() {
+        let (status, json) = body_of(ServerError::Internal.into_response()).await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(json["ok"], false);
+        assert_eq!(json["code"], "service_unavailable");
+        // The internal variant deliberately returns the same generic
+        // message regardless of operator context — see the type docs.
+        assert_eq!(json["message"], "Service is temporarily unavailable.");
+    }
+
+    #[test]
+    fn internal_helper_logs_and_returns_unit_variant() {
+        // Smoke: the helper must not panic on any string.
+        let e = internal("some operator-only context");
+        // We don't assert on stderr (cargo test captures it); we just
+        // assert the variant returned is the unit Internal.
+        assert!(matches!(e, ServerError::Internal));
+    }
+
+    #[tokio::test]
+    async fn sdk_failure_passthrough() {
+        let failure = SdkFailure {
+            ok: false,
+            stage: "verify",
+            code: "corrupted_resource",
+            message: "SHA-256 mismatch".into(),
+            path: Some("Linguistics/phonemes.eld".into()),
+            diagnostics: Vec::new(),
+        };
+        let (status, json) = body_of(ServerError::Sdk(failure).into_response()).await;
+        // Deliberately 200 OK — the Hub's parseSdkResult is the only
+        // path that surfaces the SdkErrorCode.
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["code"], "corrupted_resource");
+        assert_eq!(json["path"], "Linguistics/phonemes.eld");
+    }
+
+    #[test]
+    fn map_code_container_branch() {
+        assert_eq!(
+            map_code(Category::Container, "anything"),
+            "malformed_container"
+        );
+        assert_eq!(map_code(Category::Index, "anything"), "malformed_container");
+        assert_eq!(map_code(Category::Frame, "anything"), "malformed_container");
+        assert_eq!(
+            map_code(Category::ResourcePath, "anything"),
+            "malformed_container"
+        );
+    }
+
+    #[test]
+    fn map_code_integrity_hash_mismatch_means_corrupted() {
+        assert_eq!(
+            map_code(Category::Integrity, "INTEGRITY_HASH_MISMATCH"),
+            "corrupted_resource"
+        );
+    }
+
+    #[test]
+    fn map_code_integrity_other_means_manifest_problem() {
+        // Non-hash-mismatch integrity codes should all fall through to
+        // `integrity_check_failed`.
+        assert_eq!(
+            map_code(Category::Integrity, "INTEGRITY_STRUCTURE_INVALID"),
+            "integrity_check_failed"
+        );
+        assert_eq!(
+            map_code(Category::Integrity, "INTEGRITY_MISSING_ENTRY"),
+            "integrity_check_failed"
+        );
+        assert_eq!(
+            map_code(Category::Integrity, "INTEGRITY_BAD_ALGORITHM"),
+            "integrity_check_failed"
+        );
+    }
+
+    #[test]
+    fn map_code_epf_schema_is_descriptor_invalid() {
+        assert_eq!(
+            map_code(Category::EpfSchema, "EPF_BAD_URN"),
+            "descriptor_invalid"
+        );
+    }
+
+    #[test]
+    fn map_code_eld_family_is_eld_invalid() {
+        // Use real registered codes so the conformance registry test
+        // (which scans the source tree) does not flag these literals.
+        assert_eq!(
+            map_code(Category::EldSchema, "ELD_EMPTY"),
+            "eld_invalid"
+        );
+        assert_eq!(
+            map_code(Category::Unicode, "UNICODE_NONCHARACTER"),
+            "eld_invalid"
+        );
+        assert_eq!(
+            map_code(Category::Ipa, "IPA_EXCLUDED_NOTATION"),
+            "eld_invalid"
+        );
+        assert_eq!(
+            map_code(Category::Roman, "ROMAN_BAD_FORMAT"),
+            "eld_invalid"
+        );
+        assert_eq!(map_code(Category::When, "WHEN_EMPTY"), "eld_invalid");
+    }
+
+    #[test]
+    fn map_code_limit_is_malformed_container() {
+        assert_eq!(map_code(Category::Limit, "X"), "malformed_container");
+    }
+
+    #[test]
+    fn map_code_canonical_is_eld_invalid() {
+        assert_eq!(map_code(Category::Canonical, "X"), "eld_invalid");
+    }
+}
