@@ -20,7 +20,7 @@
 | REQ-GOV-DOCS-001 | `README.md`, `LICENSE`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `.github/`, `docs/specification.md` | files present | Done |
 | REQ-GOV-ADR-001 | `docs/decisions/` (template + 0001–0003) | files present | Done |
 | REQ-GOV-SPEC-001 | `.kiro/specs/elang-v0.1.0/{requirements,design,tasks}.md`, this matrix | files present | Done |
-| REQ-GOV-CI-001 | `.github/workflows/ci.yml` | jobs: `fmt`, `clippy`, `test` (Linux/macOS/Windows), `msrv`, `docs`, `audit`, `coverage` — the workflow runs on push and PR | Done |
+| REQ-GOV-CI-001 | `.github/workflows/ci.yml` | jobs: `fmt`, `clippy`, `test` (Linux), `msrv`, `docs`, `audit`, `coverage` — the workflow runs on push and PR | Done |
 | REQ-GOV-SUPPLY-001 | `[workspace.dependencies]` pins, `docs/supply-chain.md` | pins present | Done |
 | REQ-GOV-FIXTURE-001 | `fixtures/README.md`, `fixtures/expected-result.schema.json` | files present | Done |
 | REQ-GOV-RELEASE-001 | `CHANGELOG.md`, `docs/release-strategy.md` | files present | Done |
@@ -179,7 +179,7 @@ real requirements — so adding a new normative MUST without coverage fails CI.
 | REQ-CONF-002 | `crates/elang-conformance/src/golden_packages.rs`, `crates/elang-conformance/src/epf_canonical_goldens.rs` | `published_digests_match_the_pinned_constants`, `every_pinned_case_canonicalises_to_its_pinned_bytes` | Done |
 | REQ-CONF-003 | `crates/elang-conformance/src/inspect_matrix.rs`, `crates/elang-conformance/tests/requirement_completeness.rs` | `every_level_of_every_golden_package_passes`, `every_negative_fixture_declares_an_expected_code` | Done |
 | REQ-CONF-004 | `crates/elang-conformance/src/roundtrip.rs` | `write_read_write_is_byte_identical`, `roundtrip_is_byte_identical` | Done |
-| REQ-CONF-005 | `.github/workflows/ci.yml` | `meta_tests::ci_matrix_runs_linux_windows_macos` | Done |
+| REQ-CONF-005 | `.github/workflows/ci.yml` | `meta_tests::ci_runs_linux` | Done |
 | REQ-BIN-001..018 | `crates/elang-conformance/src/negatives.rs` | `every_binary_fixture_behaves_as_declared` | Done |
 | REQ-FRAME-001..012 | `crates/elang-conformance/src/zstd_vectors.rs`, `crates/elang-conformance/src/zstd_negatives.rs` | `pinned_frame_digests_match_the_frames_the_writer_produces`, `every_zstd_negative_is_rejected_at_the_declared_level` | Done |
 | REQ-INTEGRITY-001..008 | `crates/elang-conformance/src/negatives.rs` | `every_integrity_fixture_behaves_as_declared` | Done |

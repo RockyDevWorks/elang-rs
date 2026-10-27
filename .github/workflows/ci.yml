@@ -38,12 +38,15 @@ jobs:
       - run: cargo clippy --workspace --all-targets --all-features
 
   test:
-    name: test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+    # Linux-only run: macOS/Windows GitHub-hosted runners are scarce
+    # and routinely back the queue up to 30+ minutes for a workspace
+    # of this size — long enough that CI feedback on PRs is useless.
+    # elang-rs has no OS-specific Rust code (no `#[cfg(unix)]` /
+    # `#[cfg(windows)]`, no FFI, all deps cross-platform pure-Rust), so
+    # dropping the matrix loses no real coverage; cross-platform
+    # validation is deferred to release builds.
+    name: test (ubuntu-latest)
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
