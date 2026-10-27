@@ -2,15 +2,14 @@
 //!
 //! All three SDK handlers share the same shape:
 //!
-//! 1. Validate `Content-Type: application/octet-stream`.
-//! 2. Acquire a [`tokio::sync::Semaphore`] permit from [`AppState`] so
-//!    the blocking work cannot orphan past the configured concurrency
-//!    cap, even after a handler timeout.
-//! 3. Move the body bytes (as `Bytes`, no extra copy) into a
+//! 1. Acquire a [`tokio::sync::Semaphore`] permit from [`AppState`] before
+//!    buffering the body. Return `503` immediately if full.
+//! 2. Extract `Bytes` and validate `Content-Type: application/octet-stream`.
+//! 3. Move the body bytes (as `Bytes`, no extra copy) and permit into a
 //!    [`tokio::task::spawn_blocking`] closure that calls the matching
 //!    [`elang_reader::Package`] method.
-//! 4. Wrap the work in [`tokio::time::timeout`] so a hung request cannot
-//!    pin a worker indefinitely.
+//! 4. Use [`tokio::time::timeout`] to limit the response wait. Blocking
+//!    work can continue after a timeout, retaining its permit until done.
 //! 5. Map the SDK's [`elang_core::error::Error`] to a Hub-shaped
 //!    [`crate::response::SdkFailure`] via [`crate::error::ServerError`].
 //!
@@ -18,7 +17,7 @@
 //! semantic validation) must not run on a tokio worker thread — that would
 //! stall every concurrent request on the same worker. The `spawn_blocking`
 //! hop moves it to tokio's blocking thread pool, which by default can grow
-//! up to 512 threads; the `Semaphore` permit acquired in step 2 caps the
+//! up to 512 threads; the `Semaphore` permit acquired in step 1 caps the
 //! number of concurrent jobs to the configured limit so the pool cannot be
 //! exhausted by a client that repeatedly triggers timeouts.
 
@@ -26,13 +25,14 @@ use std::time::Duration;
 
 use axum::{
     body::Bytes,
-    extract::State,
-    http::{HeaderMap, HeaderValue, StatusCode},
+    extract::{FromRequestParts, State},
+    http::{request::Parts, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
 
 use elang_reader::{Inspected, Package, Validated, Verified};
+use tokio::sync::OwnedSemaphorePermit;
 
 use crate::{
     error::{internal, ServerError},
@@ -44,6 +44,34 @@ use crate::{
 /// Content-Type expected on every SDK endpoint.
 const REQUIRED_CONTENT_TYPE: &str = "application/octet-stream";
 
+/// Admission permit extracted before Axum buffers the SDK request body.
+///
+/// The permit is released if a later extractor rejects the request, or when
+/// the blocking SDK job completes, including after a response timeout.
+#[derive(Debug)]
+pub struct SdkPermit(OwnedSemaphorePermit);
+
+impl SdkPermit {
+    fn acquire(state: &AppState) -> Result<Self, ServerError> {
+        state
+            .permits()
+            .try_acquire_owned()
+            .map(Self)
+            .map_err(|_| internal("SDK concurrency limit reached or semaphore closed"))
+    }
+}
+
+impl FromRequestParts<AppState> for SdkPermit {
+    type Rejection = ServerError;
+
+    async fn from_request_parts(
+        _parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        Self::acquire(state)
+    }
+}
+
 /// Liveness probe. Not part of the SDK contract.
 ///
 /// Returns `200 OK` with a static body so a Hub version mismatch can never
@@ -54,31 +82,29 @@ pub async fn healthz() -> Response {
 
 /// Run the supplied blocking work on tokio's blocking pool, with a
 /// per-request wall-clock timeout from [`AppState::timeout_ms`] and a
-/// bounded-concurrency permit from [`AppState::permits`].
+/// previously acquired [`SdkPermit`].
 ///
-/// The permit is acquired *inside* the timeout budget, so a saturated
-/// server queues rather than immediately rejecting. The permit is then
-/// moved into the blocking closure, which means it is released only when
-/// the SDK work genuinely finishes — not when the timeout fires. A request
+/// Admission has already rejected saturated requests before body buffering.
+/// Move the permit into the blocking closure so it is released only when
+/// the SDK work finishes, including after a timeout. A request
 /// that times out therefore leaves its orphaned job counted against the
 /// concurrency cap, which is exactly what prevents an attacker from
 /// pinning every blocking-pool thread by repeatedly triggering timeouts.
-async fn run_with_timeout<F, T>(state: &AppState, work: F) -> Result<T, ServerError>
+async fn run_with_timeout<F, T>(
+    state: &AppState,
+    permit: SdkPermit,
+    work: F,
+) -> Result<T, ServerError>
 where
     F: FnOnce() -> Result<T, ServerError> + Send + 'static,
     T: Send + 'static,
 {
     let budget = Duration::from_millis(state.timeout_ms());
-    let permits = state.permits();
 
     let outcome = tokio::time::timeout(budget, async move {
-        let permit = permits
-            .acquire_owned()
-            .await
-            .map_err(|_| internal("concurrency semaphore closed unexpectedly"))?;
         let joined = tokio::task::spawn_blocking(move || {
             // Hold the permit for the entire blocking job.
-            let _permit = permit;
+            let _permit = permit.0;
             work()
         })
         .await;
@@ -117,10 +143,11 @@ fn is_octet_stream(value: &HeaderValue) -> bool {
 pub async fn inspect(
     State(state): State<AppState>,
     headers: HeaderMap,
+    permit: SdkPermit,
     body: Bytes,
 ) -> Result<Json<SdkInspectSuccess>, ServerError> {
     validate_content_type(&headers)?;
-    let inspected: Inspected = run_with_timeout(&state, move || {
+    let inspected: Inspected = run_with_timeout(&state, permit, move || {
         let pkg = Package::open(&body).map_err(ServerError::from)?;
         Ok::<_, ServerError>(pkg.inspect())
     })
@@ -141,10 +168,11 @@ pub async fn inspect(
 pub async fn verify(
     State(state): State<AppState>,
     headers: HeaderMap,
+    permit: SdkPermit,
     body: Bytes,
 ) -> Result<Json<SdkVerifySuccess>, ServerError> {
     validate_content_type(&headers)?;
-    let verified: Verified = run_with_timeout(&state, move || {
+    let verified: Verified = run_with_timeout(&state, permit, move || {
         open_for_decode(&body)?.verify().map_err(ServerError::from)
     })
     .await?;
@@ -165,10 +193,11 @@ pub async fn verify(
 pub async fn validate(
     State(state): State<AppState>,
     headers: HeaderMap,
+    permit: SdkPermit,
     body: Bytes,
 ) -> Result<Json<SdkValidateSuccess>, ServerError> {
     validate_content_type(&headers)?;
-    let validated: Validated = run_with_timeout(&state, move || {
+    let validated: Validated = run_with_timeout(&state, permit, move || {
         open_for_decode(&body)?
             .validate()
             .map_err(ServerError::from)
@@ -227,4 +256,76 @@ fn bytes_to_hex(bytes: &[u8]) -> String {
         out.push(low as char);
     }
     out
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, reason = "tests fail on unexpected results")]
+mod tests {
+    use std::{
+        future::Future,
+        pin::pin,
+        sync::mpsc,
+        task::{Context, Poll, Waker},
+    };
+
+    use super::*;
+
+    async fn run_admitted_work<F, T>(state: &AppState, work: F) -> Result<T, ServerError>
+    where
+        F: FnOnce() -> Result<T, ServerError> + Send + 'static,
+        T: Send + 'static,
+    {
+        let permit = SdkPermit::acquire(state)?;
+        run_with_timeout(state, permit, work).await
+    }
+
+    #[test]
+    fn saturated_work_is_rejected_on_first_poll() {
+        let state = AppState::with_concurrency(30_000, 1);
+        let _permit = state.permits().try_acquire_owned().expect("first permit");
+        let mut work = pin!(run_admitted_work(&state, || Ok(())));
+        let mut context = Context::from_waker(Waker::noop());
+
+        assert!(matches!(
+            work.as_mut().poll(&mut context),
+            Poll::Ready(Err(ServerError::Internal))
+        ));
+    }
+
+    #[tokio::test]
+    async fn timed_out_work_holds_permit_until_completion() {
+        let state = AppState::with_concurrency(20, 1);
+        let worker_state = state.clone();
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let worker = tokio::spawn(async move {
+            run_admitted_work(&worker_state, move || {
+                let _ = started_tx.send(());
+                release_rx
+                    .recv_timeout(Duration::from_secs(5))
+                    .expect("release blocking work");
+                Ok(())
+            })
+            .await
+        });
+
+        started_rx.await.expect("blocking work started");
+        assert!(matches!(
+            worker.await.expect("handler joined"),
+            Err(ServerError::Timeout)
+        ));
+        assert_eq!(state.permits().available_permits(), 0);
+        assert!(matches!(
+            run_admitted_work(&state, || Ok(())).await,
+            Err(ServerError::Internal)
+        ));
+
+        release_tx.send(()).expect("unblock work");
+        let permit = tokio::time::timeout(Duration::from_secs(5), state.permits().acquire_owned())
+            .await
+            .expect("work released permit")
+            .expect("semaphore open");
+        drop(permit);
+        assert!(run_admitted_work(&state, || Ok(())).await.is_ok());
+    }
 }

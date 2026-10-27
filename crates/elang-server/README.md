@@ -101,7 +101,7 @@ Transport-level failures still use their proper status:
 |--------------------------|--------|-------------------------|
 | Body or decoded data over the service cap | `413`  | `request_too_large`     |
 | Handler timeout          | `504`  | `timeout`               |
-| Internal error           | `503`  | `service_unavailable`   |
+| Internal error or concurrency limit reached | `503` | `service_unavailable` |
 | Wrong `Content-Type`     | `415`  | `unknown`               |
 | SDK content failure      | `200`  | the reported `SdkErrorCode` |
 
@@ -121,6 +121,11 @@ continues to list larger archives without decoding. These deployment limits
 are stricter than the reader library's 8 GiB aggregate / 128 MiB window
 ceilings. Raising the body or concurrency settings requires re-evaluating
 VM memory; a compressed-body cap alone does not bound decoded memory.
+
+When all concurrency permits are held, SDK requests return `503` immediately,
+before buffering the body. Permits cover body buffering and SDK processing;
+failed body extraction releases capacity. Timed-out blocking jobs retain
+their permits until the work finishes.
 
 ## Running locally
 
@@ -159,6 +164,9 @@ stripped binary (~2 MB) and runs as a non-root user.
 fly launch --path . --copy-config --no-deploy --config fly.toml --dockerfile crates/elang-server/Dockerfile
 fly deploy . --config fly.toml --dockerfile crates/elang-server/Dockerfile
 ```
+
+The deploy argument `.` explicitly sets the workspace root as the build
+context. The config and Dockerfile paths are relative to that root.
 
 `fly.toml` pins the region (`iad`), the machine size
 (`shared-cpu-1x` / 512 MB), and the health check (`GET /healthz`,
