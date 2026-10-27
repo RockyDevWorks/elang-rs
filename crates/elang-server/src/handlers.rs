@@ -442,7 +442,8 @@ mod tests {
         // must translate that into the `Internal` arm of the SDK
         // error contract — never panic out of the request path.
         let state = AppState::with_concurrency(30_000, 1);
-        let outcome = run_with_timeout(&state, || -> Result<(), ServerError> {
+        let permit = SdkPermit::acquire(&state).expect("permit acquired");
+        let outcome = run_with_timeout(&state, permit, || -> Result<(), ServerError> {
             panic!("synthetic SDK panic")
         })
         .await;

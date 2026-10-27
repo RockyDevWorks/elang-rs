@@ -21,8 +21,11 @@ comment:
   require_changes: true
 
 ignore:
-  # Code-generation and vector-builder binaries are exercised by their own
-  # determinism tests; they are tooling, not shipped library surface.
+  # Binary entry points under `src/bin/` are process-state adapters with
+  # no testable logic: codegen / vector-builder helpers run their own
+  # determinism tests; `elang-server`'s `main` is just an env-var → exit
+  # code adapter that delegates to the library crate, where every
+  # runtime behaviour lives and is covered.
   - "**/src/bin/**"
   - "crates/elang-conformance/src/binary_vectors.rs"
   # Test-support module: fixtures are read from disk, never executed as logic

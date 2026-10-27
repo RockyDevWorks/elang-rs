@@ -34,9 +34,13 @@ tower-http.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 
+# The binary lives under `src/bin/` so the workspace-wide
+# `**/src/bin/**` codecov ignore applies: `main` is a process-state
+# adapter with no testable logic (all runtime behaviour lives in the
+# library crate and is covered there).
 [[bin]]
 name = "elang-server"
-path = "src/main.rs"
+path = "src/bin/elang-server.rs"
 
 [lib]
 path = "src/lib.rs"
