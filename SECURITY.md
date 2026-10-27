@@ -69,10 +69,10 @@ Reproducing archives should be shared as attachments, not pasted inline.
 **Preferred channel: GitHub private vulnerability reporting**
 <https://github.com/RockyDevWorks/elang-rs/security/advisories/new>
 
-The advisory form encrypts the report at rest and limits visibility to the
-maintainers until disclosure. Maintainers can request a CVE from GitHub for
-eligible advisories. Fall back to a public issue tagged `security` only for
-non-sensitive design questions. We aim to acknowledge reports within 3 business days and
+The advisory form limits visibility to the maintainers until disclosure.
+Maintainers can request a CVE from GitHub for eligible advisories. Fall back
+to a public issue tagged `security` only for non-sensitive design questions.
+We aim to acknowledge reports within 3 business days and
 will coordinate disclosure on a 90-day timeline (sooner if a fix
 lands early; later only by mutual agreement when a downstream needs
 more time).

@@ -50,7 +50,7 @@ use axum::{
 };
 use std::time::Duration;
 
-use tower_http::{limit::RequestBodyLimitLayer, timeout::RequestBodyTimeoutLayer};
+use tower_http::{limit::RequestBodyLimitLayer, timeout::RequestBodyDeadlineLayer};
 
 pub use error::ServerError;
 pub use limits::MAX_DECODED_BYTES;
@@ -114,9 +114,13 @@ pub fn router(state: state::AppState, max_body_bytes: usize) -> Router {
         // is the sole gate. See
         // <https://docs.rs/axum/latest/axum/extract/struct.DefaultBodyLimit.html>.
         .layer(DefaultBodyLimit::disable())
-        // Bound idle body reads while an admitted request holds an SDK permit.
-        // The outer size limit still rejects oversized Content-Length immediately.
-        .layer(RequestBodyTimeoutLayer::new(body_timeout))
+        // Bound the total body transfer while an admitted request holds an
+        // SDK permit. `RequestBodyDeadlineLayer` enforces a hard deadline on
+        // the whole transfer, unlike `RequestBodyTimeoutLayer` which resets
+        // on every frame — a slow client that dribbles one byte per interval
+        // would otherwise hold the permit forever. The outer size limit still
+        // rejects oversized Content-Length immediately.
+        .layer(RequestBodyDeadlineLayer::new(body_timeout))
         .layer(RequestBodyLimitLayer::new(max_body_bytes))
         .with_state(state)
 }

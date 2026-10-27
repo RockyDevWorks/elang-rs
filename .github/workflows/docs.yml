@@ -18,6 +18,7 @@ on:
       - "docs/public/**"
       - "zensical.toml"
       - ".github/workflows/docs.yml"
+      - ".github/requirements-docs.txt"
   workflow_dispatch:
 
 # Least-privilege by default; the deploy job requests what Pages needs.
