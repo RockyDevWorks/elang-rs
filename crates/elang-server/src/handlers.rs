@@ -259,7 +259,11 @@ fn bytes_to_hex(bytes: &[u8]) -> String {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, reason = "tests fail on unexpected results")]
+#[allow(
+    clippy::expect_used,
+    clippy::panic,
+    reason = "tests fail on unexpected results"
+)]
 mod tests {
     use std::{
         future::Future,
@@ -429,5 +433,32 @@ mod tests {
             .expect("semaphore open");
         drop(permit);
         assert!(run_admitted_work(&state, || Ok(())).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn panic_in_work_returns_internal_via_join_error() {
+        // A panic inside the blocking closure is caught by
+        // `spawn_blocking` and surfaced as a `JoinError`. `run_with_timeout`
+        // must translate that into the `Internal` arm of the SDK
+        // error contract — never panic out of the request path.
+        let state = AppState::with_concurrency(30_000, 1);
+        let outcome = run_with_timeout(&state, || -> Result<(), ServerError> {
+            panic!("synthetic SDK panic")
+        })
+        .await;
+        assert!(
+            matches!(outcome, Err(ServerError::Internal)),
+            "expected Internal from JoinError, got {outcome:?}"
+        );
+    }
+
+    #[test]
+    fn is_octet_stream_rejects_non_utf8_header_value() {
+        // `HeaderValue::from_bytes` permits opaque bytes (0xFF is
+        // outside the visible ASCII range but still valid per the
+        // spec). The matcher must refuse such values rather than
+        // panic on the `to_str()` failure.
+        let value = axum::http::HeaderValue::from_bytes(&[0xFF]).expect("opaque byte");
+        assert!(!is_octet_stream(&value));
     }
 }

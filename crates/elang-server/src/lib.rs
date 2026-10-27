@@ -103,16 +103,32 @@ pub fn router(state: state::AppState, max_body_bytes: usize) -> Router {
         .with_state(state)
 }
 
-/// Bind to `0.0.0.0:config.port` and serve until the runtime shuts down.
+/// Bind to `0.0.0.0:config.port` and serve forever.
+///
+/// Equivalent to [`serve_with_shutdown`] with `shutdown =
+/// std::future::pending()` — the server runs until the runtime is
+/// dropped. Use [`serve_with_shutdown`] from tests (or from `main` if you
+/// ever want SIGTERM-aware behaviour) so the success path is reachable.
+pub async fn serve(config: crate::config::Config) -> Result<(), ServeError> {
+    serve_with_shutdown(config, std::future::pending()).await
+}
+
+/// Bind to `0.0.0.0:config.port` and serve until `shutdown` resolves.
 ///
 /// Returns:
-/// - `Ok(())` on a clean shutdown (e.g. process exit, runtime drop).
+/// - `Ok(())` after a graceful shutdown triggered by the supplied future.
 /// - `Err(ServeError::Bind { .. })` if the socket cannot be bound.
 /// - `Err(ServeError::Axum { .. })` if axum's serve loop fails.
 ///
-/// Extracted from `main` so the bind-failure path is unit-testable without
-/// standing up an HTTP client.
-pub async fn serve(config: crate::config::Config) -> Result<(), ServeError> {
+/// The shutdown future is `Send + 'static` because axum spawns the
+/// listener-accept loop on its own task; it must outlive the bind.
+pub async fn serve_with_shutdown<F>(
+    config: crate::config::Config,
+    shutdown: F,
+) -> Result<(), ServeError>
+where
+    F: std::future::Future<Output = ()> + Send + 'static,
+{
     let state = crate::config::build_state(&config);
     let app = router(state, config.max_body_bytes);
 
@@ -129,7 +145,10 @@ pub async fn serve(config: crate::config::Config) -> Result<(), ServeError> {
         config.port, config.max_body_bytes, config.timeout_ms, config.max_concurrent
     );
 
-    axum::serve(listener, app).await.map_err(ServeError::Axum)?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown)
+        .await
+        .map_err(ServeError::Axum)?;
 
     Ok(())
 }
@@ -165,6 +184,32 @@ mod tests {
     use crate::config::{Config, DEFAULT_PORT};
 
     #[tokio::test]
+    async fn serve_with_shutdown_returns_ok_when_signal_fires() {
+        // Pre-build a shutdown future that resolves on a oneshot. Spawning
+        // `serve_with_shutdown` lets it bind to an ephemeral port; we then
+        // fire the signal and confirm the success path returns `Ok(())`
+        // — the one line `run_with_timeout`'s existing tests cannot hit.
+        let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+        let cfg = Config {
+            port: 0,
+            max_body_bytes: 1024,
+            timeout_ms: 30_000,
+            max_concurrent: 1,
+        };
+        let handle = tokio::spawn(serve_with_shutdown(cfg, async move {
+            let _ = rx.await;
+        }));
+        // Yield so the bind lands before we fire the signal.
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        tx.send(()).expect("shutdown signal sent");
+        tokio::time::timeout(std::time::Duration::from_secs(5), handle)
+            .await
+            .expect("serve task did not hang")
+            .expect("serve task joined")
+            .expect("Ok(()) on graceful shutdown");
+    }
+
+    #[tokio::test]
     async fn serve_returns_bind_error_when_port_already_taken() {
         // Reserve an ephemeral port, then ask `serve` to bind to it —
         // the second bind must fail and the function must return
@@ -192,31 +237,6 @@ mod tests {
             }
             other => panic!("expected ServeError::Bind, got {other:?}"),
         }
-    }
-
-    #[tokio::test]
-    async fn serve_returns_ok_when_listener_is_dropped_immediately() {
-        // Spawn `serve` in the background, give it a moment to bind to
-        // an ephemeral port, then drop the `JoinHandle`. With nothing
-        // talking to the socket, axum's serve future will resolve
-        // cleanly when the listener is closed (the JoinHandle drop is
-        // best-effort; the task may also be aborted by the runtime,
-        // which returns the same Ok variant for our purposes).
-        let cfg = Config {
-            port: 0,
-            max_body_bytes: 1024,
-            timeout_ms: 30_000,
-            max_concurrent: 1,
-        };
-        let handle = tokio::spawn(serve(cfg));
-        // Yield so the bind can land before we drop.
-        tokio::task::yield_now().await;
-        handle.abort();
-        // The bind-error path is exercised by the sibling test; this
-        // test simply needs to confirm the success path type-checks
-        // and `Result<(), ServeError>` is what the caller receives on
-        // a clean (or aborted) shutdown.
-        let _ = handle.await; // Ok, ErrJoin, or ErrBind — any of them is fine.
     }
 
     #[test]
