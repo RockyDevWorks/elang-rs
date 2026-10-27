@@ -48,5 +48,5 @@ path = "src/lib.rs"
 [dev-dependencies]
 # Integration tests build a real `axum::Router` and drive it with
 # `tower::ServiceExt::oneshot`, which needs the `tower` dev-dep.
-tower = { version = "=0.5.2", features = ["util"] }
+tower = { version = "=0.5.3", features = ["util"] }
 
