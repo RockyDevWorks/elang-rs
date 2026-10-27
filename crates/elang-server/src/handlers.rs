@@ -36,6 +36,7 @@ use elang_reader::{Inspected, Package, Validated, Verified};
 
 use crate::{
     error::{internal, ServerError},
+    limits::open_for_decode,
     response::{SdkInspectSuccess, SdkValidateSuccess, SdkVerifySuccess},
     state::AppState,
 };
@@ -144,10 +145,7 @@ pub async fn verify(
 ) -> Result<Json<SdkVerifySuccess>, ServerError> {
     validate_content_type(&headers)?;
     let verified: Verified = run_with_timeout(&state, move || {
-        Package::open(&body)
-            .map_err(ServerError::from)?
-            .verify()
-            .map_err(ServerError::from)
+        open_for_decode(&body)?.verify().map_err(ServerError::from)
     })
     .await?;
 
@@ -171,8 +169,7 @@ pub async fn validate(
 ) -> Result<Json<SdkValidateSuccess>, ServerError> {
     validate_content_type(&headers)?;
     let validated: Validated = run_with_timeout(&state, move || {
-        Package::open(&body)
-            .map_err(ServerError::from)?
+        open_for_decode(&body)?
             .validate()
             .map_err(ServerError::from)
     })

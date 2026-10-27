@@ -202,3 +202,119 @@ async fn unknown_route_returns_404() {
     let response = app.oneshot(req).await.expect("router responded");
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
+
+/// Build a structurally valid archive around supplied frames. Keeping the
+/// manifest absent proves the service rejects expansion before SDK decoding.
+fn archive_from_frames(frames: &[(&str, Vec<u8>, u64)]) -> Vec<u8> {
+    use elang_container::{
+        Footer, Header, Index, IndexEntry, COMPRESSION_ZSTD, FOOTER_LEN, HEADER_LEN,
+    };
+
+    let mut archive = vec![0; HEADER_LEN];
+    Header::current().encode(&mut archive, 0).unwrap();
+    let mut entries = Vec::new();
+    for (path, frame, declared_size) in frames {
+        entries.push(
+            IndexEntry::new(
+                path,
+                archive.len() as u64,
+                frame.len() as u64,
+                *declared_size,
+                COMPRESSION_ZSTD,
+            )
+            .unwrap(),
+        );
+        archive.extend_from_slice(frame);
+    }
+    let index_offset = archive.len();
+    let (index, hash) = Index::with_entries(entries)
+        .unwrap()
+        .encode_and_hash()
+        .unwrap();
+    archive.extend_from_slice(&index);
+    let footer_offset = archive.len();
+    archive.resize(footer_offset + FOOTER_LEN, 0);
+    Footer::new(index_offset as u64, index.len() as u64, hash)
+        .unwrap()
+        .encode(&mut archive, footer_offset)
+        .unwrap();
+    elang_reader::Package::open(&archive).expect("valid structural framing");
+    archive
+}
+
+fn compressed_zeros(size: usize) -> Vec<u8> {
+    elang_container::frame::encode(&vec![0; size], elang_container::frame::Profile::Fast)
+        .expect("compress synthetic resource")
+}
+
+async fn assert_decode_limit_rejected(bytes: Vec<u8>) {
+    assert!(
+        bytes.len() < DEFAULT_MAX_BODY_BYTES,
+        "compressed body must fit"
+    );
+    for path in ["/verify", "/validate"] {
+        let (status, _, body) = post_octet_stream(build_app(), path, bytes.clone()).await;
+        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE, "{path}");
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["ok"], false);
+        assert_eq!(json["code"], "request_too_large");
+    }
+    // Inspect remains a listing operation and never decompresses these frames.
+    let (status, _, body) = post_octet_stream(build_app(), "/inspect", bytes).await;
+    assert_eq!(status, StatusCode::OK);
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["ok"], true);
+}
+
+#[tokio::test]
+async fn compressed_resource_over_decoded_cap_is_rejected_before_decoding() {
+    let size = 8 * 1024 * 1024 + 1;
+    let archive = archive_from_frames(&[("payload", compressed_zeros(size), size as u64)]);
+    assert_decode_limit_rejected(archive).await;
+}
+
+#[tokio::test]
+async fn aggregate_decoded_cap_applies_across_resources() {
+    let size = 4 * 1024 * 1024 + 1;
+    let frame = compressed_zeros(size);
+    let archive =
+        archive_from_frames(&[("a", frame.clone(), size as u64), ("b", frame, size as u64)]);
+    assert_decode_limit_rejected(archive).await;
+}
+
+#[tokio::test]
+async fn understated_index_cannot_bypass_decoded_cap() {
+    let frame = compressed_zeros(8 * 1024 * 1024 + 1);
+    let archive = archive_from_frames(&[("payload", frame, 1)]);
+    assert_decode_limit_rejected(archive).await;
+}
+
+#[tokio::test]
+async fn decoder_window_is_bounded_independently_of_decoded_size() {
+    // A standard non-single-segment frame with a 16 MiB history window,
+    // one raw byte and checksum. Frame inspection accepts it without decoding.
+    let frame = vec![
+        0x28, 0xb5, 0x2f, 0xfd, 0x84, 0x70, 1, 0, 0, 0, 0x09, 0, 0, 0, 0, 0, 0, 0,
+    ];
+    let header = elang_container::frame::inspect(&frame).unwrap();
+    assert_eq!(header.content_size, 1);
+    assert_eq!(header.window_size, 16 * 1024 * 1024);
+    let archive = archive_from_frames(&[("payload", frame, 1)]);
+    assert_decode_limit_rejected(archive).await;
+}
+
+#[tokio::test]
+async fn exact_decoded_cap_is_admitted_to_the_sdk() {
+    let size = 8 * 1024 * 1024;
+    let archive = archive_from_frames(&[("payload", compressed_zeros(size), size as u64)]);
+    for path in ["/verify", "/validate"] {
+        let (status, _, body) = post_octet_stream(build_app(), path, archive.clone()).await;
+        // The service admits the boundary, then SDK stage 8 rejects the
+        // intentionally absent bootstrap resources using the existing contract.
+        assert_eq!(status, StatusCode::OK);
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["ok"], false);
+        assert_eq!(json["stage"], "verify");
+        assert_ne!(json["code"], "request_too_large");
+    }
+}

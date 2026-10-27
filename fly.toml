@@ -8,8 +8,8 @@
 # workspace manifest in the same directory.
 #
 # Deploy from the workspace root:
-#   fly launch --no-deploy               # creates the app with this config
-#   fly deploy                           # builds + deploys
+#   fly launch --path . --copy-config --no-deploy --config fly.toml --dockerfile crates/elang-server/Dockerfile
+#   fly deploy . --config fly.toml --dockerfile crates/elang-server/Dockerfile
 #
 # The `app` name below is a placeholder — `fly launch` will prompt for a
 # unique name. After the first deploy, set the Hub's `SDK_SERVICE_URL` to
@@ -31,8 +31,7 @@ primary_region = "iad"
   internal_port = 8080
   force_https = true
   # Auto-stop would add a cold start to every interactive validation
-  # request. The free allowance covers an always-on shared-cpu-1x for
-  # this workload, so keep the machine running.
+  # request, so keep the machine running.
   auto_stop_machines = false
   auto_start_machines = true
   min_machines_running = 1
@@ -49,4 +48,6 @@ primary_region = "iad"
 
 [[vm]]
   size = "shared-cpu-1x"
-  memory = "256mb"
+  # Four jobs each admit at most 8 MiB decoded bytes and an 8 MiB Zstd
+  # window. Leave room for compressed bodies, metadata, parsers and runtime.
+  memory = "512mb"

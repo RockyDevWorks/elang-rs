@@ -24,7 +24,7 @@ use crate::response::{stage_to_label, SdkDiagnostic, SdkFailure};
 /// [`IntoResponse for ServerError`](impl-IntoResponse).
 #[derive(Debug)]
 pub enum ServerError {
-    /// `413` — request body exceeded the configured cap.
+    /// `413` — request body or decoded resources exceeded a service cap.
     PayloadTooLarge,
     /// `415` — `Content-Type` was not `application/octet-stream`.
     UnsupportedMediaType,
@@ -65,7 +65,7 @@ impl ServerError {
                 ok: false,
                 stage: "inspect",
                 code: "request_too_large",
-                message: "Request body exceeded the configured size cap.".into(),
+                message: "Request exceeded the service body or decoded-resource size cap.".into(),
                 path: None,
                 diagnostics: Vec::new(),
             },

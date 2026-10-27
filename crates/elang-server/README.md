@@ -99,7 +99,7 @@ Transport-level failures still use their proper status:
 
 | Situation                | Status | Hub maps to             |
 |--------------------------|--------|-------------------------|
-| Body over the size cap   | `413`  | `request_too_large`     |
+| Body or decoded data over the service cap | `413`  | `request_too_large`     |
 | Handler timeout          | `504`  | `timeout`               |
 | Internal error           | `503`  | `service_unavailable`   |
 | Wrong `Content-Type`     | `415`  | `unknown`               |
@@ -113,6 +113,14 @@ Transport-level failures still use their proper status:
 | `ELANG_SERVER_MAX_BODY_BYTES`   | `10485760` | `1`–`268435456` (256 MiB cap)  | Request body cap; `413` above it              |
 | `ELANG_SERVER_TIMEOUT_MS`       | `30000`    | any `u64`                      | Per-request handler budget; `504` above it    |
 | `ELANG_SERVER_MAX_CONCURRENT`   | `4`        | `1`+ (saturates to 1)          | Max concurrent in-flight SDK requests         |
+
+The HTTP service also caps the total decoded resource bytes and each Zstd
+window at **8 MiB per SDK job**, before decompression. `/verify` and
+`/validate` return `413 request_too_large` above either cap; `/inspect`
+continues to list larger archives without decoding. These deployment limits
+are stricter than the reader library's 8 GiB aggregate / 128 MiB window
+ceilings. Raising the body or concurrency settings requires re-evaluating
+VM memory; a compressed-body cap alone does not bound decoded memory.
 
 ## Running locally
 
@@ -148,17 +156,19 @@ stripped binary (~2 MB) and runs as a non-root user.
 
 ```bash
 # From the workspace root (fly.toml lives at the root, not in the crate)
-fly launch --no-deploy   # creates the app, prompts for a name
-fly deploy               # builds + deploys
+fly launch --path . --copy-config --no-deploy --config fly.toml --dockerfile crates/elang-server/Dockerfile
+fly deploy . --config fly.toml --dockerfile crates/elang-server/Dockerfile
 ```
 
 `fly.toml` pins the region (`iad`), the machine size
-(`shared-cpu-1x` / 256 MB), and the health check (`GET /healthz`,
+(`shared-cpu-1x` / 512 MB), and the health check (`GET /healthz`,
 every 15 s). `auto_stop_machines = false` — auto-stop would add a cold
-start to every interactive validation request, and the free allowance
-covers an always-on machine at this size. The Dockerfile referenced
-by `fly.toml` (`crates/elang-server/Dockerfile`) expects the workspace
-root as its build context, which is why `fly.toml` itself lives here.
+start to every interactive validation request. The allocation leaves
+headroom for four SDK jobs under the service's decoded-byte/window caps,
+the default 10 MiB bodies, parsing and runtime overhead. The Dockerfile
+referenced by `fly.toml` (`crates/elang-server/Dockerfile`) expects the workspace
+root as its build context. `--path .` and `deploy .` select that root;
+both config and Dockerfile paths are relative to it.
 
 Once deployed, point the Hub at it:
 
