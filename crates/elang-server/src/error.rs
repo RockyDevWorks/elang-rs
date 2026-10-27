@@ -43,9 +43,8 @@ pub enum ServerError {
     /// The variant carries no message: anything held in an `Internal`
     /// value would only be useful for server-side logging, but exposing
     /// it in the response could leak panic payloads, internal paths, or
-    /// other operator-only data. Construct via [`ServerError::internal`],
-    /// which logs the supplied context to stderr and returns the unit
-    /// variant.
+    /// other operator-only data. Construct via [`internal`], which logs
+    /// the supplied context to stderr and returns the unit variant.
     Internal,
 }
 
