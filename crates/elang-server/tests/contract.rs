@@ -193,6 +193,24 @@ async fn body_size_cap_returns_413() {
 }
 
 #[tokio::test]
+async fn body_above_axum_default_limit_reaches_handler() {
+    // Axum's `Bytes` extractor applies a 2 MB default cap that shadows the
+    // configured body cap unless `DefaultBodyLimit::disable()` is layered on
+    // the router. This posts a 3 MB body (above the 2 MB default, below the
+    // 10 MB configured cap) and asserts the request is NOT rejected with
+    // 413 — i.e. it reaches the handler. Without the fix this test fails
+    // with `413 Failed to buffer the request body: length limit exceeded`.
+    let app = build_app();
+    let payload: Vec<u8> = vec![0xAB; 3 * 1024 * 1024];
+    let (status, _headers, _body) = post_octet_stream(app, "/inspect", payload).await;
+    assert_ne!(
+        status,
+        StatusCode::PAYLOAD_TOO_LARGE,
+        "body between Axum's 2 MB default and the configured 10 MB cap must not be 413",
+    );
+}
+
+#[tokio::test]
 async fn saturated_sdk_routes_return_503_and_recover() {
     let state = AppState::with_concurrency(30_000, 1);
     let permit = state

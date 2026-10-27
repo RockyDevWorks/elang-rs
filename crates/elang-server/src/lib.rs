@@ -44,6 +44,7 @@ pub mod response;
 pub mod state;
 
 use axum::{
+    extract::DefaultBodyLimit,
     routing::{get, post},
     Router,
 };
@@ -99,6 +100,11 @@ pub fn router(state: state::AppState, max_body_bytes: usize) -> Router {
         .route("/inspect", post(handlers::inspect))
         .route("/verify", post(handlers::verify))
         .route("/validate", post(handlers::validate))
+        // Axum's `Bytes` extractor applies a 2 MB default cap that shadows
+        // the configured body cap. Disable it so `RequestBodyLimitLayer`
+        // is the sole gate. See
+        // <https://docs.rs/axum/latest/axum/extract/struct.DefaultBodyLimit.html>.
+        .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(max_body_bytes))
         .with_state(state)
 }
