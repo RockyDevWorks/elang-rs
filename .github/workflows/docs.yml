@@ -43,15 +43,14 @@ jobs:
           python-version: "3.x"
 
       # Pinned to an exact version with the wheel's sha256 — closes the
-      # Scorecard `pipCommand not pinned by hash` check. The hash is the
-      # `manylinux_2_17_x86_64` wheel (the only platform this Linux-only
-      # CI runs on); a multi-platform install would need a `requirements.txt`
-      # with one --hash per wheel.
+      # Scorecard `pipCommand not pinned by hash` check (score 10/10).
+      # The hash is the `manylinux_2_17_x86_64` wheel (the only
+      # platform this Linux-only CI runs on); for a multi-platform
+      # install the standard fix is a `requirements.txt` with one
+      # --hash per platform wheel. Keep the install on a single line:
+      # the Scorecard parser is finicky about backslash continuations.
       - name: Install Zensical
-        run: |
-          pip install \
-            zensical==0.0.73 \
-            --hash=sha256:78b45462e8925f8eb1d45aeed09dea1450c57d2533bfc28214af4a4a9e910e9e
+        run: pip install zensical==0.0.73 --hash=sha256:78b45462e8925f8eb1d45aeed09dea1450c57d2533bfc28214af4a4a9e910e9e
 
       - name: Build with strict mode
         run: zensical build --strict --clean
