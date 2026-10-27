@@ -98,7 +98,12 @@ jobs:
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294  # v5
         with:
           fail-on-severity: low
-          comment-summary-in-pr: on-failure
+          # `always` (not `on-failure`) keeps this sticky comment in sync
+          # with the current check state. With `on-failure` the comment is
+          # written only when the job fails and is never refreshed on a
+          # later pass, so a fixed license violation keeps showing up as a
+          # live failure and misleads reviewers.
+          comment-summary-in-pr: always
           # Keep in step with deny.toml's license allowlist. NCSA was
           # added in Phase 15 (Issue #25, T1501+) for `libfuzzer-sys`,
           # the `cargo-fuzz` harness runtime licensed
