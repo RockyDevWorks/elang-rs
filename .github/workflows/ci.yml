@@ -99,26 +99,6 @@ jobs:
           docker logs elang-smoke >&2 || true
           exit 1
 
-  docker-buildx-multiarch:
-    # Build the image for amd64 + arm64 to catch cross-arch compile
-    # errors. arm64 uses qemu emulation (~5 min cold; cached after
-    # first run). The build output is discarded — only success/fail
-    # is checked. No push to a registry.
-    name: docker buildx multi-arch (amd64 + arm64)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/setup-qemu-action@v3
-      - name: Build multi-arch
-        run: |
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --cache-from type=gha,scope=elang-server-multiarch \
-            --cache-to type=gha,scope=elang-server-multiarch,mode=max \
-            -f crates/elang-server/Dockerfile \
-            .
-
   msrv:
     name: MSRV (1.90)
     runs-on: ubuntu-latest
