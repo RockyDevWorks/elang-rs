@@ -99,7 +99,7 @@ Transport-level failures still use their proper status:
 
 | Situation                | Status | Hub maps to             |
 |--------------------------|--------|-------------------------|
-| Body or decoded resources over the size cap | `413` | `request_too_large` |
+| Body or decoded data over the service cap | `413`  | `request_too_large`     |
 | Handler timeout          | `504`  | `timeout`               |
 | Internal error or concurrency limit reached | `503` | `service_unavailable` |
 | Wrong `Content-Type`     | `415`  | `unknown`               |
@@ -114,19 +114,18 @@ Transport-level failures still use their proper status:
 | `ELANG_SERVER_TIMEOUT_MS`       | `30000`    | any `u64`                      | Per-request handler budget; `504` above it    |
 | `ELANG_SERVER_MAX_CONCURRENT`   | `4`        | `1`+ (saturates to 1)          | Max concurrent in-flight SDK requests         |
 
-When all concurrency permits are held, SDK requests return `503` immediately.
-Timed-out blocking jobs retain their permits until the work finishes.
+The HTTP service also caps the total decoded resource bytes and each Zstd
+window at **8 MiB per SDK job**, before decompression. `/verify` and
+`/validate` return `413 request_too_large` above either cap; `/inspect`
+continues to list larger archives without decoding. These deployment limits
+are stricter than the reader library's 8 GiB aggregate / 128 MiB window
+ceilings. Raising the body or concurrency settings requires re-evaluating
+VM memory; a compressed-body cap alone does not bound decoded memory.
 
-`/verify` and `/validate` also enforce a fixed **32 MiB aggregate decoded-byte
-cap** before decompressing any resource. The check sums Zstd frame content
-sizes, independently of the index; the reader's streaming decoder rejects
-output beyond those declarations. `/inspect` does not decode resources.
-The SDK's 8 GiB format ceiling is unchanged. Archives within that ceiling
-can exceed the HTTP service's operational limit and receive `413`.
-
-Provision memory for decoded buffers, the Zstd window (up to 128 MiB), parser
-state, request bodies and archive copies for every concurrent job. Raising
-the body or concurrency settings requires revisiting the VM allocation.
+When all concurrency permits are held, SDK requests return `503` immediately,
+before buffering the body. Permits cover body buffering and SDK processing;
+failed body extraction releases capacity. Timed-out blocking jobs retain
+their permits until the work finishes.
 
 ## Running locally
 
@@ -162,7 +161,7 @@ stripped binary (~2 MB) and runs as a non-root user.
 
 ```bash
 # From the workspace root (fly.toml lives at the root, not in the crate)
-fly launch --no-deploy --config fly.toml --dockerfile crates/elang-server/Dockerfile
+fly launch --path . --copy-config --no-deploy --config fly.toml --dockerfile crates/elang-server/Dockerfile
 fly deploy . --config fly.toml --dockerfile crates/elang-server/Dockerfile
 ```
 
@@ -172,11 +171,12 @@ context. The config and Dockerfile paths are relative to that root.
 `fly.toml` pins the region (`iad`), the machine size
 (`shared-cpu-1x` / 1 GB), one concurrent SDK job, and the health check (`GET /healthz`,
 every 15 s). `auto_stop_machines = false` — auto-stop would add a cold
-start to every interactive validation request. The 1 GB allocation leaves
-headroom above the service's 32 MiB decoded-byte cap for decompression and
-parsing. The Dockerfile referenced
-by `fly.toml` (`crates/elang-server/Dockerfile`) expects the workspace
-root as its build context, which is why `fly.toml` itself lives here.
+start to every interactive validation request. The allocation leaves
+headroom for one SDK job under the service's decoded-byte/window caps,
+the default 10 MiB body, parsing and runtime overhead. The Dockerfile
+referenced by `fly.toml` (`crates/elang-server/Dockerfile`) expects the workspace
+root as its build context. `--path .` and `deploy .` select that root;
+both config and Dockerfile paths are relative to it.
 
 Once deployed, point the Hub at it:
 

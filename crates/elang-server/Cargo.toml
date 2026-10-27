@@ -17,7 +17,7 @@ workspace = true
 # subset of stages 8-12. The server is a thin wrapper — no validation
 # logic lives here.
 elang-reader.workspace = true
-# Inspect frame content sizes before invoking the decoding pipeline.
+# Preflight actual Zstd frame sizes/windows before any SDK decompression.
 elang-container.workspace = true
 # Versions, error categories and stage constants are needed by the
 # response/error mapping (`stage_to_label`, `map_category`).

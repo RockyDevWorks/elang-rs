@@ -229,3 +229,199 @@ async fn unknown_route_returns_404() {
     let response = app.oneshot(req).await.expect("router responded");
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
+
+/// Build a structurally valid archive around supplied frames. Keeping the
+/// manifest absent proves the service rejects expansion before SDK decoding.
+fn archive_from_frames(frames: &[(&str, Vec<u8>, u64)]) -> Vec<u8> {
+    use elang_container::{
+        Footer, Header, Index, IndexEntry, COMPRESSION_ZSTD, FOOTER_LEN, HEADER_LEN,
+    };
+
+    let mut archive = vec![0; HEADER_LEN];
+    Header::current().encode(&mut archive, 0).unwrap();
+    let mut entries = Vec::new();
+    for (path, frame, declared_size) in frames {
+        entries.push(
+            IndexEntry::new(
+                path,
+                archive.len() as u64,
+                frame.len() as u64,
+                *declared_size,
+                COMPRESSION_ZSTD,
+            )
+            .unwrap(),
+        );
+        archive.extend_from_slice(frame);
+    }
+    let index_offset = archive.len();
+    let (index, hash) = Index::with_entries(entries)
+        .unwrap()
+        .encode_and_hash()
+        .unwrap();
+    archive.extend_from_slice(&index);
+    let footer_offset = archive.len();
+    archive.resize(footer_offset + FOOTER_LEN, 0);
+    Footer::new(index_offset as u64, index.len() as u64, hash)
+        .unwrap()
+        .encode(&mut archive, footer_offset)
+        .unwrap();
+    elang_reader::Package::open(&archive).expect("valid structural framing");
+    archive
+}
+
+fn compressed_zeros(size: usize) -> Vec<u8> {
+    elang_container::frame::encode(&vec![0; size], elang_container::frame::Profile::Fast)
+        .expect("compress synthetic resource")
+}
+
+async fn assert_decode_limit_rejected(bytes: Vec<u8>) {
+    assert!(
+        bytes.len() < DEFAULT_MAX_BODY_BYTES,
+        "compressed body must fit"
+    );
+    for path in ["/verify", "/validate"] {
+        let (status, _, body) = post_octet_stream(build_app(), path, bytes.clone()).await;
+        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE, "{path}");
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["ok"], false);
+        assert_eq!(json["code"], "request_too_large");
+    }
+    // Inspect remains a listing operation and never decompresses these frames.
+    let (status, _, body) = post_octet_stream(build_app(), "/inspect", bytes).await;
+    assert_eq!(status, StatusCode::OK);
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["ok"], true);
+}
+
+#[tokio::test]
+async fn compressed_resource_over_decoded_cap_is_rejected_before_decoding() {
+    let size = 8 * 1024 * 1024 + 1;
+    let archive = archive_from_frames(&[("payload", compressed_zeros(size), size as u64)]);
+    assert_decode_limit_rejected(archive).await;
+}
+
+#[tokio::test]
+async fn aggregate_decoded_cap_applies_across_resources() {
+    let size = 4 * 1024 * 1024 + 1;
+    let frame = compressed_zeros(size);
+    let archive =
+        archive_from_frames(&[("a", frame.clone(), size as u64), ("b", frame, size as u64)]);
+    assert_decode_limit_rejected(archive).await;
+}
+
+#[tokio::test]
+async fn understated_index_cannot_bypass_decoded_cap() {
+    let frame = compressed_zeros(8 * 1024 * 1024 + 1);
+    let archive = archive_from_frames(&[("payload", frame, 1)]);
+    assert_decode_limit_rejected(archive).await;
+}
+
+#[tokio::test]
+async fn decoder_window_is_bounded_independently_of_decoded_size() {
+    // A standard non-single-segment frame with a 16 MiB history window,
+    // one raw byte and checksum. Frame inspection accepts it without decoding.
+    let frame = vec![
+        0x28, 0xb5, 0x2f, 0xfd, 0x84, 0x70, 1, 0, 0, 0, 0x09, 0, 0, 0, 0, 0, 0, 0,
+    ];
+    let header = elang_container::frame::inspect(&frame).unwrap();
+    assert_eq!(header.content_size, 1);
+    assert_eq!(header.window_size, 16 * 1024 * 1024);
+    let archive = archive_from_frames(&[("payload", frame, 1)]);
+    assert_decode_limit_rejected(archive).await;
+}
+
+#[tokio::test]
+async fn exact_decoded_cap_is_admitted_to_the_sdk() {
+    let size = 8 * 1024 * 1024;
+    let archive = archive_from_frames(&[("payload", compressed_zeros(size), size as u64)]);
+    for path in ["/verify", "/validate"] {
+        let (status, _, body) = post_octet_stream(build_app(), path, archive.clone()).await;
+        // The service admits the boundary, then SDK stage 8 rejects the
+        // intentionally absent bootstrap resources using the existing contract.
+        assert_eq!(status, StatusCode::OK);
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["ok"], false);
+        assert_eq!(json["stage"], "verify");
+        assert_ne!(json["code"], "request_too_large");
+    }
+}
+
+/// Send only the headers: the advertised byte remains unsent so body
+/// extraction must wait. A saturated route must still return a response.
+fn send_incomplete_request(address: std::net::SocketAddr, path: &str) -> std::net::TcpStream {
+    use std::io::Write;
+
+    let mut stream = std::net::TcpStream::connect(address).expect("connect to test server");
+    stream
+        .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+        .expect("bound response wait");
+    write!(stream,
+        "POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/octet-stream\r\nContent-Length: 1\r\nConnection: close\r\n\r\n"
+    ).expect("send request headers");
+    stream
+}
+
+fn read_status_line(stream: std::net::TcpStream) -> String {
+    use std::io::BufRead;
+
+    let mut line = String::new();
+    std::io::BufReader::new(stream)
+        .read_line(&mut line)
+        .expect("response arrives before the missing request body");
+    line
+}
+
+async fn wait_for_capacity(state: &AppState, expected: usize) {
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while state.permits().available_permits() != expected {
+            tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+        }
+    })
+    .await
+    .expect("capacity changes within the test budget");
+}
+
+#[tokio::test]
+async fn body_buffering_holds_capacity_and_saturated_requests_do_not_wait_for_bodies() {
+    use std::io::Write;
+
+    let state = AppState::with_concurrency(30_000, 1);
+    let app = router(state.clone(), DEFAULT_MAX_BODY_BYTES);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind test listener");
+    let address = listener.local_addr().expect("test listener address");
+    let server = tokio::spawn(async move { axum::serve(listener, app).await });
+
+    for path in ["/inspect", "/verify", "/validate"] {
+        let mut buffering = send_incomplete_request(address, path);
+        // The admitted request owns the only permit before its body arrives.
+        wait_for_capacity(&state, 0).await;
+        let status = tokio::task::spawn_blocking(move || {
+            read_status_line(send_incomplete_request(address, path))
+        })
+        .await
+        .expect("saturated request joined");
+        assert!(status.starts_with("HTTP/1.1 503"), "{path}: {status}");
+
+        buffering.write_all(b"x").expect("finish admitted body");
+        let status = tokio::task::spawn_blocking(move || read_status_line(buffering))
+            .await
+            .expect("admitted request joined");
+        // The malformed SDK content still follows the established 200/ok:false contract.
+        assert!(status.starts_with("HTTP/1.1 200"), "{path}: {status}");
+        wait_for_capacity(&state, 1).await;
+    }
+    server.abort();
+}
+
+#[tokio::test]
+async fn failed_body_extraction_releases_capacity() {
+    let state = AppState::with_concurrency(30_000, 1);
+    let app = router(state.clone(), 16);
+    for path in ["/inspect", "/verify", "/validate"] {
+        let (status, _, _) = post_octet_stream(app.clone(), path, vec![0; 32]).await;
+        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(state.permits().available_permits(), 1);
+    }
+}

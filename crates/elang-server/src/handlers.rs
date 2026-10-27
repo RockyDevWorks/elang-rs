@@ -2,11 +2,10 @@
 //!
 //! All three SDK handlers share the same shape:
 //!
-//! 1. Validate `Content-Type: application/octet-stream`.
-//! 2. Acquire a [`tokio::sync::Semaphore`] permit from [`AppState`] so
-//!    the blocking work cannot orphan past the configured concurrency
-//!    cap, even after a handler timeout. Return `503` immediately if full.
-//! 3. Move the body bytes (as `Bytes`, no extra copy) into a
+//! 1. Acquire a [`tokio::sync::Semaphore`] permit from [`AppState`] before
+//!    buffering the body. Return `503` immediately if full.
+//! 2. Extract `Bytes` and validate `Content-Type: application/octet-stream`.
+//! 3. Move the body bytes (as `Bytes`, no extra copy) and permit into a
 //!    [`tokio::task::spawn_blocking`] closure that calls the matching
 //!    [`elang_reader::Package`] method.
 //! 4. Use [`tokio::time::timeout`] to limit the response wait. Blocking
@@ -18,7 +17,7 @@
 //! semantic validation) must not run on a tokio worker thread — that would
 //! stall every concurrent request on the same worker. The `spawn_blocking`
 //! hop moves it to tokio's blocking thread pool, which by default can grow
-//! up to 512 threads; the `Semaphore` permit acquired in step 2 caps the
+//! up to 512 threads; the `Semaphore` permit acquired in step 1 caps the
 //! number of concurrent jobs to the configured limit so the pool cannot be
 //! exhausted by a client that repeatedly triggers timeouts.
 
@@ -26,23 +25,52 @@ use std::time::Duration;
 
 use axum::{
     body::Bytes,
-    extract::State,
-    http::{HeaderMap, HeaderValue, StatusCode},
+    extract::{FromRequestParts, State},
+    http::{request::Parts, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
 
 use elang_reader::{Inspected, Package, Validated, Verified};
+use tokio::sync::OwnedSemaphorePermit;
 
 use crate::{
     error::{internal, ServerError},
+    limits::open_for_decode,
     response::{SdkInspectSuccess, SdkValidateSuccess, SdkVerifySuccess},
     state::AppState,
-    MAX_DECODED_BYTES,
 };
 
 /// Content-Type expected on every SDK endpoint.
 const REQUIRED_CONTENT_TYPE: &str = "application/octet-stream";
+
+/// Admission permit extracted before Axum buffers the SDK request body.
+///
+/// The permit is released if a later extractor rejects the request, or when
+/// the blocking SDK job completes, including after a response timeout.
+#[derive(Debug)]
+pub struct SdkPermit(OwnedSemaphorePermit);
+
+impl SdkPermit {
+    fn acquire(state: &AppState) -> Result<Self, ServerError> {
+        state
+            .permits()
+            .try_acquire_owned()
+            .map(Self)
+            .map_err(|_| internal("SDK concurrency limit reached or semaphore closed"))
+    }
+}
+
+impl FromRequestParts<AppState> for SdkPermit {
+    type Rejection = ServerError;
+
+    async fn from_request_parts(
+        _parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        Self::acquire(state)
+    }
+}
 
 /// Liveness probe. Not part of the SDK contract.
 ///
@@ -54,29 +82,29 @@ pub async fn healthz() -> Response {
 
 /// Run the supplied blocking work on tokio's blocking pool, with a
 /// per-request wall-clock timeout from [`AppState::timeout_ms`] and a
-/// bounded-concurrency permit from [`AppState::permits`].
+/// previously acquired [`SdkPermit`].
 ///
-/// Reject immediately with `503` if no permit is available. Move the
-/// permit into the blocking closure so it is released only when
+/// Admission has already rejected saturated requests before body buffering.
+/// Move the permit into the blocking closure so it is released only when
 /// the SDK work finishes, including after a timeout. A request
 /// that times out therefore leaves its orphaned job counted against the
 /// concurrency cap, which is exactly what prevents an attacker from
 /// pinning every blocking-pool thread by repeatedly triggering timeouts.
-async fn run_with_timeout<F, T>(state: &AppState, work: F) -> Result<T, ServerError>
+async fn run_with_timeout<F, T>(
+    state: &AppState,
+    permit: SdkPermit,
+    work: F,
+) -> Result<T, ServerError>
 where
     F: FnOnce() -> Result<T, ServerError> + Send + 'static,
     T: Send + 'static,
 {
     let budget = Duration::from_millis(state.timeout_ms());
-    let permit = state
-        .permits()
-        .try_acquire_owned()
-        .map_err(|_| internal("SDK concurrency limit reached or semaphore closed"))?;
 
     let outcome = tokio::time::timeout(budget, async move {
         let joined = tokio::task::spawn_blocking(move || {
             // Hold the permit for the entire blocking job.
-            let _permit = permit;
+            let _permit = permit.0;
             work()
         })
         .await;
@@ -110,38 +138,16 @@ fn is_octet_stream(value: &HeaderValue) -> bool {
     primary.trim().eq_ignore_ascii_case(REQUIRED_CONTENT_TYPE)
 }
 
-/// Check the service's decoded-byte cap before bootstrap or parser decoding.
-///
-/// Use the frame headers, rather than index claims: the reader's streaming
-/// decoder rejects output beyond each frame's declared content size. The
-/// aggregate therefore bounds retained resource bytes even for a lying index.
-fn open_for_decode(body: &[u8]) -> Result<Package, ServerError> {
-    let pkg = Package::open(body).map_err(ServerError::from)?;
-    let mut remaining = MAX_DECODED_BYTES;
-    for span in pkg.listing().layout().spans() {
-        let frame = usize::try_from(span.offset)
-            .ok()
-            .zip(span.end().and_then(|end| usize::try_from(end).ok()))
-            .and_then(|(start, end)| body.get(start..end))
-            .ok_or_else(|| internal("validated frame span falls outside the archive"))?;
-        // Package::open has already inspected every frame at stage 7.
-        let header = elang_container::frame::inspect(frame).map_err(ServerError::from)?;
-        remaining = remaining
-            .checked_sub(header.content_size)
-            .ok_or(ServerError::PayloadTooLarge)?;
-    }
-    Ok(pkg)
-}
-
 /// Handler for `POST /inspect`. Runs `Package::open` (stages 1–7) and returns
 /// the listing without integrity verification.
 pub async fn inspect(
     State(state): State<AppState>,
     headers: HeaderMap,
+    permit: SdkPermit,
     body: Bytes,
 ) -> Result<Json<SdkInspectSuccess>, ServerError> {
     validate_content_type(&headers)?;
-    let inspected: Inspected = run_with_timeout(&state, move || {
+    let inspected: Inspected = run_with_timeout(&state, permit, move || {
         let pkg = Package::open(&body).map_err(ServerError::from)?;
         Ok::<_, ServerError>(pkg.inspect())
     })
@@ -162,10 +168,11 @@ pub async fn inspect(
 pub async fn verify(
     State(state): State<AppState>,
     headers: HeaderMap,
+    permit: SdkPermit,
     body: Bytes,
 ) -> Result<Json<SdkVerifySuccess>, ServerError> {
     validate_content_type(&headers)?;
-    let verified: Verified = run_with_timeout(&state, move || {
+    let verified: Verified = run_with_timeout(&state, permit, move || {
         open_for_decode(&body)?.verify().map_err(ServerError::from)
     })
     .await?;
@@ -186,10 +193,11 @@ pub async fn verify(
 pub async fn validate(
     State(state): State<AppState>,
     headers: HeaderMap,
+    permit: SdkPermit,
     body: Bytes,
 ) -> Result<Json<SdkValidateSuccess>, ServerError> {
     validate_content_type(&headers)?;
-    let validated: Validated = run_with_timeout(&state, move || {
+    let validated: Validated = run_with_timeout(&state, permit, move || {
         open_for_decode(&body)?
             .validate()
             .map_err(ServerError::from)
@@ -261,6 +269,7 @@ mod tests {
     };
 
     use super::*;
+    use crate::MAX_DECODED_BYTES;
 
     /// Header-valid frames with synthetic content-size claims. No large
     /// buffers are allocated, and the empty frame bodies cannot satisfy the
@@ -363,11 +372,20 @@ mod tests {
         }
     }
 
+    async fn run_admitted_work<F, T>(state: &AppState, work: F) -> Result<T, ServerError>
+    where
+        F: FnOnce() -> Result<T, ServerError> + Send + 'static,
+        T: Send + 'static,
+    {
+        let permit = SdkPermit::acquire(state)?;
+        run_with_timeout(state, permit, work).await
+    }
+
     #[test]
     fn saturated_work_is_rejected_on_first_poll() {
         let state = AppState::with_concurrency(30_000, 1);
         let _permit = state.permits().try_acquire_owned().expect("first permit");
-        let mut work = pin!(run_with_timeout(&state, || Ok(())));
+        let mut work = pin!(run_admitted_work(&state, || Ok(())));
         let mut context = Context::from_waker(Waker::noop());
 
         assert!(matches!(
@@ -383,7 +401,7 @@ mod tests {
         let (started_tx, started_rx) = tokio::sync::oneshot::channel();
         let (release_tx, release_rx) = mpsc::channel();
         let worker = tokio::spawn(async move {
-            run_with_timeout(&worker_state, move || {
+            run_admitted_work(&worker_state, move || {
                 let _ = started_tx.send(());
                 release_rx
                     .recv_timeout(Duration::from_secs(5))
@@ -400,7 +418,7 @@ mod tests {
         ));
         assert_eq!(state.permits().available_permits(), 0);
         assert!(matches!(
-            run_with_timeout(&state, || Ok(())).await,
+            run_admitted_work(&state, || Ok(())).await,
             Err(ServerError::Internal)
         ));
 
@@ -410,6 +428,6 @@ mod tests {
             .expect("work released permit")
             .expect("semaphore open");
         drop(permit);
-        assert!(run_with_timeout(&state, || Ok(())).await.is_ok());
+        assert!(run_admitted_work(&state, || Ok(())).await.is_ok());
     }
 }

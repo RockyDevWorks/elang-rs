@@ -8,10 +8,8 @@
 # workspace manifest in the same directory.
 #
 # Deploy from the workspace root:
-#   fly launch --no-deploy --config fly.toml --dockerfile crates/elang-server/Dockerfile
+#   fly launch --path . --copy-config --no-deploy --config fly.toml --dockerfile crates/elang-server/Dockerfile
 #   fly deploy . --config fly.toml --dockerfile crates/elang-server/Dockerfile
-# The deploy argument `.` explicitly sets the workspace root as the build
-# context. Both paths are relative to that root.
 #
 # The `app` name below is a placeholder — `fly launch` will prompt for a
 # unique name. After the first deploy, set the Hub's `SDK_SERVICE_URL` to
@@ -51,6 +49,6 @@ primary_region = "iad"
 
 [[vm]]
   size = "shared-cpu-1x"
-  # The service caps decoded resources at 32 MiB per job. Leave room for
-  # the 128 MiB Zstd window, parser state, archive copies and the runtime.
+  # One job admits at most 8 MiB decoded bytes and an 8 MiB Zstd window.
+  # Leave room for compressed bodies, metadata, parsers and the runtime.
   memory = "1gb"

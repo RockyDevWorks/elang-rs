@@ -39,6 +39,7 @@
 pub mod config;
 pub mod error;
 pub mod handlers;
+mod limits;
 pub mod response;
 pub mod state;
 
@@ -49,6 +50,7 @@ use axum::{
 use tower_http::limit::RequestBodyLimitLayer;
 
 pub use error::ServerError;
+pub use limits::MAX_DECODED_BYTES;
 pub use response::{
     SdkDiagnostic, SdkFailure, SdkInspectSuccess, SdkValidateSuccess, SdkVerifySuccess,
 };
@@ -59,12 +61,6 @@ pub use response::{
 /// default. Override with the `ELANG_SERVER_MAX_BODY_BYTES` env var; values
 /// outside `[1, 256 MiB]` are clamped to that range to keep the limit sane.
 pub const DEFAULT_MAX_BODY_BYTES: usize = 10 * 1024 * 1024;
-
-/// HTTP service ceiling on aggregate decoded resource bytes (32 MiB).
-///
-/// Checked against every Zstd frame's content size before any decoding.
-/// This operational limit is separate from the SDK's 8 GiB format ceiling.
-pub const MAX_DECODED_BYTES: u64 = 32 * 1024 * 1024;
 
 /// Hard upper bound on the body-size cap (256 MiB).
 ///
@@ -86,7 +82,8 @@ pub const DEFAULT_TIMEOUT_MS: u64 = 30_000;
 /// the underlying blocking job past the permit limit. Provision memory
 /// for each job's decoded bytes, decompressor window and parser state,
 /// as well as buffered request bodies and archive copies. The Fly.io
-/// configuration uses one job on a 1 GB VM. Override with
+/// configuration uses one job on a 1 GB VM. Raising body size or concurrency
+/// requires reviewing available memory. Override with
 /// `ELANG_SERVER_MAX_CONCURRENT`.
 pub const DEFAULT_MAX_CONCURRENT_REQUESTS: usize = 4;
 

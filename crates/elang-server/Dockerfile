@@ -22,10 +22,11 @@ ARG DEBIAN_IMAGE=debian:bookworm-slim
 FROM ${RUST_IMAGE} AS build
 WORKDIR /build
 
-# Copy the workspace manifests, lockfile, and sources for the build.
-# Source changes invalidate the build layer, including dependency compilation.
+# Copy the locked workspace sources and the repertoire embedded at compile
+# time. Source changes invalidate the build layer below.
 COPY Cargo.toml Cargo.lock ./
 COPY crates crates
+COPY specs/schema/ipa-v1.json specs/schema/ipa-v1.json
 
 # Build with the workspace's pinned dependencies and release profile.
 # `--locked` enforces Cargo.lock equality so a stale lockfile fails the

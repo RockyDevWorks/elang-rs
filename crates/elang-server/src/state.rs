@@ -18,8 +18,8 @@ pub struct AppState {
     /// `tokio::time::timeout` and map overrun to `504 GATEWAY_TIMEOUT` (the
     /// Hub maps that to `SdkErrorCode::timeout`).
     timeout_ms: u64,
-    /// Bounded-concurrency guard for in-flight SDK jobs. Each handler
-    /// acquires a permit before `spawn_blocking`; the permit moves into
+    /// Bounded-concurrency guard for in-flight SDK jobs. An extractor
+    /// acquires a permit before request body buffering; the permit moves into
     /// the closure and is released only when the SDK work completes —
     /// even if the outer timeout fired and the response went back as
     /// `504`. Without this guard, a client that repeatedly hits the
