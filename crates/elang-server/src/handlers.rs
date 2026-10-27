@@ -38,6 +38,7 @@ use crate::{
     error::{internal, ServerError},
     response::{SdkInspectSuccess, SdkValidateSuccess, SdkVerifySuccess},
     state::AppState,
+    MAX_DECODED_BYTES,
 };
 
 /// Content-Type expected on every SDK endpoint.
@@ -109,6 +110,29 @@ fn is_octet_stream(value: &HeaderValue) -> bool {
     primary.trim().eq_ignore_ascii_case(REQUIRED_CONTENT_TYPE)
 }
 
+/// Check the service's decoded-byte cap before bootstrap or parser decoding.
+///
+/// Use the frame headers, rather than index claims: the reader's streaming
+/// decoder rejects output beyond each frame's declared content size. The
+/// aggregate therefore bounds retained resource bytes even for a lying index.
+fn open_for_decode(body: &[u8]) -> Result<Package, ServerError> {
+    let pkg = Package::open(body).map_err(ServerError::from)?;
+    let mut remaining = MAX_DECODED_BYTES;
+    for span in pkg.listing().layout().spans() {
+        let frame = usize::try_from(span.offset)
+            .ok()
+            .zip(span.end().and_then(|end| usize::try_from(end).ok()))
+            .and_then(|(start, end)| body.get(start..end))
+            .ok_or_else(|| internal("validated frame span falls outside the archive"))?;
+        // Package::open has already inspected every frame at stage 7.
+        let header = elang_container::frame::inspect(frame).map_err(ServerError::from)?;
+        remaining = remaining
+            .checked_sub(header.content_size)
+            .ok_or(ServerError::PayloadTooLarge)?;
+    }
+    Ok(pkg)
+}
+
 /// Handler for `POST /inspect`. Runs `Package::open` (stages 1–7) and returns
 /// the listing without integrity verification.
 pub async fn inspect(
@@ -142,10 +166,7 @@ pub async fn verify(
 ) -> Result<Json<SdkVerifySuccess>, ServerError> {
     validate_content_type(&headers)?;
     let verified: Verified = run_with_timeout(&state, move || {
-        Package::open(&body)
-            .map_err(ServerError::from)?
-            .verify()
-            .map_err(ServerError::from)
+        open_for_decode(&body)?.verify().map_err(ServerError::from)
     })
     .await?;
 
@@ -169,8 +190,7 @@ pub async fn validate(
 ) -> Result<Json<SdkValidateSuccess>, ServerError> {
     validate_content_type(&headers)?;
     let validated: Validated = run_with_timeout(&state, move || {
-        Package::open(&body)
-            .map_err(ServerError::from)?
+        open_for_decode(&body)?
             .validate()
             .map_err(ServerError::from)
     })
@@ -241,6 +261,107 @@ mod tests {
     };
 
     use super::*;
+
+    /// Header-valid frames with synthetic content-size claims. No large
+    /// buffers are allocated, and the empty frame bodies cannot satisfy the
+    /// claims, so a 413 proves rejection happened before decoding.
+    fn archive_with_frame_sizes(sizes: &[(u64, u64)]) -> Vec<u8> {
+        use elang_container::{Footer, Header, Index, IndexEntry, FOOTER_LEN, HEADER_LEN};
+
+        let mut bytes = vec![0u8; HEADER_LEN];
+        Header::current().encode(&mut bytes, 0).expect("header");
+        let mut entries = Vec::new();
+        for (i, &(index_size, frame_size)) in sizes.iter().enumerate() {
+            let offset = u64::try_from(bytes.len()).expect("offset");
+            let mut frame = vec![0x28, 0xb5, 0x2f, 0xfd, 0xe4];
+            frame.extend_from_slice(&frame_size.to_le_bytes());
+            frame.extend_from_slice(&[1, 0, 0, 0, 0, 0, 0]); // empty block + checksum
+            entries.push(
+                IndexEntry::new(
+                    &format!("resource/{i:04}.bin"),
+                    offset,
+                    u64::try_from(frame.len()).expect("frame length"),
+                    index_size,
+                    1,
+                )
+                .expect("entry"),
+            );
+            bytes.extend_from_slice(&frame);
+        }
+        let index_offset = u64::try_from(bytes.len()).expect("index offset");
+        let (index, digest) = Index::with_entries(entries)
+            .expect("index")
+            .encode_and_hash()
+            .expect("index encoding");
+        let footer = Footer::new(
+            index_offset,
+            u64::try_from(index.len()).expect("index length"),
+            digest,
+        )
+        .expect("footer");
+        bytes.extend_from_slice(&index);
+        let footer_offset = bytes.len();
+        bytes.resize(footer_offset.saturating_add(FOOTER_LEN), 0);
+        footer
+            .encode(&mut bytes, footer_offset)
+            .expect("footer encoding");
+        bytes
+    }
+
+    #[test]
+    fn decoded_limit_accepts_the_exact_aggregate_boundary() {
+        let half = MAX_DECODED_BYTES.checked_div(2).expect("half limit");
+        let bytes = archive_with_frame_sizes(&[(half, half), (half, half)]);
+        assert!(open_for_decode(&bytes).is_ok());
+    }
+
+    #[tokio::test]
+    async fn decode_endpoints_reject_excessive_frame_sizes_before_decoding() {
+        let half = MAX_DECODED_BYTES.checked_div(2).expect("half limit");
+        let over = MAX_DECODED_BYTES.checked_add(1).expect("over limit");
+        let half_over = half.checked_add(1).expect("over half limit");
+        for sizes in [
+            // One oversized resource.
+            vec![(over, over)],
+            // Aggregate overflow with individually acceptable frames.
+            vec![(half, half), (half_over, half_over)],
+            // Index understates frame size.
+            vec![(1, over)],
+        ] {
+            let bytes = archive_with_frame_sizes(&sizes);
+            assert!(bytes.len() < crate::DEFAULT_MAX_BODY_BYTES);
+            // The SDK still accepts the headers under its format limits.
+            assert!(Package::open(&bytes).is_ok());
+            for path in ["/verify", "/validate"] {
+                use axum::{body::Body, http::Request};
+                use tower::ServiceExt;
+
+                let app = crate::router(
+                    AppState::with_concurrency(30_000, 1),
+                    crate::DEFAULT_MAX_BODY_BYTES,
+                );
+                let response = app
+                    .oneshot(
+                        Request::post(path)
+                            .header("content-type", REQUIRED_CONTENT_TYPE)
+                            .body(Body::from(bytes.clone()))
+                            .expect("request"),
+                    )
+                    .await
+                    .expect("response");
+                assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE, "{path}");
+                let body = axum::body::to_bytes(response.into_body(), 4096)
+                    .await
+                    .expect("body");
+                let json: serde_json::Value = serde_json::from_slice(&body).expect("JSON");
+                assert_eq!(json.get("ok"), Some(&serde_json::Value::Bool(false)));
+                assert_eq!(
+                    json.get("code").and_then(serde_json::Value::as_str),
+                    Some("request_too_large")
+                );
+            }
+        }
+    }
 
     #[test]
     fn saturated_work_is_rejected_on_first_poll() {

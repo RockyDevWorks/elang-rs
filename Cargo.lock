@@ -323,6 +323,7 @@ name = "elang-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "elang-container",
  "elang-core",
  "elang-reader",
  "serde",

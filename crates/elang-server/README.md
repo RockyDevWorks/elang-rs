@@ -99,7 +99,7 @@ Transport-level failures still use their proper status:
 
 | Situation                | Status | Hub maps to             |
 |--------------------------|--------|-------------------------|
-| Body over the size cap   | `413`  | `request_too_large`     |
+| Body or decoded resources over the size cap | `413` | `request_too_large` |
 | Handler timeout          | `504`  | `timeout`               |
 | Internal error or concurrency limit reached | `503` | `service_unavailable` |
 | Wrong `Content-Type`     | `415`  | `unknown`               |
@@ -116,6 +116,17 @@ Transport-level failures still use their proper status:
 
 When all concurrency permits are held, SDK requests return `503` immediately.
 Timed-out blocking jobs retain their permits until the work finishes.
+
+`/verify` and `/validate` also enforce a fixed **32 MiB aggregate decoded-byte
+cap** before decompressing any resource. The check sums Zstd frame content
+sizes, independently of the index; the reader's streaming decoder rejects
+output beyond those declarations. `/inspect` does not decode resources.
+The SDK's 8 GiB format ceiling is unchanged. Archives within that ceiling
+can exceed the HTTP service's operational limit and receive `413`.
+
+Provision memory for decoded buffers, the Zstd window (up to 128 MiB), parser
+state, request bodies and archive copies for every concurrent job. Raising
+the body or concurrency settings requires revisiting the VM allocation.
 
 ## Running locally
 
@@ -159,10 +170,11 @@ The deploy argument `.` explicitly sets the workspace root as the build
 context. The config and Dockerfile paths are relative to that root.
 
 `fly.toml` pins the region (`iad`), the machine size
-(`shared-cpu-1x` / 256 MB), and the health check (`GET /healthz`,
+(`shared-cpu-1x` / 1 GB), one concurrent SDK job, and the health check (`GET /healthz`,
 every 15 s). `auto_stop_machines = false` — auto-stop would add a cold
-start to every interactive validation request, and the free allowance
-covers an always-on machine at this size. The Dockerfile referenced
+start to every interactive validation request. The 1 GB allocation leaves
+headroom above the service's 32 MiB decoded-byte cap for decompression and
+parsing. The Dockerfile referenced
 by `fly.toml` (`crates/elang-server/Dockerfile`) expects the workspace
 root as its build context, which is why `fly.toml` itself lives here.
 

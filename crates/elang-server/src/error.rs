@@ -24,7 +24,7 @@ use crate::response::{stage_to_label, SdkDiagnostic, SdkFailure};
 /// [`IntoResponse for ServerError`](impl-IntoResponse).
 #[derive(Debug)]
 pub enum ServerError {
-    /// `413` — request body exceeded the configured cap.
+    /// `413` — request exceeded the body or decoded-resource cap.
     PayloadTooLarge,
     /// `415` — `Content-Type` was not `application/octet-stream`.
     UnsupportedMediaType,
@@ -65,7 +65,7 @@ impl ServerError {
                 ok: false,
                 stage: "inspect",
                 code: "request_too_large",
-                message: "Request body exceeded the configured size cap.".into(),
+                message: "Request exceeded the body or decoded-resource size cap.".into(),
                 path: None,
                 diagnostics: Vec::new(),
             },
@@ -333,10 +333,7 @@ mod tests {
     fn map_code_eld_family_is_eld_invalid() {
         // Use real registered codes so the conformance registry test
         // (which scans the source tree) does not flag these literals.
-        assert_eq!(
-            map_code(Category::EldSchema, "ELD_EMPTY"),
-            "eld_invalid"
-        );
+        assert_eq!(map_code(Category::EldSchema, "ELD_EMPTY"), "eld_invalid");
         assert_eq!(
             map_code(Category::Unicode, "UNICODE_NONCHARACTER"),
             "eld_invalid"
@@ -345,10 +342,7 @@ mod tests {
             map_code(Category::Ipa, "IPA_EXCLUDED_NOTATION"),
             "eld_invalid"
         );
-        assert_eq!(
-            map_code(Category::Roman, "ROMAN_BAD_FORMAT"),
-            "eld_invalid"
-        );
+        assert_eq!(map_code(Category::Roman, "ROMAN_BAD_FORMAT"), "eld_invalid");
         assert_eq!(map_code(Category::When, "WHEN_EMPTY"), "eld_invalid");
     }
 

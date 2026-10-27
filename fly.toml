@@ -27,14 +27,14 @@ primary_region = "iad"
   ELANG_SERVER_PORT = "8080"
   ELANG_SERVER_MAX_BODY_BYTES = "10485760"
   ELANG_SERVER_TIMEOUT_MS = "30000"
-  ELANG_SERVER_MAX_CONCURRENT = "4"
+  # One reader job at a time, including work continuing after a timeout.
+  ELANG_SERVER_MAX_CONCURRENT = "1"
 
 [http_service]
   internal_port = 8080
   force_https = true
   # Auto-stop would add a cold start to every interactive validation
-  # request. The free allowance covers an always-on shared-cpu-1x for
-  # this workload, so keep the machine running.
+  # request, so keep the machine running.
   auto_stop_machines = false
   auto_start_machines = true
   min_machines_running = 1
@@ -51,4 +51,6 @@ primary_region = "iad"
 
 [[vm]]
   size = "shared-cpu-1x"
-  memory = "256mb"
+  # The service caps decoded resources at 32 MiB per job. Leave room for
+  # the 128 MiB Zstd window, parser state, archive copies and the runtime.
+  memory = "1gb"
