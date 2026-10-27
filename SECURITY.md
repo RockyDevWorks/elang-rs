@@ -62,10 +62,20 @@ implementation is designed to fail closed against:
 
 ## Reporting a vulnerability
 
-Please report suspected vulnerabilities privately to the maintainers rather than
-opening a public issue. Include a minimal reproducing input where possible.
-Reproducing archives should be shared as attachments, not pasted inline. We aim
-to acknowledge reports promptly and will coordinate disclosure.
+Please report suspected vulnerabilities privately rather than opening a
+public issue. Include a minimal reproducing input where possible.
+Reproducing archives should be shared as attachments, not pasted inline.
+
+**Preferred channel: GitHub private vulnerability reporting**
+<https://github.com/RockyDevWorks/elang-rs/security/advisories/new>
+
+The advisory form encrypts the report at rest, limits visibility to the
+maintainers until disclosure, and generates a CVE on publish. Fall back
+to a public issue tagged `security` only for non-sensitive design
+questions. We aim to acknowledge reports within 3 business days and
+will coordinate disclosure on a 90-day timeline (sooner if a fix
+lands early; later only by mutual agreement when a downstream needs
+more time).
 
 ## Security testing
 
