@@ -101,7 +101,7 @@ Transport-level failures still use their proper status:
 |--------------------------|--------|-------------------------|
 | Body over the size cap   | `413`  | `request_too_large`     |
 | Handler timeout          | `504`  | `timeout`               |
-| Internal error           | `503`  | `service_unavailable`   |
+| Internal error or concurrency limit reached | `503` | `service_unavailable` |
 | Wrong `Content-Type`     | `415`  | `unknown`               |
 | SDK content failure      | `200`  | the reported `SdkErrorCode` |
 
@@ -113,6 +113,9 @@ Transport-level failures still use their proper status:
 | `ELANG_SERVER_MAX_BODY_BYTES`   | `10485760` | `1`–`268435456` (256 MiB cap)  | Request body cap; `413` above it              |
 | `ELANG_SERVER_TIMEOUT_MS`       | `30000`    | any `u64`                      | Per-request handler budget; `504` above it    |
 | `ELANG_SERVER_MAX_CONCURRENT`   | `4`        | `1`+ (saturates to 1)          | Max concurrent in-flight SDK requests         |
+
+When all concurrency permits are held, SDK requests return `503` immediately.
+Timed-out blocking jobs retain their permits until the work finishes.
 
 ## Running locally
 
@@ -148,9 +151,12 @@ stripped binary (~2 MB) and runs as a non-root user.
 
 ```bash
 # From the workspace root (fly.toml lives at the root, not in the crate)
-fly launch --no-deploy   # creates the app, prompts for a name
-fly deploy               # builds + deploys
+fly launch --no-deploy --config fly.toml --dockerfile crates/elang-server/Dockerfile
+fly deploy . --config fly.toml --dockerfile crates/elang-server/Dockerfile
 ```
+
+The deploy argument `.` explicitly sets the workspace root as the build
+context. The config and Dockerfile paths are relative to that root.
 
 `fly.toml` pins the region (`iad`), the machine size
 (`shared-cpu-1x` / 256 MB), and the health check (`GET /healthz`,

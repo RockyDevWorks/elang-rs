@@ -22,9 +22,8 @@ ARG DEBIAN_IMAGE=debian:bookworm-slim
 FROM ${RUST_IMAGE} AS build
 WORKDIR /build
 
-# Copy the workspace manifest and lockfile first so dependency resolution
-# caches independently of source changes (a source-only edit does NOT
-# invalidate this layer — only changes to `Cargo.toml` / `Cargo.lock` do).
+# Copy the workspace manifests, lockfile, and sources for the build.
+# Source changes invalidate the build layer, including dependency compilation.
 COPY Cargo.toml Cargo.lock ./
 COPY crates crates
 

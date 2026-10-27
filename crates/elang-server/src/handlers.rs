@@ -5,12 +5,12 @@
 //! 1. Validate `Content-Type: application/octet-stream`.
 //! 2. Acquire a [`tokio::sync::Semaphore`] permit from [`AppState`] so
 //!    the blocking work cannot orphan past the configured concurrency
-//!    cap, even after a handler timeout.
+//!    cap, even after a handler timeout. Return `503` immediately if full.
 //! 3. Move the body bytes (as `Bytes`, no extra copy) into a
 //!    [`tokio::task::spawn_blocking`] closure that calls the matching
 //!    [`elang_reader::Package`] method.
-//! 4. Wrap the work in [`tokio::time::timeout`] so a hung request cannot
-//!    pin a worker indefinitely.
+//! 4. Use [`tokio::time::timeout`] to limit the response wait. Blocking
+//!    work can continue after a timeout, retaining its permit until done.
 //! 5. Map the SDK's [`elang_core::error::Error`] to a Hub-shaped
 //!    [`crate::response::SdkFailure`] via [`crate::error::ServerError`].
 //!
@@ -55,10 +55,9 @@ pub async fn healthz() -> Response {
 /// per-request wall-clock timeout from [`AppState::timeout_ms`] and a
 /// bounded-concurrency permit from [`AppState::permits`].
 ///
-/// The permit is acquired *inside* the timeout budget, so a saturated
-/// server queues rather than immediately rejecting. The permit is then
-/// moved into the blocking closure, which means it is released only when
-/// the SDK work genuinely finishes — not when the timeout fires. A request
+/// Reject immediately with `503` if no permit is available. Move the
+/// permit into the blocking closure so it is released only when
+/// the SDK work finishes, including after a timeout. A request
 /// that times out therefore leaves its orphaned job counted against the
 /// concurrency cap, which is exactly what prevents an attacker from
 /// pinning every blocking-pool thread by repeatedly triggering timeouts.
@@ -68,13 +67,12 @@ where
     T: Send + 'static,
 {
     let budget = Duration::from_millis(state.timeout_ms());
-    let permits = state.permits();
+    let permit = state
+        .permits()
+        .try_acquire_owned()
+        .map_err(|_| internal("SDK concurrency limit reached or semaphore closed"))?;
 
     let outcome = tokio::time::timeout(budget, async move {
-        let permit = permits
-            .acquire_owned()
-            .await
-            .map_err(|_| internal("concurrency semaphore closed unexpectedly"))?;
         let joined = tokio::task::spawn_blocking(move || {
             // Hold the permit for the entire blocking job.
             let _permit = permit;
@@ -230,4 +228,67 @@ fn bytes_to_hex(bytes: &[u8]) -> String {
         out.push(low as char);
     }
     out
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, reason = "tests fail on unexpected results")]
+mod tests {
+    use std::{
+        future::Future,
+        pin::pin,
+        sync::mpsc,
+        task::{Context, Poll, Waker},
+    };
+
+    use super::*;
+
+    #[test]
+    fn saturated_work_is_rejected_on_first_poll() {
+        let state = AppState::with_concurrency(30_000, 1);
+        let _permit = state.permits().try_acquire_owned().expect("first permit");
+        let mut work = pin!(run_with_timeout(&state, || Ok(())));
+        let mut context = Context::from_waker(Waker::noop());
+
+        assert!(matches!(
+            work.as_mut().poll(&mut context),
+            Poll::Ready(Err(ServerError::Internal))
+        ));
+    }
+
+    #[tokio::test]
+    async fn timed_out_work_holds_permit_until_completion() {
+        let state = AppState::with_concurrency(20, 1);
+        let worker_state = state.clone();
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let worker = tokio::spawn(async move {
+            run_with_timeout(&worker_state, move || {
+                let _ = started_tx.send(());
+                release_rx
+                    .recv_timeout(Duration::from_secs(5))
+                    .expect("release blocking work");
+                Ok(())
+            })
+            .await
+        });
+
+        started_rx.await.expect("blocking work started");
+        assert!(matches!(
+            worker.await.expect("handler joined"),
+            Err(ServerError::Timeout)
+        ));
+        assert_eq!(state.permits().available_permits(), 0);
+        assert!(matches!(
+            run_with_timeout(&state, || Ok(())).await,
+            Err(ServerError::Internal)
+        ));
+
+        release_tx.send(()).expect("unblock work");
+        let permit = tokio::time::timeout(Duration::from_secs(5), state.permits().acquire_owned())
+            .await
+            .expect("work released permit")
+            .expect("semaphore open");
+        drop(permit);
+        assert!(run_with_timeout(&state, || Ok(())).await.is_ok());
+    }
 }

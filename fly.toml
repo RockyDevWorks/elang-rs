@@ -8,8 +8,10 @@
 # workspace manifest in the same directory.
 #
 # Deploy from the workspace root:
-#   fly launch --no-deploy               # creates the app with this config
-#   fly deploy                           # builds + deploys
+#   fly launch --no-deploy --config fly.toml --dockerfile crates/elang-server/Dockerfile
+#   fly deploy . --config fly.toml --dockerfile crates/elang-server/Dockerfile
+# The deploy argument `.` explicitly sets the workspace root as the build
+# context. Both paths are relative to that root.
 #
 # The `app` name below is a placeholder — `fly launch` will prompt for a
 # unique name. After the first deploy, set the Hub's `SDK_SERVICE_URL` to

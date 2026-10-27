@@ -193,6 +193,33 @@ async fn body_size_cap_returns_413() {
 }
 
 #[tokio::test]
+async fn saturated_sdk_routes_return_503_and_recover() {
+    let state = AppState::with_concurrency(30_000, 1);
+    let permit = state
+        .permits()
+        .try_acquire_owned()
+        .expect("reserve capacity");
+    let app = router(state, DEFAULT_MAX_BODY_BYTES);
+
+    for path in ["/inspect", "/verify", "/validate"] {
+        let (status, _, body) = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            post_octet_stream(app.clone(), path, fixture_archive()),
+        )
+        .await
+        .expect("saturated route rejects without waiting for capacity");
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        let json: serde_json::Value = serde_json::from_slice(&body).expect("valid JSON");
+        assert_eq!(json["ok"], false);
+        assert_eq!(json["code"], "service_unavailable");
+    }
+
+    drop(permit);
+    let (status, _, _) = post_octet_stream(app, "/validate", fixture_archive()).await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+#[tokio::test]
 async fn unknown_route_returns_404() {
     let app = build_app();
     let req = Request::builder()
