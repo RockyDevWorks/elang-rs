@@ -143,3 +143,182 @@ pub fn stage_to_label(stage: u8) -> &'static str {
         _ => "inspect",
     }
 }
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    reason = "unit tests for the response types; panics on regression"
+)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn singleton_constructs_one_element_vector_with_no_path() {
+        let v = SdkDiagnostic::singleton("inspect", "ok", "hello".into());
+        assert_eq!(v.len(), 1);
+        assert_eq!(v[0].stage, "inspect");
+        assert_eq!(v[0].code, "ok");
+        assert_eq!(v[0].message, "hello");
+        assert_eq!(v[0].path, None);
+    }
+
+    #[test]
+    fn sdk_diagnostic_serializes_camel_case_with_path_omitted_when_none() {
+        let diag = SdkDiagnostic {
+            stage: "inspect",
+            code: "x",
+            message: "msg".into(),
+            path: None,
+        };
+        let json = serde_json::to_value(&diag).expect("serializable");
+        assert_eq!(
+            json,
+            serde_json::json!({"stage": "inspect", "code": "x", "message": "msg"})
+        );
+    }
+
+    #[test]
+    fn sdk_diagnostic_serializes_path_when_present() {
+        let diag = SdkDiagnostic {
+            stage: "verify",
+            code: "x",
+            message: "msg".into(),
+            path: Some("Linguistics/phonemes.eld".into()),
+        };
+        let json = serde_json::to_value(&diag).expect("serializable");
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "stage": "verify", "code": "x", "message": "msg",
+                "path": "Linguistics/phonemes.eld",
+            })
+        );
+    }
+
+    #[test]
+    fn inspect_success_serializes_camel_case() {
+        let s = SdkInspectSuccess {
+            ok: true,
+            mode: "inspect",
+            spec_version: "0.1.0",
+            binary_container_version: "0.1.0",
+            discovered_resources: 3,
+            diagnostics: Vec::new(),
+        };
+        let json = serde_json::to_value(&s).expect("serializable");
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "ok": true,
+                "mode": "inspect",
+                "specVersion": "0.1.0",
+                "binaryContainerVersion": "0.1.0",
+                "discoveredResources": 3,
+                "diagnostics": [],
+            })
+        );
+    }
+
+    #[test]
+    fn verify_success_serializes_camel_case() {
+        let s = SdkVerifySuccess {
+            ok: true,
+            mode: "verify",
+            spec_version: "0.1.0",
+            binary_container_version: "0.1.0",
+            verified_resources: 7,
+            diagnostics: Vec::new(),
+        };
+        let json = serde_json::to_value(&s).expect("serializable");
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "ok": true,
+                "mode": "verify",
+                "specVersion": "0.1.0",
+                "binaryContainerVersion": "0.1.0",
+                "verifiedResources": 7,
+                "diagnostics": [],
+            })
+        );
+    }
+
+    #[test]
+    fn validate_success_serializes_camel_case_with_inventory_value() {
+        let s = SdkValidateSuccess {
+            ok: true,
+            mode: "validate",
+            spec_version: "0.1.0",
+            binary_container_version: "0.1.0",
+            phoneme_resource_path: "Linguistics/phonemes.eld".into(),
+            inventory: serde_json::json!({"groupCount": 2, "rootCount": 5}),
+            diagnostics: Vec::new(),
+        };
+        let json = serde_json::to_value(&s).expect("serializable");
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "ok": true,
+                "mode": "validate",
+                "specVersion": "0.1.0",
+                "binaryContainerVersion": "0.1.0",
+                "phonemeResourcePath": "Linguistics/phonemes.eld",
+                "inventory": {"groupCount": 2, "rootCount": 5},
+                "diagnostics": [],
+            })
+        );
+    }
+
+    #[test]
+    fn failure_serializes_camel_case_with_path_omitted_when_none() {
+        let f = SdkFailure {
+            ok: false,
+            stage: "inspect",
+            code: "request_too_large",
+            message: "too big".into(),
+            path: None,
+            diagnostics: Vec::new(),
+        };
+        let json = serde_json::to_value(&f).expect("serializable");
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "ok": false,
+                "stage": "inspect",
+                "code": "request_too_large",
+                "message": "too big",
+                "diagnostics": [],
+            })
+        );
+    }
+
+    #[test]
+    fn stage_to_label_inspect_range() {
+        for stage in 1u8..=7 {
+            assert_eq!(stage_to_label(stage), "inspect", "stage {stage}");
+        }
+    }
+
+    #[test]
+    fn stage_to_label_verify_range() {
+        for stage in 8u8..=11 {
+            assert_eq!(stage_to_label(stage), "verify", "stage {stage}");
+        }
+    }
+
+    #[test]
+    fn stage_to_label_validate_value() {
+        assert_eq!(stage_to_label(12), "validate");
+    }
+
+    #[test]
+    fn stage_to_label_out_of_range_falls_back_to_inspect() {
+        assert_eq!(stage_to_label(0), "inspect");
+        assert_eq!(stage_to_label(13), "inspect");
+        assert_eq!(stage_to_label(255), "inspect");
+    }
+}
