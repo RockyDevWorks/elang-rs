@@ -111,8 +111,8 @@ Transport-level failures still use their proper status:
 |---------------------------------|------------|--------------------------------|-----------------------------------------------|
 | `ELANG_SERVER_PORT`             | `8080`     | valid `u16`                    | TCP listen port                               |
 | `ELANG_SERVER_MAX_BODY_BYTES`   | `10485760` | `1`–`268435456` (256 MiB cap)  | Request body cap; `413` above it              |
-| `ELANG_SERVER_TIMEOUT_MS`       | `30000`    | any `u64`                      | Per-request handler budget; `504` above it    |
-| `ELANG_SERVER_MAX_CONCURRENT`   | `4`        | `1`+ (saturates to 1)          | Max concurrent in-flight SDK requests         |
+| `ELANG_SERVER_TIMEOUT_MS`       | `30000`    | `1`+ (clamped to 1)             | Per-request handler budget; `504` above it    |
+| `ELANG_SERVER_MAX_CONCURRENT`   | `4`        | `1`–`512` (clamped)            | Max concurrent in-flight SDK requests         |
 
 The HTTP service also caps the total decoded resource bytes and each Zstd
 window at **8 MiB per SDK job**, before decompression. `/verify` and
@@ -124,8 +124,9 @@ VM memory; a compressed-body cap alone does not bound decoded memory.
 
 When all concurrency permits are held, SDK requests return `503` immediately,
 before buffering the body. Permits cover body buffering and SDK processing;
-failed body extraction releases capacity. Timed-out blocking jobs retain
-their permits until the work finishes.
+failed body extraction releases capacity. Body reads time out after an idle
+interval of 30 seconds or the configured handler timeout, whichever is shorter.
+Timed-out blocking jobs retain their permits until the work finishes.
 
 ## Running locally
 
@@ -154,7 +155,7 @@ docker run --rm -p 8080:8080 elang-server:local
 ```
 
 The image is a multi-stage build: `rust:1.99-bookworm` for the build,
-`debian:bookworm-slim` for the runtime. The final image carries a single
+`debian:12-slim` (Bookworm) for the runtime. The final image carries a single
 stripped binary (~2 MB) and runs as a non-root user.
 
 ## Deploying to Fly.io

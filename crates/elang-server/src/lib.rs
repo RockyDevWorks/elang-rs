@@ -48,7 +48,9 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use tower_http::limit::RequestBodyLimitLayer;
+use std::time::Duration;
+
+use tower_http::{limit::RequestBodyLimitLayer, timeout::RequestBodyTimeoutLayer};
 
 pub use error::ServerError;
 pub use limits::MAX_DECODED_BYTES;
@@ -88,6 +90,12 @@ pub const DEFAULT_TIMEOUT_MS: u64 = 30_000;
 /// `ELANG_SERVER_MAX_CONCURRENT`.
 pub const DEFAULT_MAX_CONCURRENT_REQUESTS: usize = 4;
 
+/// Hard upper bound on configured SDK concurrency (Tokio's default blocking-pool size).
+///
+/// This is a runtime ceiling, not a memory recommendation; deployments must
+/// provision memory for every admitted request and SDK job.
+pub const MAX_CONCURRENT_REQUESTS_CEILING: usize = 512;
+
 /// Build the Axum router with all routes wired and the body-size cap
 /// applied as a layer.
 ///
@@ -95,6 +103,7 @@ pub const DEFAULT_MAX_CONCURRENT_REQUESTS: usize = 4;
 /// via [`state::AppState`] so the same router can serve any number of
 /// concurrent requests.
 pub fn router(state: state::AppState, max_body_bytes: usize) -> Router {
+    let body_timeout = Duration::from_millis(state.timeout_ms().min(DEFAULT_TIMEOUT_MS));
     Router::new()
         .route("/healthz", get(handlers::healthz))
         .route("/inspect", post(handlers::inspect))
@@ -105,6 +114,9 @@ pub fn router(state: state::AppState, max_body_bytes: usize) -> Router {
         // is the sole gate. See
         // <https://docs.rs/axum/latest/axum/extract/struct.DefaultBodyLimit.html>.
         .layer(DefaultBodyLimit::disable())
+        // Bound idle body reads while an admitted request holds an SDK permit.
+        // The outer size limit still rejects oversized Content-Length immediately.
+        .layer(RequestBodyTimeoutLayer::new(body_timeout))
         .layer(RequestBodyLimitLayer::new(max_body_bytes))
         .with_state(state)
 }
@@ -113,8 +125,7 @@ pub fn router(state: state::AppState, max_body_bytes: usize) -> Router {
 ///
 /// Equivalent to [`serve_with_shutdown`] with `shutdown =
 /// std::future::pending()` — the server runs until the runtime is
-/// dropped. Use [`serve_with_shutdown`] from tests (or from `main` if you
-/// ever want SIGTERM-aware behaviour) so the success path is reachable.
+/// dropped. The binary uses [`serve_with_shutdown`] to handle SIGTERM and Ctrl-C.
 pub async fn serve(config: crate::config::Config) -> Result<(), ServeError> {
     serve_with_shutdown(config, std::future::pending()).await
 }

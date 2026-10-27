@@ -364,7 +364,7 @@ async fn exact_decoded_cap_is_admitted_to_the_sdk() {
     }
 }
 
-/// Send only the headers: the advertised byte remains unsent so body
+/// Send only the headers: the advertised bytes remain unsent so body
 /// extraction must wait. A saturated route must still return a response.
 fn send_incomplete_request(address: std::net::SocketAddr, path: &str) -> std::net::TcpStream {
     use std::io::Write;
@@ -374,7 +374,7 @@ fn send_incomplete_request(address: std::net::SocketAddr, path: &str) -> std::ne
         .set_read_timeout(Some(std::time::Duration::from_secs(5)))
         .expect("bound response wait");
     write!(stream,
-        "POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/octet-stream\r\nContent-Length: 1\r\nConnection: close\r\n\r\n"
+        "POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/octet-stream\r\nContent-Length: 2\r\nConnection: close\r\n\r\n"
     ).expect("send request headers");
     stream
 }
@@ -422,7 +422,7 @@ async fn body_buffering_holds_capacity_and_saturated_requests_do_not_wait_for_bo
         .expect("saturated request joined");
         assert!(status.starts_with("HTTP/1.1 503"), "{path}: {status}");
 
-        buffering.write_all(b"x").expect("finish admitted body");
+        buffering.write_all(b"xx").expect("finish admitted body");
         let status = tokio::task::spawn_blocking(move || read_status_line(buffering))
             .await
             .expect("admitted request joined");
@@ -442,4 +442,44 @@ async fn failed_body_extraction_releases_capacity() {
         assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
         assert_eq!(state.permits().available_permits(), 1);
     }
+}
+
+#[tokio::test]
+async fn stalled_bodies_time_out_and_release_sdk_capacity() {
+    use std::io::Write;
+
+    let state = AppState::with_concurrency(200, 1);
+    let app = router(state.clone(), DEFAULT_MAX_BODY_BYTES);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind test listener");
+    let address = listener.local_addr().expect("test listener address");
+    let server_app = app.clone();
+    let server = tokio::spawn(async move { axum::serve(listener, server_app).await });
+
+    for path in ["/inspect", "/verify", "/validate"] {
+        for partial_body in [false, true] {
+            let mut stalled = send_incomplete_request(address, path);
+            if partial_body {
+                stalled.write_all(b"x").expect("send partial body");
+            }
+            wait_for_capacity(&state, 0).await;
+            let status = tokio::time::timeout(
+                std::time::Duration::from_secs(2),
+                tokio::task::spawn_blocking(move || read_status_line(stalled)),
+            )
+            .await
+            .expect("body timeout follows the 200 ms handler budget")
+            .expect("stalled request joined");
+            // Axum maps a body-read error to 400, before SDK processing starts.
+            assert!(status.starts_with("HTTP/1.1 400"), "{path}: {status}");
+            wait_for_capacity(&state, 1).await;
+
+            let (status, _, body) = post_octet_stream(app.clone(), path, fixture_archive()).await;
+            assert_eq!(status, StatusCode::OK, "{path}");
+            let json: serde_json::Value = serde_json::from_slice(&body).expect("valid JSON");
+            assert_eq!(json["ok"], true, "subsequent SDK request succeeds: {path}");
+        }
+    }
+    server.abort();
 }

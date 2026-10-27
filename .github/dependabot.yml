@@ -60,21 +60,5 @@ updates:
           - "minor"
           - "patch"
 
-  # Docker base images referenced by `crates/elang-server/Dockerfile`
-  # and any other `ARG *_IMAGE=...` lines. Dependabot proposes a digest
-  # refresh PR whenever the upstream manifest digest changes; we merge
-  # after rebuilding the image and confirming smoke tests pass.
-  - package-ecosystem: "docker"
-    directory: "/crates/elang-server"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "Etc/UTC"
-    open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-      - "docker"
-    commit-message:
-      prefix: "ci"
-      include: "scope"
+  # Docker ARG image tags and digests are managed by Renovate's custom
+  # regex manager in `renovate.json`; Dependabot cannot resolve both stages.
