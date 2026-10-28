@@ -54,8 +54,22 @@ description = "HTTP URL containing credentials"
 # Escapes must be complete bytes. Include ports in the match so the
 # exact fixture allowlist cannot hide credentials on another port.
 # Consume any additional `@host[:port]` segments so a URL-confusion
-# attack like `http://user:pass@localhost:3000@attacker.tld` is
+# attack like `<user>:<pass>@localhost:3000@<attacker-host>` is
 # captured as a single finding (the trailing host makes the URL no
 # longer match the anchored `^http://user:pass@localhost:3000$`
-# allowlist entry above, so the finding is reported).
-regex = '''https?://(?:[a-zA-Z0-9._-]|%[a-fA-F0-9]{2})+:(?:[a-zA-Z0-9._-]|%[a-fA-F0-9]{2})+@(?:[a-zA-Z0-9.-]+|\\[::1\\])(?::[0-9]+)?(?:@[a-zA-Z0-9.-]+(?::[0-9]+)?)*(?:[^@]|$)'''
+# allowlist entry above, so the finding is reported). The literal
+# credential and attacker-host are written as placeholders here so
+# Gitleaks does not match the comment against itself when scanning
+# this file.
+#
+# The URL body is captured into group 1 and reported as the secret
+# (secretGroup = 1). The trailing boundary character (whatever
+# non-`@` character follows the URL in the matched line) stays in
+# the regex match but is excluded from the secret, so anchored
+# allowlist regexes still match the comment's `^http://...:3000$`
+# example verbatim. The TOML literal string uses single backslashes
+# so the regex `\[::1\]` actually matches the literal IPv6 host
+# `[::1]` instead of `\[::1\]` (literal backslash, char class,
+# literal backslash).
+regex = '''(https?://(?:[a-zA-Z0-9._-]|%[a-fA-F0-9]{2})+:(?:[a-zA-Z0-9._-]|%[a-fA-F0-9]{2})+@(?:[a-zA-Z0-9.-]+|\[::1\])(?::[0-9]+)?(?:@[a-zA-Z0-9.-]+(?::[0-9]+)?)*)(?:[^@]|$)'''
+secretGroup = 1

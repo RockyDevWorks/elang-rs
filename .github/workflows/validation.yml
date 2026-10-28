@@ -99,7 +99,7 @@ jobs:
             -o /tmp/gitleaks.tar.gz
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
           sudo mv /tmp/gitleaks /usr/local/bin/
-          gitleaks detect --source . --no-banner --config .gitleaks.toml
+          gitleaks detect --source . --no-banner --config .gitleaks.toml --verbose --redact
           bash scripts/test-gitleaks.sh
 
   zizmor:
@@ -349,14 +349,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        # No `path:` override: GitHub Actions checks the repo out at
-        # `$GITHUB_WORKSPACE/elang-rs/` by default, which matches the
-        # repo name. Each subsequent step's `working-directory` is
-        # set to `elang-rs` so lychee resolves `.lycheeignore` and
-        # relative links from the repo root rather than from the
-        # workspace root.
+        # No `path:` override and no step-level `working-directory`:
+        # `actions/checkout` v4 places the repository directly at
+        # `$GITHUB_WORKSPACE` (which is also the default step
+        # working directory for subsequent steps), so Lychee resolves
+        # `.lycheeignore` from the repo root and runs in the same
+        # directory the checkout landed in. A relative
+        # `working-directory: elang-rs` would resolve against
+        # `$GITHUB_WORKSPACE` and look for a non-existent
+        # `<workspace>/elang-rs/elang-rs` directory.
       - name: Run Lychee
-        working-directory: elang-rs
         run: |
           # Binary download from the pinned release tag. Lychee has
           # no npm or pip distribution; the official install path is
@@ -435,7 +437,12 @@ jobs:
         with:
           results_file: results.sarif
           results_format: sarif
-          publish_results: true
+          # Scorecard rejects SARIF uploads from non-default
+          # branches. Restrict publishing to pushes against
+          # `main`; schedule and workflow_dispatch always run on
+          # the default branch so publishing proceeds there. PR
+          # runs (handled by `security.yml`) never publish.
+          publish_results: ${{ github.event_name == 'push' && github.ref_name == 'main' || github.event_name != 'push' }}
       - uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           sarif_file: results.sarif

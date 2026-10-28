@@ -306,15 +306,47 @@ for entry in "${NIGHTLY_CHECKS[@]}"; do
         skip_check "${name}" "explicit --skip"
         continue
     fi
-    # Probe the nightly toolchain; the subcommand (miri, fuzz) is also
-    # only present on nightly. `rustup toolchain list` returns a single
-    # line per installed toolchain.
-    if ! rustup toolchain list 2>/dev/null | grep -qx 'nightly-x86_64-unknown-linux-gnu' \
-       && ! rustup toolchain list 2>/dev/null | grep -q '^nightly'; then
-        skip_check "${name}" "nightly toolchain not installed (run: rustup toolchain install nightly)"
+    # Resolve which nightly toolchain to use. Prefer the unpinned
+    # `nightly` alias that `cargo +nightly` selects; fall back to
+    # the most recent `nightly-YYYY-MM-DD` toolchain if only pinned
+    # nightly is installed (a common setup for reproducible builds).
+    # `rustup toolchain list` returns one line per installed toolchain.
+    nightly_name="$(rustup toolchain list 2>/dev/null \
+        | grep -E '^(nightly-x86_64-unknown-linux-gnu|nightly)$' \
+        | head -1 | tr -d ' ')"
+    if [[ -z "${nightly_name}" ]]; then
+        nightly_name="$(rustup toolchain list 2>/dev/null \
+            | grep -E '^nightly-' \
+            | head -1 | tr -d ' ')"
+    fi
+    if [[ -z "${nightly_name}" ]]; then
+        skip_check "${name}" "no nightly toolchain installed (run: rustup toolchain install nightly --profile minimal --component miri --component rust-src)"
         continue
     fi
-    run_check "${name}" "${cmd}" || true
+    # Probe the actual subcommand before running it. The nightly
+    # toolchain alone does not install Miri (it ships separately as
+    # `rustup component add miri`) or cargo-fuzz (a `cargo install`
+    # on the nightly toolchain). Without this probe, a missing
+    # component or plugin produces a confusing "no such subcommand"
+    # or "binary not found" failure instead of a clean skip.
+    subcmd="$(echo "${cmd}" | awk '{print $2}')"
+    if ! cargo "+${nightly_name}" "${subcmd}" --version >/dev/null 2>&1; then
+        case "${subcmd}" in
+            miri)
+                skip_check "${name}" "miri component not installed on ${nightly_name} (run: rustup component add --toolchain ${nightly_name} miri)"
+                ;;
+            fuzz)
+                skip_check "${name}" "cargo-fuzz not installed on ${nightly_name} (run: cargo +${nightly_name} install cargo-fuzz)"
+                ;;
+            *)
+                skip_check "${name}" "${subcmd} subcommand not available on ${nightly_name}"
+                ;;
+        esac
+        continue
+    fi
+    # Substitute the resolved toolchain name into the command so the
+    # selected toolchain (pinned or unpinned) is the one that runs.
+    run_check "${name}" "$(echo "${cmd}" | sed "s/+nightly/+${nightly_name}/")" || true
 done
 
 # JS source guard — mirrors the `_js-source-guard` job in
@@ -323,9 +355,14 @@ done
 # not-applicable, and a contributor must wire up Knip or the CI
 # `Knip` job will block the PR. Excluded paths mirror the workflow:
 # build outputs and cache directories that legitimately hold JS files
-# without counting as project source.
+# without counting as project source. The `fuzz/` directory itself
+# is *not* pruned — only its generated subdirectories (`target`,
+# `corpus`, `artifacts`) are excluded, so a real JS or TS fixture
+# inside a fuzz harness directory is still detected.
 js_source=$(find . \
-    -type d \( -name target -o -name node_modules -o -name fuzz -o -name '.git' \) -prune -o \
+    -type d \( -name target -o -name node_modules -o -name 'fuzz/target' \
+               -o -name 'fuzz/corpus' -o -name 'fuzz/artifacts' -o -name '.git' \
+               -o -name '.jscpd-report' \) -prune -o \
     -type f \( \
         -name '*.js' -o -name '*.jsx' -o -name '*.ts' -o -name '*.tsx' \
         -o -name '*.mjs' -o -name '*.cjs' -o -name '*.mts' -o -name '*.cts' \
