@@ -231,6 +231,10 @@ fn inspect_accepts_a_valid_canonical_frame() {
 // =============================================================================
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "exercises libzstd FFI (ZSTD_createCCtx / ZSTD_decompressCCtx), which Miri cannot execute"
+)]
 fn decode_round_trips_a_canonical_frame() {
     let input = b"hello ELANG hello ELANG hello ELANG hello ELANG hello ELANG";
     let frame = encode(input, Profile::Canonical).unwrap();
@@ -240,6 +244,10 @@ fn decode_round_trips_a_canonical_frame() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "exercises libzstd FFI (ZSTD_createCCtx / ZSTD_decompressCCtx), which Miri cannot execute"
+)]
 fn decode_charges_the_aggregate() {
     let input = vec![0u8; 4096];
     let frame = encode(&input, Profile::Canonical).unwrap();
@@ -249,6 +257,10 @@ fn decode_charges_the_aggregate() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "exercises libzstd FFI (ZSTD_createCCtx / ZSTD_decompressCCtx), which Miri cannot execute"
+)]
 fn decode_releases_the_aggregate_on_failure() {
     let input = vec![0u8; 4096];
     let mut frame = encode(&input, Profile::Canonical).unwrap();
@@ -263,6 +275,10 @@ fn decode_releases_the_aggregate_on_failure() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "exercises libzstd FFI (ZSTD_createCCtx / ZSTD_decompressCCtx), which Miri cannot execute"
+)]
 fn decode_rejects_a_frame_above_the_per_resource_ceiling() {
     // Build a 32-byte payload, then a budget with a 16-byte ceiling.
     let input = vec![0u8; 32];
@@ -273,6 +289,10 @@ fn decode_rejects_a_frame_above_the_per_resource_ceiling() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "exercises libzstd FFI (ZSTD_createCCtx / ZSTD_decompressCCtx), which Miri cannot execute"
+)]
 fn decode_rejects_a_frame_above_the_aggregate_ceiling() {
     let input = vec![0u8; 4096];
     let frame = encode(&input, Profile::Canonical).unwrap();
@@ -286,6 +306,10 @@ fn decode_rejects_a_frame_above_the_aggregate_ceiling() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "exercises libzstd FFI (ZSTD_createCCtx / ZSTD_decompressCCtx), which Miri cannot execute"
+)]
 fn decode_rejects_a_corrupted_body() {
     let input = vec![0xABu8; 4096];
     let mut frame = encode(&input, Profile::Canonical).unwrap();
@@ -308,6 +332,10 @@ fn decode_rejects_a_corrupted_body() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "exercises libzstd FFI (ZSTD_createCCtx / ZSTD_decompressCCtx), which Miri cannot execute"
+)]
 fn decode_rejects_a_corrupted_checksum() {
     let input = vec![0u8; 1024];
     let mut frame = encode(&input, Profile::Canonical).unwrap();
@@ -323,6 +351,10 @@ fn decode_rejects_a_corrupted_checksum() {
 #[cfg_attr(
     miri,
     ignore = "exercises libzstd FFI (ZSTD_createCCtx), which Miri cannot execute"
+)]
+#[cfg_attr(
+    miri,
+    ignore = "exercises libzstd FFI (ZSTD_createCCtx / ZSTD_decompressCCtx), which Miri cannot execute"
 )]
 fn decode_rejects_output_exceeding_a_lowered_declared_size_mid_stream() {
     // T0421: a small window lets libzstd recycle its streaming buffer rather
@@ -383,6 +415,10 @@ fn profile_ids_are_stable() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "exercises libzstd FFI (ZSTD_createCCtx / ZSTD_decompressCCtx), which Miri cannot execute"
+)]
 fn encode_then_inspect_round_trips_each_profile() {
     let input = b"the quick brown fox jumps over the lazy dog, again and again";
     for profile in [Profile::Fast, Profile::Compact, Profile::Canonical] {
@@ -396,6 +432,10 @@ fn encode_then_inspect_round_trips_each_profile() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "exercises libzstd FFI (ZSTD_createCCtx / ZSTD_decompressCCtx), which Miri cannot execute"
+)]
 fn canonical_matches_pinned_golden_bytes() {
     // T0418 / REQ-FRAME-010/011. Captured with libzstd 1.5.7 and the locked
     // canonical parameters. Empty, literal and match-compressed blocks freeze
@@ -436,6 +476,10 @@ fn canonical_matches_pinned_golden_bytes() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "exercises libzstd FFI (ZSTD_createCCtx / ZSTD_decompressCCtx), which Miri cannot execute"
+)]
 fn canonical_is_byte_identical_across_repeated_runs() {
     let input = b"deterministic-by-construction canonical payload";
     let a = encode(input, Profile::Canonical).unwrap();
@@ -446,6 +490,10 @@ fn canonical_is_byte_identical_across_repeated_runs() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "exercises libzstd FFI (ZSTD_createCCtx / ZSTD_decompressCCtx), which Miri cannot execute"
+)]
 fn canonical_uses_a_fresh_context_per_call() {
     // This is a structural assertion: encode from the *same* context reused
     // for two distinct inputs could leak state. Our encoder creates a new
@@ -460,6 +508,10 @@ fn canonical_uses_a_fresh_context_per_call() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "exercises libzstd FFI (ZSTD_createCCtx / ZSTD_decompressCCtx), which Miri cannot execute"
+)]
 fn canonical_window_never_exceeds_the_ceiling() {
     // T0416 / REQ-FRAME-010. `WindowLog` is a *maximum*: libzstd may choose a
     // smaller window for small inputs. What we can pin down without
@@ -474,6 +526,10 @@ fn canonical_window_never_exceeds_the_ceiling() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "exercises libzstd FFI (ZSTD_createCCtx / ZSTD_decompressCCtx), which Miri cannot execute"
+)]
 fn canonical_includes_a_declared_content_size() {
     let payload = b"with a content size"; // 19 bytes
     let frame = encode(payload, Profile::Canonical).unwrap();
@@ -485,6 +541,10 @@ fn canonical_includes_a_declared_content_size() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "exercises libzstd FFI (ZSTD_createCCtx / ZSTD_decompressCCtx), which Miri cannot execute"
+)]
 fn canonical_includes_a_frame_checksum() {
     // The accept path requires has_checksum=true; inspect would have returned
     // MISSING_CHECKSUM otherwise. So a successful inspect is the assertion.
@@ -493,6 +553,10 @@ fn canonical_includes_a_frame_checksum() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "exercises libzstd FFI (ZSTD_createCCtx / ZSTD_decompressCCtx), which Miri cannot execute"
+)]
 fn encode_empty_input_produces_a_valid_frame() {
     let frame = encode(&[], Profile::Canonical).unwrap();
     let header = inspect(&frame).unwrap();
@@ -503,6 +567,10 @@ fn encode_empty_input_produces_a_valid_frame() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "exercises libzstd FFI (ZSTD_createCCtx / ZSTD_decompressCCtx), which Miri cannot execute"
+)]
 fn encode_then_verify_against_index_matches_content_size() {
     let input = b"x".repeat(1234);
     let frame = encode(&input, Profile::Canonical).unwrap();
@@ -567,6 +635,10 @@ fn inspect_rejects_a_frame_that_ends_inside_the_content_size_field() {
 // =============================================================================
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "exercises libzstd FFI (ZSTD_createCCtx / ZSTD_decompressCCtx), which Miri cannot execute"
+)]
 fn decode_rejects_an_aggregate_charge_that_would_overflow_u64() {
     // The aggregate is charged *before* any byte is produced, so an
     // aggregate counter already at `u64::MAX` must fail the addition rather
@@ -587,6 +659,10 @@ fn decode_rejects_an_aggregate_charge_that_would_overflow_u64() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "exercises libzstd FFI (ZSTD_createCCtx / ZSTD_decompressCCtx), which Miri cannot execute"
+)]
 fn decode_rejects_a_frame_whose_declared_size_contradicts_its_body() {
     // A frame whose declared content size does not match the bytes it
     // actually carries is rejected by libzstd itself, which is reported as a
@@ -620,6 +696,10 @@ fn decode_rejects_a_frame_whose_declared_size_contradicts_its_body() {
 #[cfg_attr(
     miri,
     ignore = "exercises libzstd FFI (ZSTD_createCCtx), which Miri cannot execute"
+)]
+#[cfg_attr(
+    miri,
+    ignore = "exercises libzstd FFI (ZSTD_createCCtx / ZSTD_decompressCCtx), which Miri cannot execute"
 )]
 fn apply_reports_a_parameter_libzstd_refuses() {
     // `windowLog` is bounded by libzstd; an out-of-range value is rejected by
