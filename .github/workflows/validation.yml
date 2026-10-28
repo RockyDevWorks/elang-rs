@@ -52,7 +52,7 @@ jobs:
     name: Jscpd (copy-paste detection)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # `npx --yes jscpd@3` (Run Jscpd below) runs third-party
           # JS in the post-checkout shell. Disable credential
@@ -84,7 +84,7 @@ jobs:
     name: Gitleaks (secret scanner)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # Gitleaks needs the full git history, not the shallow
           # clone the default checkout uses.
@@ -106,7 +106,7 @@ jobs:
     name: Zizmor (GitHub Actions YAML linter)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # `pip install` (Run Zizmor below) executes arbitrary code
           # in the post-checkout shell. Disable credential persistence
@@ -155,7 +155,7 @@ jobs:
     name: proptest (property-based tests)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # `cargo` runs build scripts (build.rs) and procedural
           # macros from third-party crates. Disable credential
@@ -192,7 +192,7 @@ jobs:
     name: cargo-server-checks (server crate audit)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # `cargo` runs build scripts (build.rs) and procedural
           # macros from third-party crates. Disable credential
@@ -227,7 +227,7 @@ jobs:
     name: cargo-hack (feature flag matrix)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # The `Install cargo-hack` step downloads and runs a
           # third-party release tarball; subsequent `cargo hack`
@@ -267,7 +267,7 @@ jobs:
     name: Miri (Rust undefined behavior detector)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # `cargo` runs build scripts (build.rs) and procedural
           # macros from third-party crates. Disable credential
@@ -294,7 +294,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # `cargo install cargo-mutants` builds a third-party crate
           # from source, executing its build.rs. Subsequent
@@ -348,7 +348,7 @@ jobs:
     name: Lychee (link checker)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         # No `path:` override and no step-level `working-directory`:
         # `actions/checkout` v4 places the repository directly at
         # `$GITHUB_WORKSPACE` (which is also the default step
@@ -390,7 +390,7 @@ jobs:
     name: Syft (SBOM generation)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # `curl | sh` from raw.githubusercontent.com executes a
           # third-party install script in the post-checkout shell.
@@ -430,7 +430,7 @@ jobs:
       security-events: write
       id-token: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
       - uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
@@ -460,7 +460,7 @@ jobs:
     outputs:
       has-js: ${{ steps.scan.outputs.has-js }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - id: scan
         run: |
           # Trigger the placeholder if and only if no JS source is
