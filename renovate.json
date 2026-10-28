@@ -22,6 +22,15 @@
         "docker"
       ],
       "pinDigests": true
+    },
+    {
+      "description": "These actions/repos are pinned to commit SHAs by repo policy (manual control) — disable Renovate's lookup to suppress the github-tags 'Could not determine new digest' failures on the Dependency Dashboard.",
+      "matchPackageNames": [
+        "dtolnay/rust-toolchain",
+        "rustsec/audit-check",
+        "actions/dependency-review-action"
+      ],
+      "enabled": false
     }
   ]
 }
