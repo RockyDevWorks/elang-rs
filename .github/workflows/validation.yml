@@ -130,7 +130,16 @@ jobs:
         with:
           toolchain: nightly
       - name: Install cargo-fuzz
-        run: cargo +nightly install cargo-fuzz --locked --root /usr/local/cargo
+        # Install into the default cargo bin directory
+        # (`$CARGO_HOME/bin`, i.e. `/home/runner/.cargo/bin` on the
+        # GitHub-hosted runner). The elang-hub mirror used
+        # `--root /usr/local/cargo` which fails on the elang-rs runner
+        # (no permission to write to `/usr/local/cargo`); the install
+        # path is added to `PATH` for the smoke-test step that
+        # follows.
+        run: |
+          cargo +nightly install cargo-fuzz --locked
+          echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
       - name: Smoke-test every fuzz target for 10s
         # Mirrors fuzz.yml's `smoke` job. Long-form nightly fuzz
         # campaigns live in fuzz.yml on its daily schedule; this
@@ -285,7 +294,14 @@ jobs:
             ${{ runner.os }}-validation-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}-
             ${{ runner.os }}-validation-${{ github.job }}-cargo-
       - name: Install cargo-mutants
-        run: cargo install cargo-mutants --version 27.1.0 --locked --root /usr/local/cargo
+        # Install into the default cargo bin directory. The
+        # elang-hub mirror used `--root /usr/local/cargo` which
+        # fails on the elang-rs runner (no permission to write to
+        # `/usr/local/cargo`); `cargo-mutants` is on `$PATH` for the
+        # mutation step that follows.
+        run: |
+          cargo install cargo-mutants --version 27.1.0 --locked
+          echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
       - name: Mutate elang-core
         # Mutation testing is intrinsically slow. Scoping to
         # `elang-core` (the workspace's root crate) keeps the run
@@ -303,6 +319,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # GitHub Actions checks the repo out under
+          # `$GITHUB_WORKSPACE/<repo-name>/<repo-name>/`; lychee must
+          # resolve relative links from the repo root, not the
+          # workspace root.
+          path: elang-rs
       - name: Run Lychee
         run: |
           # Binary download from the pinned release tag. Lychee has
