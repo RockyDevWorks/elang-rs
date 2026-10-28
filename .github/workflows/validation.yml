@@ -337,12 +337,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          # GitHub Actions checks the repo out under
-          # `$GITHUB_WORKSPACE/<repo-name>/<repo-name>/`; lychee must
-          # resolve relative links from the repo root, not the
-          # workspace root.
-          path: elang-rs
       - name: Run Lychee
         run: |
           # Binary download from the pinned release tag. Lychee has
@@ -441,7 +435,8 @@ jobs:
           # so a build artifact never trips the guard.
           if find . \
               \( -name node_modules -o -name target -o -name 'fuzz/target' -o -name '.jscpd-report' \) -prune -false \
-              -o -type f \( -name '*.js' -o -name '*.ts' -o -name '*.svelte' -o -name 'package.json' \) \
+              -o -type f \( -name '*.js' -o -name '*.ts' -o -name '*.svelte' -o -name 'package.json' \
+              -o -name '*.jsx' -o -name '*.tsx' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.mts' \) \
               -print -quit | grep -q .; then
             echo 'has-js=true' >> "$GITHUB_OUTPUT"
             echo '::error::JS source detected; install Knip and remove this guard before proceeding.'
