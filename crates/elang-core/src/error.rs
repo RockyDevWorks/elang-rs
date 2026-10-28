@@ -161,6 +161,37 @@ impl Error {
     }
 }
 
+/// Build an [`Error`] with a code, category, stage, message, and an
+/// optional KDL source span.
+///
+/// `span` is the already-projected `KdlSpan` (typically obtained from
+/// `elang_kdl::span::to_kdl_span`) or `None` when the source span is
+/// invalid. When `None`, the diagnostic is built without a span
+/// (synthetic nodes, dropped positions). This is the shared
+/// constructor used by every `*_err_at` helper in `elang-eld`,
+/// `elang-epf`, and `elang-integrity`; the helpers exist to fix each
+/// crate's category and stage, but the construction logic is
+/// identical, so the helper lives here in `elang-core`.
+///
+/// Note: the link to `elang_kdl::span::to_kdl_span` is intentionally
+/// a plain path mention — `elang-core` is dependency-light (ADR 0010)
+/// and does not name `elang-kdl` in scope, so an intra-doc link would
+/// be unresolvable.
+#[must_use]
+pub fn diagnostic_at(
+    code: &'static str,
+    category: Category,
+    stage: u8,
+    message: impl Into<String>,
+    span: Option<KdlSpan>,
+) -> Error {
+    let mut d = Diagnostic::new(code, category, message).with_stage(stage);
+    if let Some(s) = span {
+        d = d.with_span(s);
+    }
+    Error { diagnostic: d }
+}
+
 impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(

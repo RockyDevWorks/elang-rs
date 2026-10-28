@@ -12,7 +12,7 @@
 //! filtering on the registry always matches. The underlying reason survives
 //! in the diagnostic message.
 
-use elang_core::error::{Category, Diagnostic, Error};
+use elang_core::error::{diagnostic_at, Category, Error};
 use elang_kdl::span::{to_kdl_span, SourceSpan};
 
 /// Build an `EPF_SCHEMA` diagnostic pointing at `span`.
@@ -25,11 +25,7 @@ pub(crate) fn epf_err_at(
     message: impl Into<String>,
     span: SourceSpan,
 ) -> Error {
-    let mut d = Diagnostic::new(code, Category::EpfSchema, message).with_stage(10);
-    if let Some(s) = to_kdl_span(span) {
-        d = d.with_span(s);
-    }
-    Error { diagnostic: d }
+    diagnostic_at(code, Category::EpfSchema, 10, message, to_kdl_span(span))
 }
 
 /// Build an `EPF_SCHEMA` diagnostic without a source span.
@@ -42,14 +38,8 @@ pub(crate) fn epf_err(code: &'static str, message: impl Into<String>) -> Error {
 pub(crate) fn from_kdl(err: elang_kdl::ParseError) -> Error {
     let code = err.code().as_str();
     let category = err.category();
-    let span = err.span();
-    let span_kdl = to_kdl_span(span);
     let message = err.message.to_string();
-    let mut d = Diagnostic::new(code, category, message).with_stage(10);
-    if let Some(s) = span_kdl {
-        d = d.with_span(s);
-    }
-    Error { diagnostic: d }
+    diagnostic_at(code, category, 10, message, to_kdl_span(err.span()))
 }
 
 /// Translate an `Error` returned by `elang-core::model::epf` constructors into

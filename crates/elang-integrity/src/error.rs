@@ -18,7 +18,7 @@
 //! unchanged so a consumer filtering on those registry codes continues to
 //! match.
 
-use elang_core::error::{Category, Diagnostic, Error};
+use elang_core::error::{diagnostic_at, Category, Error};
 use elang_kdl::span::{to_kdl_span, SourceSpan};
 
 /// Build an `INTEGRITY` diagnostic pointing at `span`.
@@ -32,11 +32,7 @@ pub(crate) fn integrity_err_at(
     message: impl Into<String>,
     span: SourceSpan,
 ) -> Error {
-    let mut d = Diagnostic::new(code, Category::Integrity, message).with_stage(9);
-    if let Some(s) = to_kdl_span(span) {
-        d = d.with_span(s);
-    }
-    Error { diagnostic: d }
+    diagnostic_at(code, Category::Integrity, 9, message, to_kdl_span(span))
 }
 
 /// Build an `INTEGRITY` diagnostic without a source span.
@@ -57,14 +53,8 @@ pub(crate) fn integrity_err(code: &'static str, message: impl Into<String>) -> E
 pub(crate) fn from_kdl(err: elang_kdl::ParseError) -> Error {
     let code = err.code().as_str();
     let category = err.category();
-    let span = err.span();
-    let span_kdl = to_kdl_span(span);
     let message = err.message.to_string();
-    let mut d = Diagnostic::new(code, category, message).with_stage(9);
-    if let Some(s) = span_kdl {
-        d = d.with_span(s);
-    }
-    Error { diagnostic: d }
+    diagnostic_at(code, category, 9, message, to_kdl_span(err.span()))
 }
 
 #[cfg(test)]

@@ -415,11 +415,7 @@ fn unicode_to_error(violation: UnicodeViolation, span: elang_kdl::span::SourceSp
             scalar as u32
         ),
     };
-    let mut d = elang_core::error::Diagnostic::new(code, Category::Unicode, message).with_stage(9);
-    if let Some(s) = to_kdl_span(span) {
-        d = d.with_span(s);
-    }
-    Error { diagnostic: d }
+    elang_core::error::diagnostic_at(code, Category::Unicode, 9, message, to_kdl_span(span))
 }
 
 fn span_of(v: &KdlValue) -> elang_kdl::span::SourceSpan {
