@@ -10,9 +10,13 @@ finding record must satisfy before the lifecycle can move past
 
 1. **No finding record without a committed reproduction.** Every
    `fuzz/findings/<NNNN>-<slug>.md` entry must link to a `git`-pinned
-   corpus entry in `fuzz/corpus/` that crashes on a clean checkout of
-   `main`. If the corpus cannot be reproduced, the finding is
-   downgraded to a hypothesis and the record is closed without a fix.
+   corpus entry in `fuzz/regressions/<target>/` that crashes on a
+   clean checkout of `main`. If the corpus cannot be reproduced, the
+   finding is downgraded to a hypothesis and the record is closed
+   without a fix. (Rejected inputs the harness already rejects with
+   `Result::Err(_)` are not findings — those live in `fuzz/corpus/`,
+   which is intentionally git-ignored; see `fuzz/findings/README.md`
+   for the full triage procedure.)
 
 2. **No regression test that calls the wrong code path.** When a
    finding is fixed, the regression test must exercise the exact
