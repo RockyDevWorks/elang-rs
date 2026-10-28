@@ -114,16 +114,21 @@ jobs:
         # annotations; a new cache-poisoning or artipacked finding
         # (low confidence) is a review item, not a CI failure.
         #
-        # `--no-deps --require-hashes` pins the wheel by SHA-256 so
-        # the install cannot silently pick up a tampered release
-        # (zizmor has no transitive Python deps, so this is safe).
-        # The hash is the one published by PyPI for the
-        # manylinux_2_28_x86_64 wheel — the platform every
-        # github-hosted `ubuntu-latest` runner uses.
+        # The install is pinned by SHA-256 via a PEP 508 URL with a
+        # `#sha256=<digest>` fragment, plus `--require-hashes` so
+        # pip will refuse to install if the bytes on disk don't
+        # match. This is the only pip CLI shape that lets us pin a
+        # hash without an extra requirements file — pip's `--hash`
+        # flag is a *per-requirement* option, not a CLI option, and
+        # there is no way to attach it to a bare `pkg==X.Y.Z`
+        # requirement on the command line. The wheel is pinned to
+        # the manylinux_2_28_x86_64 build — the platform every
+        # github-hosted `ubuntu-latest` runner uses. zizmor has no
+        # transitive Python deps (`requires_dist: None` per PyPI),
+        # so `--no-deps` is safe.
         run: |
           python -m pip install --no-deps --require-hashes \
-            "zizmor==1.9.0" \
-            --hash=sha256:03e103d64367c265e32ce9122c7d6317eff6df9d04c399d988192d1925881ed1
+            "zizmor @ https://files.pythonhosted.org/packages/1e/ac/fd54df6c4e4f0bf9c16b056e5b7d01efeaebf74b5387f4f545e2ff2c9c49/zizmor-1.9.0-py3-none-manylinux_2_28_x86_64.whl#sha256=03e103d64367c265e32ce9122c7d6317eff6df9d04c399d988192d1925881ed1"
           zizmor --persona=regular --no-exit-codes --format github .github/workflows
 
   cargo-fuzz:
