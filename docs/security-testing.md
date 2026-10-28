@@ -269,19 +269,19 @@ holds, CI is green. Phase 15 also requires the **reactive** side:
 when libFuzzer *does* find a crash, what happens?
 
 - The nightly campaign's `upload-artifacts-on-failure` step in
-  [`.github/workflows/fuzz.yml`](../../.github/workflows/fuzz.yml)
+  [`.github/workflows/fuzz.yml`](../.github/workflows/fuzz.yml)
   packages the `crash-<sha1>` / `timeout-<sha1>` / `oom-<sha1>` /
   `leak-<sha1>` artifact as `fuzz-artifacts-<target>` (7-day
   retention).
 - The triage procedure lives at
-  [`fuzz/findings/README.md`](../../fuzz/findings/README.md). One
+  [`fuzz/findings/README.md`](../fuzz/findings/README.md). One
   finding record per finding (`fuzz/findings/<NNNN>-<slug>.md`),
   one committed reproduction byte sequence per finding
   (`fuzz/regressions/<target>/<NNNN>-<slug>.bin`), one regression
   test per finding
   (`crates/elang-conformance/tests/fuzz_regressions.rs::regression_<target>_<NNNN>`).
 - The audit trail lives at
-  [`fuzz/findings/index.md`](../../fuzz/findings/index.md): one row
+  [`fuzz/findings/index.md`](../fuzz/findings/index.md): one row
   per finding, plus the lifetime campaign totals (executions,
   crashes, peak RSS).
 - The end-to-end procedure, including the discipline ("no finding
