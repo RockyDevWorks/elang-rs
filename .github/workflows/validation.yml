@@ -321,12 +321,16 @@ jobs:
         # `elang-core` (the workspace's root crate) keeps the run
         # under 30 minutes; a future iteration can widen to the
         # whole workspace on a nightly schedule.
-        # `--no-shallow` skips mutants that are already exercised
-        # by an existing test, which trims a meaningful fraction
-        # of cases.
+        #
+        # Note: cargo-mutants v27.1.0 has no `--no-shallow` flag
+        # (removed/renamed upstream — the only `no-*` flag is
+        # `--no-shuffle`). Earlier validation.yml drafts included
+        # `--no-shallow` based on stale elang-hub notes; the flag
+        # is rejected at parse time, which fails the job before any
+        # mutants run.
         run: |
           cargo mutants -p elang-core \
-            --timeout 60 --no-shallow
+            --timeout 60
 
   lychee:
     name: Lychee (link checker)
