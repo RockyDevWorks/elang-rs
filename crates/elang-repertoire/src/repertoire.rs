@@ -549,13 +549,19 @@ mod tests {
         )
     }
 
+    // `#[rustfmt::skip]` keeps the inner `matches!` on a single line
+    // even though it exceeds rustfmt's default 60-char `fn_call_width`.
+    // The split-across-lines form (`matches!(\n    load_from(src),\n
+    // Err(...)\n)`) makes cargo-llvm-cov attribute the macro expansion's
+    // hit count to the *inner* `load_from(src),` line instead of the
+    // macro call itself, so the bare `matches!(` token reports 0 hits
+    // — even though the condition is evaluated correctly. This is a
+    // known llvm-cov macro-line-attribution quirk.
+    #[rustfmt::skip]
     #[track_caller]
     fn assert_codepoint_mismatch(src: &str) {
         assert!(
-            matches!(
-                load_from(src),
-                Err(RepertoireError::CodepointMismatch { .. })
-            ),
+            matches!(load_from(src), Err(RepertoireError::CodepointMismatch { .. })),
             "expected CodepointMismatch, got a different error"
         );
     }
