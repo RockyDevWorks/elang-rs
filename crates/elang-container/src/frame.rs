@@ -633,10 +633,20 @@ fn apply(cctx: &mut CCtx, param: CParameter) -> Result<()> {
 }
 
 #[cfg(test)]
+#[cfg(not(miri))]
 #[allow(
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::indexing_slicing,
     reason = "frame tests build hand-crafted frames with fixed-length slices and assert Err variants; the indices are compile-time constants and the panics are test-failure signals"
 )]
+// Gated under `not(miri)` because every test in `frame::tests` reaches libzstd
+// FFI — either directly via `encode`/`decode`/`apply`, or indirectly through
+// the `valid_canonical`/`valid_minimal`/`valid_windowed` helpers, all of
+// which funnel into `ZSTD_createCCtx` / `ZSTD_decompressCCtx`. Miri refuses
+// to execute foreign functions and aborts with "unsupported operation:
+// can't call foreign function". The Miri job therefore compiles the
+// library and the rest of the test suite (container::footer, container::index,
+// etc.) without exercising frame, since the frame unit under inspection is
+// `encode`/`decode` — both FFI-gated.
 mod tests;
