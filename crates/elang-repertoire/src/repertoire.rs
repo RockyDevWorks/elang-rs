@@ -507,145 +507,163 @@ mod tests {
     // Uncovered-line regression tests
     // -----------------------------------------------------------------------
 
+    /// Build a JSON repertoire document with a single bad scalar field;
+    /// every other field carries the canonical good value. The five
+    /// metadata-style rejection tests share this template so the JSON
+    /// boilerplate is written once.
+    fn bad_repertoire(repertoire_version: u32, unicode_version: &str, ipa_chart: &str) -> String {
+        format!(
+            r#"{{
+            "repertoire_version": {repertoire_version},
+            "unicode_version": "{unicode_version}",
+            "ipa_chart": "{ipa_chart}",
+            "base_symbols": [],
+            "combining_diacritics": [],
+            "spacing_modifiers": []
+        }}"#
+        )
+    }
+
+    /// Build a JSON repertoire document with a single base_symbol that
+    /// carries the given codepoint strings. Used by the two
+    /// `CodepointMismatch` regression tests.
+    fn bad_symbol_repertoire(symbol: &str, codepoints: &[&str]) -> String {
+        let cp_list = codepoints
+            .iter()
+            .map(|c| format!("\"{c}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            r#"{{
+            "repertoire_version": 1,
+            "unicode_version": "18.0.0",
+            "ipa_chart": "2026",
+            "base_symbols": [{{
+                "symbol": "{symbol}",
+                "codepoints": [{cp_list}],
+                "name": ""
+            }}],
+            "combining_diacritics": [],
+            "spacing_modifiers": []
+        }}"#
+        )
+    }
+
+    #[track_caller]
+    fn assert_codepoint_mismatch(src: &str) {
+        assert!(
+            matches!(
+                load_from(src),
+                Err(RepertoireError::CodepointMismatch { .. })
+            ),
+            "expected CodepointMismatch, got a different error"
+        );
+    }
+
+    #[track_caller]
+    fn assert_metadata_err(src: &str, needle: &str) {
+        let err = load_from(src).unwrap_err();
+        assert!(
+            matches!(&err, RepertoireError::Metadata(msg) if msg.contains(needle)),
+            "expected Metadata error mentioning {needle:?}, got {err:?}"
+        );
+    }
+
+    #[track_caller]
+    fn assert_not_sorted(src: &str, inventory: &str) {
+        assert!(
+            matches!(
+                load_from(src),
+                Err(RepertoireError::NotSorted { inventory: inv }) if inv == inventory
+            ),
+            "expected NotSorted({inventory}), got a different error"
+        );
+    }
+
+    #[track_caller]
+    fn assert_duplicate_symbol(src: &str, expected: &str) {
+        let err = load_from(src).unwrap_err();
+        assert!(
+            matches!(&err, RepertoireError::Duplicate { ref symbol } if symbol == expected),
+            "expected Duplicate({expected}), got {err:?}"
+        );
+    }
+
+    /// Build a JSON repertoire document whose `base_symbols` is filled in
+    /// by the caller (raw JSON fragment with no trailing comma).
+    fn base_symbols_repertoire(base_symbols_json: &str) -> String {
+        format!(
+            r#"{{
+            "repertoire_version": 1,
+            "unicode_version": "18.0.0",
+            "ipa_chart": "2026",
+            "base_symbols": [{base_symbols_json}],
+            "combining_diacritics": [],
+            "spacing_modifiers": []
+        }}"#
+        )
+    }
+
     #[test]
     fn rejects_invalid_codepoint_format() {
         // parse_codepoint returns None when the hex string is malformed
         // (e.g. missing U+ prefix) → CodepointMismatch.
-        let src = r#"{
-            "repertoire_version": 1,
-            "unicode_version": "18.0.0",
-            "ipa_chart": "2026",
-            "base_symbols": [{
-                "symbol": "x",
-                "codepoints": ["bad"],
-                "name": ""
-            }],
-            "combining_diacritics": [],
-            "spacing_modifiers": []
-        }"#;
-        assert!(matches!(
-            load_from(src),
-            Err(RepertoireError::CodepointMismatch { .. })
-        ));
+        assert_codepoint_mismatch(&bad_symbol_repertoire("x", &["bad"]));
     }
 
     #[test]
     fn rejects_codepoint_symbol_mismatch() {
         // The declared codepoints do not spell the symbol.
-        let src = r#"{
-            "repertoire_version": 1,
-            "unicode_version": "18.0.0",
-            "ipa_chart": "2026",
-            "base_symbols": [{
-                "symbol": "p",
-                "codepoints": ["U+0062"],
-                "name": ""
-            }],
-            "combining_diacritics": [],
-            "spacing_modifiers": []
-        }"#;
-        assert!(matches!(
-            load_from(src),
-            Err(RepertoireError::CodepointMismatch { .. })
-        ));
+        assert_codepoint_mismatch(&bad_symbol_repertoire("p", &["U+0062"]));
     }
 
     #[test]
     fn rejects_wrong_repertoire_version() {
-        let src = r#"{
-            "repertoire_version": 999,
-            "unicode_version": "18.0.0",
-            "ipa_chart": "2026",
-            "base_symbols": [],
-            "combining_diacritics": [],
-            "spacing_modifiers": []
-        }"#;
-        let err = load_from(src).unwrap_err();
-        assert!(
-            matches!(&err, RepertoireError::Metadata(msg) if msg.contains("repertoire_version")),
-            "expected Metadata error mentioning repertoire_version, got {err:?}"
-        );
+        assert_metadata_err(&bad_repertoire(999, "18.0.0", "2026"), "repertoire_version");
     }
 
     #[test]
     fn rejects_wrong_unicode_version() {
-        let src = r#"{
-            "repertoire_version": 1,
-            "unicode_version": "99.99.99",
-            "ipa_chart": "2026",
-            "base_symbols": [],
-            "combining_diacritics": [],
-            "spacing_modifiers": []
-        }"#;
-        let err = load_from(src).unwrap_err();
-        assert!(
-            matches!(&err, RepertoireError::Metadata(msg) if msg.contains("unicode_version")),
-            "expected Metadata error mentioning unicode_version, got {err:?}"
-        );
+        assert_metadata_err(&bad_repertoire(1, "99.99.99", "2026"), "unicode_version");
     }
 
     #[test]
     fn rejects_wrong_ipa_chart() {
-        let src = r#"{
-            "repertoire_version": 1,
-            "unicode_version": "18.0.0",
-            "ipa_chart": "bad",
-            "base_symbols": [],
-            "combining_diacritics": [],
-            "spacing_modifiers": []
-        }"#;
-        let err = load_from(src).unwrap_err();
-        assert!(
-            matches!(&err, RepertoireError::Metadata(msg) if msg.contains("ipa_chart")),
-            "expected Metadata error mentioning ipa_chart, got {err:?}"
-        );
+        assert_metadata_err(&bad_repertoire(1, "18.0.0", "bad"), "ipa_chart");
     }
 
     #[test]
     fn rejects_unsorted_inventory() {
         // Two entries out of raw-byte order.
-        let src = r#"{
-            "repertoire_version": 1,
-            "unicode_version": "18.0.0",
-            "ipa_chart": "2026",
-            "base_symbols": [
+        assert_not_sorted(
+            &base_symbols_repertoire(
+                r#"
                 {"symbol": "b", "codepoints": ["U+0062"], "name": ""},
                 {"symbol": "a", "codepoints": ["U+0061"], "name": ""}
-            ],
-            "combining_diacritics": [],
-            "spacing_modifiers": []
-        }"#;
-        assert!(matches!(
-            load_from(src),
-            Err(RepertoireError::NotSorted {
-                inventory: "base_symbols"
-            })
-        ));
+            "#,
+            ),
+            "base_symbols",
+        );
     }
 
     #[test]
     fn rejects_duplicate_in_inventory() {
-        let src = r#"{
-            "repertoire_version": 1,
-            "unicode_version": "18.0.0",
-            "ipa_chart": "2026",
-            "base_symbols": [
+        assert_duplicate_symbol(
+            &base_symbols_repertoire(
+                r#"
                 {"symbol": "a", "codepoints": ["U+0061"], "name": ""},
                 {"symbol": "a", "codepoints": ["U+0061"], "name": ""}
-            ],
-            "combining_diacritics": [],
-            "spacing_modifiers": []
-        }"#;
-        assert!(matches!(
-            load_from(src),
-            Err(RepertoireError::Duplicate { ref symbol }) if symbol == "a"
-        ));
+            "#,
+            ),
+            "a",
+        );
     }
 
     #[test]
     fn rejects_duplicate_global() {
         // Same symbol in base_symbols and combining_diacritics.
-        let src = r#"{
+        assert_duplicate_symbol(
+            r#"{
             "repertoire_version": 1,
             "unicode_version": "18.0.0",
             "ipa_chart": "2026",
@@ -656,11 +674,9 @@ mod tests {
                 {"symbol": "a", "codepoints": ["U+0061"], "name": ""}
             ],
             "spacing_modifiers": []
-        }"#;
-        assert!(matches!(
-            load_from(src),
-            Err(RepertoireError::Duplicate { ref symbol }) if symbol == "a"
-        ));
+        }"#,
+            "a",
+        );
     }
 
     #[test]
