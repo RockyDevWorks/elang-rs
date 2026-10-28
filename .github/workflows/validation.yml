@@ -53,6 +53,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # `npx --yes jscpd@3` (Run Jscpd below) runs third-party
+          # JS in the post-checkout shell. Disable credential
+          # persistence so a malicious npm dependency cannot read
+          # the workflow token via the post-checkout git config.
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '26'
@@ -101,6 +107,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # `pip install` (Run Zizmor below) executes arbitrary code
+          # in the post-checkout shell. Disable credential persistence
+          # so a malicious wheel cannot read the workflow token via
+          # the post-checkout git config.
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12'
@@ -131,51 +143,25 @@ jobs:
             "zizmor @ https://files.pythonhosted.org/packages/1e/ac/fd54df6c4e4f0bf9c16b056e5b7d01efeaebf74b5387f4f545e2ff2c9c49/zizmor-1.9.0-py3-none-manylinux_2_28_x86_64.whl#sha256=03e103d64367c265e32ce9122c7d6317eff6df9d04c399d988192d1925881ed1"
           zizmor --persona=regular --no-exit-codes --format github .github/workflows
 
-  cargo-fuzz:
-    name: cargo-fuzz (Rust fuzzing)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          # fuzz.yml uses a wider set of paths; reuse the same fetch
-          # depth so `git log` reaches fuzz-corpus seed history.
-          fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
-        with:
-          toolchain: nightly
-      - name: Install cargo-fuzz
-        # Install into the default cargo bin directory
-        # (`$CARGO_HOME/bin`, i.e. `/home/runner/.cargo/bin` on the
-        # GitHub-hosted runner). The elang-hub mirror used
-        # `--root /usr/local/cargo` which fails on the elang-rs runner
-        # (no permission to write to `/usr/local/cargo`); the install
-        # path is added to `PATH` for the smoke-test step that
-        # follows.
-        run: |
-          cargo +nightly install cargo-fuzz --locked
-          echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
-      - name: Smoke-test every fuzz target for 10s
-        # Mirrors fuzz.yml's `smoke` job. Long-form nightly fuzz
-        # campaigns live in fuzz.yml on its daily schedule; this
-        # menu job is a "the fuzz wiring still builds" check that
-        # runs on every PR. 10s per target is enough to surface a
-        # compile or instrumentation regression without slowing the
-        # suite.
-        run: |
-          set -euo pipefail
-          targets=$(ls fuzz/fuzz_targets/ | sed 's/\.rs$//')
-          for t in ${targets}; do
-            echo "::group::fuzz ${t}"
-            cargo +nightly fuzz run "${t}" -- -max_total_time=10 -runs=1000 \
-              || { echo "::error::fuzz target ${t} failed"; exit 1; }
-            echo "::endgroup::"
-          done
+  # `cargo-fuzz` smoke tests live in `.github/workflows/fuzz.yml`,
+  # which runs the same smoke check on every PR that touches
+  # `fuzz/`, `elang-core`, `elang-container`, or `elang-unicode`.
+  # A second cargo-fuzz job here would re-run on every PR
+  # (including documentation-only ones) and add minutes of
+  # nightly install + target compilation for no extra coverage.
+  # See `fuzz.yml` for the actual gate.
 
   proptest:
     name: proptest (property-based tests)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # `cargo` runs build scripts (build.rs) and procedural
+          # macros from third-party crates. Disable credential
+          # persistence so a malicious build script cannot read the
+          # workflow token via the post-checkout git config.
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: stable
@@ -207,6 +193,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # `cargo` runs build scripts (build.rs) and procedural
+          # macros from third-party crates. Disable credential
+          # persistence so a malicious build script cannot read the
+          # workflow token via the post-checkout git config.
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: stable
@@ -236,6 +228,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # The `Install cargo-hack` step downloads and runs a
+          # third-party release tarball; subsequent `cargo hack`
+          # invocations execute build scripts. Disable credential
+          # persistence so neither can read the workflow token via
+          # the post-checkout git config.
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: stable
@@ -269,6 +268,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # `cargo` runs build scripts (build.rs) and procedural
+          # macros from third-party crates. Disable credential
+          # persistence so a malicious build script cannot read the
+          # workflow token via the post-checkout git config.
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: nightly
@@ -290,6 +295,13 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # `cargo install cargo-mutants` builds a third-party crate
+          # from source, executing its build.rs. Subsequent
+          # `cargo mutants` invocations also run build scripts.
+          # Disable credential persistence so neither can read the
+          # workflow token via the post-checkout git config.
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: stable
@@ -337,13 +349,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          # GitHub Actions checks the repo out under
-          # `$GITHUB_WORKSPACE/<repo-name>/<repo-name>/`; lychee must
-          # resolve relative links from the repo root, not the
-          # workspace root.
-          path: elang-rs
+        # No `path:` override: GitHub Actions checks the repo out at
+        # `$GITHUB_WORKSPACE/elang-rs/` by default, which matches the
+        # repo name. Each subsequent step's `working-directory` is
+        # set to `elang-rs` so lychee resolves `.lycheeignore` and
+        # relative links from the repo root rather than from the
+        # workspace root.
       - name: Run Lychee
+        working-directory: elang-rs
         run: |
           # Binary download from the pinned release tag. Lychee has
           # no npm or pip distribution; the official install path is
@@ -376,6 +389,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # `curl | sh` from raw.githubusercontent.com executes a
+          # third-party install script in the post-checkout shell.
+          # Disable credential persistence so a malicious script
+          # cannot read the workflow token via the post-checkout
+          # git config.
+          persist-credentials: false
       - name: Generate SBOM
         run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/syft/v1.55.0/install.sh \
@@ -438,10 +458,20 @@ jobs:
         run: |
           # Trigger the placeholder if and only if no JS source is
           # committed to the repo. Target/fuzz outputs are excluded
-          # so a build artifact never trips the guard.
+          # so a build artifact never trips the guard. The
+          # extension list covers every common JS/TS surface:
+          # `.js`/`.jsx`/`.mjs`/`.cjs`/`.cts` for ESM/CommonJS,
+          # `.ts`/`.tsx`/`.mts` for TypeScript, `.svelte`/`.vue`
+          # for component frameworks, and `package.json` for the
+          # npm manifest.
           if find . \
               \( -name node_modules -o -name target -o -name 'fuzz/target' -o -name '.jscpd-report' \) -prune -false \
-              -o -type f \( -name '*.js' -o -name '*.ts' -o -name '*.svelte' -o -name 'package.json' \) \
+              -o -type f \( \
+                -name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.cts' \
+                -o -name '*.ts' -o -name '*.tsx' -o -name '*.mts' \
+                -o -name '*.svelte' -o -name '*.vue' \
+                -o -name 'package.json' \
+              \) \
               -print -quit | grep -q .; then
             echo 'has-js=true' >> "$GITHUB_OUTPUT"
             echo '::error::JS source detected; install Knip and remove this guard before proceeding.'
