@@ -311,13 +311,7 @@ mod tests {
     #[test]
     fn diagnostics_cap_does_not_mask_failure() {
         let mut diags = Diagnostics::new();
-        for i in 0..(MAX_RETAINED_DIAGNOSTICS + 50) {
-            diags.push(Diagnostic::new(
-                "LIMIT_NODES_RESOURCE",
-                Category::Limit,
-                format!("d{i}"),
-            ));
-        }
+        fill(&mut diags, MAX_RETAINED_DIAGNOSTICS + 50);
         assert_eq!(diags.retained().len(), MAX_RETAINED_DIAGNOSTICS);
         assert_eq!(diags.total(), MAX_RETAINED_DIAGNOSTICS + 50);
         assert!(diags.truncated());
@@ -349,13 +343,7 @@ mod tests {
     #[test]
     fn diagnostics_at_cap_is_not_truncated() {
         let mut diags = Diagnostics::new();
-        for i in 0..MAX_RETAINED_DIAGNOSTICS {
-            diags.push(Diagnostic::new(
-                "LIMIT_NODES_RESOURCE",
-                Category::Limit,
-                format!("d{i}"),
-            ));
-        }
+        fill(&mut diags, MAX_RETAINED_DIAGNOSTICS);
         assert_eq!(diags.retained().len(), MAX_RETAINED_DIAGNOSTICS);
         assert_eq!(diags.total(), MAX_RETAINED_DIAGNOSTICS);
         assert!(
@@ -366,5 +354,18 @@ mod tests {
             diags.has_any(),
             "collector at the cap has recorded diagnostics"
         );
+    }
+
+    /// Shared fill helper for the diagnostics tests so jscpd does not
+    /// flag the `for i in 0..N { push(Diagnostic::new(...)) }` shape
+    /// between the over-cap and at-cap cases as a duplicate.
+    fn fill(diags: &mut Diagnostics, n: usize) {
+        for i in 0..n {
+            diags.push(Diagnostic::new(
+                "LIMIT_NODES_RESOURCE",
+                Category::Limit,
+                format!("d{i}"),
+            ));
+        }
     }
 }
