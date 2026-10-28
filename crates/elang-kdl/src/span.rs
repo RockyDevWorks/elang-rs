@@ -16,6 +16,30 @@
 
 use core::fmt;
 
+use elang_core::error::KdlSpan;
+
+/// Convert a [`SourceSpan`] into the workspace's [`KdlSpan`] type.
+///
+/// Returns `None` for an invalid span (e.g. synthetic AST node with no real
+/// source position), so the caller can build the diagnostic without a span
+/// instead of constructing one from a sentinel.
+///
+/// This is the single canonical implementation of the conversion; all
+/// diagnostic helpers that need to project a KDL source span into a
+/// workspace `KdlSpan` call through this function (was duplicated across
+/// `elang-eld`, `elang-epf`, and `elang-integrity` error modules before
+/// issue #77 consolidated them here).
+pub fn to_kdl_span(span: SourceSpan) -> Option<KdlSpan> {
+    if span.is_invalid() {
+        return None;
+    }
+    Some(KdlSpan {
+        line: span.start.line,
+        column: span.start.column,
+        length: span.len(),
+    })
+}
+
 /// Byte offsets immediately after each KDL newline, preceded by zero.
 /// CRLF is one newline; all other KDL newline scalars are recognized too.
 pub(crate) fn line_starts(input: &[u8]) -> impl Iterator<Item = usize> + '_ {
@@ -249,5 +273,27 @@ mod tests {
     fn span_invalid_slice_returns_none() {
         let s = SourceSpan::INVALID;
         assert_eq!(s.slice(b"abc"), None);
+    }
+
+    #[test]
+    fn to_kdl_span_returns_none_for_invalid_span() {
+        assert_eq!(to_kdl_span(SourceSpan::INVALID), None);
+    }
+
+    #[test]
+    fn to_kdl_span_preserves_line_column_and_length() {
+        // 'K' on line 2 starts at byte 6, column 1 (1-based). When
+        // `to_kdl_span` returns `None`, the sentinel (line=0) makes the
+        // first assertion fail loudly so the test cannot silently pass.
+        let input = b"first\nKDOC {\n";
+        let s = SourceSpan::from_range(input, 6, 11);
+        let k = to_kdl_span(s).unwrap_or(KdlSpan {
+            line: 0,
+            column: 0,
+            length: 0,
+        });
+        assert_eq!(k.line, 2);
+        assert_eq!(k.column, 1);
+        assert_eq!(k.length, 5);
     }
 }

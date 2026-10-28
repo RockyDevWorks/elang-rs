@@ -12,21 +12,21 @@
 //! filtering on the registry always matches. The underlying reason survives
 //! in the diagnostic message.
 
-use elang_core::error::{Category, Diagnostic, Error, KdlSpan};
-use elang_kdl::span::SourceSpan;
+use elang_core::error::{Category, Diagnostic, Error};
+use elang_kdl::span::{to_kdl_span, SourceSpan};
 
 /// Build an `EPF_SCHEMA` diagnostic pointing at `span`.
 ///
 /// The category is always [`Category::EpfSchema`] and the stage is `10`; the
 /// span is dropped when it is [`SourceSpan::INVALID`] (synthetic nodes) or
-/// cannot be expressed as a [`KdlSpan`].
+/// cannot be expressed as a `KdlSpan` (see [`elang_kdl::span::to_kdl_span`]).
 pub(crate) fn epf_err_at(
     code: &'static str,
     message: impl Into<String>,
     span: SourceSpan,
 ) -> Error {
     let mut d = Diagnostic::new(code, Category::EpfSchema, message).with_stage(10);
-    if let Some(s) = span_to_kdl(span) {
+    if let Some(s) = to_kdl_span(span) {
         d = d.with_span(s);
     }
     Error { diagnostic: d }
@@ -37,33 +37,13 @@ pub(crate) fn epf_err(code: &'static str, message: impl Into<String>) -> Error {
     epf_err_at(code, message, SourceSpan::INVALID)
 }
 
-/// Map a KDL `SourceSpan` onto the `KdlSpan` carried by `Diagnostic`.
-///
-/// Returns `None` for any invalid span (one whose endpoints carry the
-/// `Position::INVALID` sentinel); the KDL span records 1-based line/column
-/// plus byte length, which is what every other diagnostic in the reference
-/// implementation uses.
-fn span_to_kdl(span: SourceSpan) -> Option<KdlSpan> {
-    if span.is_invalid() {
-        return None;
-    }
-    let length = span.len();
-    // `SourceSpan::len` already returns 0 when the endpoints are invalid,
-    // so the value is always in range.
-    Some(KdlSpan {
-        line: span.start.line,
-        column: span.start.column,
-        length,
-    })
-}
-
 /// Translate a `ParseError` from `elang-kdl` into the crate-wide `Error` type
 /// with its span attached.
 pub(crate) fn from_kdl(err: elang_kdl::ParseError) -> Error {
     let code = err.code().as_str();
     let category = err.category();
     let span = err.span();
-    let span_kdl = span_to_kdl(span);
+    let span_kdl = to_kdl_span(span);
     let message = err.message.to_string();
     let mut d = Diagnostic::new(code, category, message).with_stage(10);
     if let Some(s) = span_kdl {
@@ -116,32 +96,6 @@ pub(crate) fn from_core(err: Error) -> Error {
 )]
 mod tests {
     use super::*;
-    use elang_kdl::span::Position;
-
-    #[test]
-    fn span_to_kdl_invalid_returns_none() {
-        assert!(span_to_kdl(SourceSpan::INVALID).is_none());
-    }
-
-    #[test]
-    fn span_to_kdl_valid_preserves_position() {
-        let s = SourceSpan {
-            start: Position {
-                byte: 4,
-                line: 2,
-                column: 3,
-            },
-            end: Position {
-                byte: 9,
-                line: 2,
-                column: 8,
-            },
-        };
-        let k = span_to_kdl(s).unwrap();
-        assert_eq!(k.line, 2);
-        assert_eq!(k.column, 3);
-        assert_eq!(k.length, 5);
-    }
 
     #[test]
     fn from_core_remaps_identifier_codes() {
