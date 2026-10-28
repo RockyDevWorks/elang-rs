@@ -25,6 +25,13 @@
 # shorter, more honest about the tool boundary, and runs without
 # `cargo install` first.
 #
+# Coverage matches `.github/workflows/validation.yml` job-for-job for
+# everything except the platform-specific release/Package/Release
+# workflows (out of scope for local validation). Optional checks are
+# skipped when their tool/plugin/toolchain is missing; the summary
+# reports each skip so a contributor can install the missing piece
+# and re-run.
+#
 # Mirrors `RockyDevWorks/elang-hub/scripts/validate-local.sh` (merged
 # as elang-hub PR #35) so the two repos stay aligned on the 13-tool
 # menu.
@@ -42,17 +49,22 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
 
 # Required Rust-quality checks. These always run because they are part
-# of the project's own toolchain.
+# of the project's own toolchain. `test` mirrors the CI configuration
+# in `.github/workflows/ci.yml` (cargo test --workspace --all-features)
+# so a feature-gated test cannot pass locally and fail in CI.
 REQUIRED_CHECKS=(
     "fmt:cargo fmt --all -- --check"
     "clippy:cargo clippy --workspace --all-targets --all-features -- -D warnings"
-    "test:cargo test --workspace"
+    "test:cargo test --workspace --all-features"
 )
 
-# Optional Rust checks. Skipped via --skip or by name.
+# Optional Rust checks that don't need extra plugins. Release-mode
+# conformance is added here so the same code paths CI exercises in
+# release get coverage locally; behavior in dev vs release can diverge
+# (overflow checks, debug assertions, panics in `unwrap` paths).
 OPTIONAL_CARGO_CHECKS=(
     "doc:cargo doc --workspace --no-deps -q"
-    "audit:cargo audit"
+    "release-conformance:cargo test --release -p elang-conformance"
 )
 
 # Tool-gated checks. Each entry maps a display name to the binary that
@@ -77,20 +89,27 @@ TOOL_CHECKS=(
     "syft:syft scan dir:. -o spdx-json > /dev/null"
 )
 
-# Tools that have no work to do on elang-rs because the repo has no
-# JS/TS source. Listed for menu parity with elang-hub (which lists the
-# inverse set). The local script reports each as "not applicable"
-# rather than attempting to run it.
-JS_ONLY_TOOLS=(
-    "knip"
+# Tools that require the nightly toolchain plus a special subcommand
+# (`miri`, `fuzz`). Listed separately so the script can probe for the
+# nightly toolchain with `rustup toolchain list` before attempting
+# them — invoking `cargo +nightly <subcommand>` without nightly
+# installed is a confusing failure ("error: toolchain 'nightly' is
+# not installed") that masquerades as a test failure.
+NIGHTLY_CHECKS=(
+    "miri:cargo +nightly miri test -p elang-container"
+    "fuzz-smoke:cargo +nightly fuzz check"
 )
 
 # Tools that require cargo subcommands not on the default toolchain.
 # These get their own gate because the binary is `cargo hack`,
-# `cargo mutants`, etc., which `command -v` cannot find.
+# `cargo mutants`, etc., which `command -v` cannot find. `cargo-audit`
+# is gated the same way so a missing plugin reports a clean skip
+# instead of a confusing "no such subcommand" failure.
 CARGO_PLUGIN_CHECKS=(
     "cargo-hack:cargo hack check --workspace --each-feature --no-dev-deps"
-    "cargo-mutants:cargo mutants -p elang-core --timeout 60 --no-shallow"
+    "cargo-mutants:cargo mutants -p elang-core --timeout 60"
+    "audit:cargo audit"
+    "server-checks:cargo server-checks run --manifest-path Cargo.toml --check all"
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -280,9 +299,46 @@ for entry in "${CARGO_PLUGIN_CHECKS[@]}"; do
     run_check "${name}" "${cmd}" || true
 done
 
-for name in "${JS_ONLY_TOOLS[@]}"; do
-    na_check "${name}" "no JS/TS source in this repo (see RockyDevWorks/elang-hub)"
+for entry in "${NIGHTLY_CHECKS[@]}"; do
+    name="${entry%%:*}"
+    cmd="${entry#*:}"
+    if is_skipped "${name}"; then
+        skip_check "${name}" "explicit --skip"
+        continue
+    fi
+    # Probe the nightly toolchain; the subcommand (miri, fuzz) is also
+    # only present on nightly. `rustup toolchain list` returns a single
+    # line per installed toolchain.
+    if ! rustup toolchain list 2>/dev/null | grep -qx 'nightly-x86_64-unknown-linux-gnu' \
+       && ! rustup toolchain list 2>/dev/null | grep -q '^nightly'; then
+        skip_check "${name}" "nightly toolchain not installed (run: rustup toolchain install nightly)"
+        continue
+    fi
+    run_check "${name}" "${cmd}" || true
 done
+
+# JS source guard — mirrors the `_js-source-guard` job in
+# `.github/workflows/validation.yml`. If any JS/TS source lands in
+# the repo, Knip (the JS-only tool) becomes applicable instead of
+# not-applicable, and a contributor must wire up Knip or the CI
+# `Knip` job will block the PR. Excluded paths mirror the workflow:
+# build outputs and cache directories that legitimately hold JS files
+# without counting as project source.
+js_source=$(find . \
+    -type d \( -name target -o -name node_modules -o -name fuzz -o -name '.git' \) -prune -o \
+    -type f \( \
+        -name '*.js' -o -name '*.jsx' -o -name '*.ts' -o -name '*.tsx' \
+        -o -name '*.mjs' -o -name '*.cjs' -o -name '*.mts' -o -name '*.cts' \
+        -o -name '*.svelte' -o -name '*.vue' -o -name 'package.json' \
+    \) -print 2>/dev/null | head -1)
+if [[ -n "${js_source}" ]]; then
+    printf '%s::error::JS/TS source detected in repo: %s — Knip gate is now live and required%s\n' \
+        "${C_RED}" "${js_source}" "${C_RESET}" >&2
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    FAILED_CHECKS+=("js-source-guard")
+else
+    na_check "knip" "no JS/TS source in this repo (see RockyDevWorks/elang-hub)"
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Summary
