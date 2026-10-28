@@ -291,17 +291,11 @@ mod tests {
     /// `..` are needed to reach the workspace root before descending into
     /// `fixtures/`.
     fn reference_index() -> Vec<u8> {
-        include_bytes!(
-            "../../../fixtures/valid/container/minimal-archive/index.bin"
-        )
-        .to_vec()
+        include_bytes!("../../../fixtures/valid/container/minimal-archive/index.bin").to_vec()
     }
 
     fn reference_archive() -> Vec<u8> {
-        include_bytes!(
-            "../../../fixtures/valid/container/minimal-archive/archive.elang"
-        )
-        .to_vec()
+        include_bytes!("../../../fixtures/valid/container/minimal-archive/archive.elang").to_vec()
     }
 
     // ---- T0304: decode ----
@@ -510,14 +504,11 @@ mod tests {
         // and from any working directory. Paths are resolved
         // relative to this source file (see `reference_index` for the
         // directory-walk rationale).
-        let footer_bytes: Vec<u8> = include_bytes!(
-            "../../../fixtures/valid/container/minimal-archive/footer.bin"
-        )
-        .to_vec();
-        let archive: Vec<u8> = include_bytes!(
-            "../../../fixtures/valid/container/minimal-archive/archive.elang"
-        )
-        .to_vec();
+        let footer_bytes: Vec<u8> =
+            include_bytes!("../../../fixtures/valid/container/minimal-archive/footer.bin").to_vec();
+        let archive: Vec<u8> =
+            include_bytes!("../../../fixtures/valid/container/minimal-archive/archive.elang")
+                .to_vec();
 
         assert_eq!(footer_bytes, GOLDEN_FOOTER.to_vec(), "footer.bin drifted");
         assert_eq!(
