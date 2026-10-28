@@ -300,6 +300,36 @@ mod tests {
         assert!(fielded.when().is_some());
     }
 
+    /// Distinguish `&&` from `||` in `is_bare`. With `&&`, an allophone that
+    /// carries exactly one of the optional fields is not bare (one operand
+    /// is true, the other is false → `true && false` is false). With `||`,
+    /// the same allophone would incorrectly be reported as bare (`true ||
+    /// false` is true). The existing `allophone_bare_vs_fielded` test only
+    /// covers the (None, None) and (Some, Some) cases, where both operators
+    /// agree, so cargo-mutants reports the substitution as MISSED until a
+    /// mixed case is exercised.
+    #[test]
+    fn allophone_with_one_field_is_not_bare() {
+        let when = WhenCondition::new(vec![Condition::predicate(Predicate::WordPosition(
+            WordPosition::Initial,
+        ))])
+        .unwrap();
+
+        // roman=None, when=Some — not bare under `&&`, bare under `||`.
+        let only_when = Allophone::new(ipa("a"), None, Some(when.clone()));
+        assert!(
+            !only_when.is_bare(),
+            "allophone with only a `when` clause is fielded, not bare"
+        );
+
+        // roman=Some, when=None — not bare under `&&`, bare under `||`.
+        let only_roman = Allophone::new(ipa("b"), Some(roman("b")), None);
+        assert!(
+            !only_roman.is_bare(),
+            "allophone with only an explicit `roman` is fielded, not bare"
+        );
+    }
+
     #[test]
     fn root_rejects_too_many_allophones() {
         let allos: Vec<Allophone> = (0..17)

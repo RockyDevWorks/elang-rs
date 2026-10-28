@@ -326,4 +326,45 @@ mod tests {
             "truncation must never hide that failures exist"
         );
     }
+
+    /// Fresh collectors report no truncation and no recorded diagnostics.
+    /// cargo-mutants mutates both predicates to `true` constants and to
+    /// `>=`; both falsified forms are caught by these assertions (an empty
+    /// collector must report `truncated() == false` and `has_any() == false`).
+    #[test]
+    fn diagnostics_fresh_collector_reports_no_truncation_or_failures() {
+        let diags = Diagnostics::new();
+        assert!(!diags.truncated());
+        assert!(!diags.has_any());
+        assert_eq!(diags.total(), 0);
+        assert!(diags.retained().is_empty());
+    }
+
+    /// Boundary case: exactly `MAX_RETAINED_DIAGNOSTICS` items are all
+    /// retained (no truncation), but the collector must still report
+    /// `has_any() == true` so a non-empty result cannot be misread as a
+    /// clean run. cargo-mutants mutates `truncated()`'s `>` to `>=`; the
+    /// `==` boundary case distinguishes the two forms (with `>=`, the
+    /// boundary would report `truncated() == true`, which is wrong).
+    #[test]
+    fn diagnostics_at_cap_is_not_truncated() {
+        let mut diags = Diagnostics::new();
+        for i in 0..MAX_RETAINED_DIAGNOSTICS {
+            diags.push(Diagnostic::new(
+                "LIMIT_NODES_RESOURCE",
+                Category::Limit,
+                format!("d{i}"),
+            ));
+        }
+        assert_eq!(diags.retained().len(), MAX_RETAINED_DIAGNOSTICS);
+        assert_eq!(diags.total(), MAX_RETAINED_DIAGNOSTICS);
+        assert!(
+            !diags.truncated(),
+            "collector at the cap is not truncated: nothing was dropped"
+        );
+        assert!(
+            diags.has_any(),
+            "collector at the cap has recorded diagnostics"
+        );
+    }
 }

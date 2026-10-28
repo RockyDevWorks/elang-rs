@@ -67,8 +67,11 @@ impl Stage {
         if next > Stage::VALIDATE_CEILING as u8 {
             return None;
         }
+        // No `Stage` variant has discriminant `0`, so the `next == 0` branch
+        // is unreachable and is omitted to avoid an equivalent mutant
+        // (`1 => Some(Stage::Preflight)` is dead code and `cargo-mutants`
+        // reports it as MISSED because deletion produces identical behavior).
         match next {
-            1 => Some(Stage::Preflight),
             2 => Some(Stage::Header),
             3 => Some(Stage::Footer),
             4 => Some(Stage::IndexHash),
