@@ -2,10 +2,10 @@
 #
 # scripts/validate-local.sh — the local validation suite for ELANG-rs.
 #
-# Runs every check that CI runs on a push or PR, locally, so a contributor
-# can confirm green before pushing. The same set of tools backs the
-# `validation` workflow in `.github/workflows/validation.yml`; if a check
-# passes here, the matching CI job will pass.
+# Runs a local subset of CI checks with available tools. It omits the
+# workflow's fuzz smoke test, release-mode conformance tests, server-specific
+# checks, Miri, and Scorecard, plus CI build, MSRV, Docker, and coverage jobs.
+# A passing summary covers only the checks listed below; CI remains required.
 #
 # Usage:
 #   scripts/validate-local.sh                # run everything that is available
@@ -25,9 +25,8 @@
 # shorter, more honest about the tool boundary, and runs without
 # `cargo install` first.
 #
-# Mirrors `RockyDevWorks/elang-hub/scripts/validate-local.sh` (merged
-# as elang-hub PR #35) so the two repos stay aligned on the 13-tool
-# menu.
+# Adapted from `RockyDevWorks/elang-hub/scripts/validate-local.sh`
+# (merged as elang-hub PR #35).
 
 set -uo pipefail
 
@@ -46,13 +45,12 @@ cd "${REPO_ROOT}"
 REQUIRED_CHECKS=(
     "fmt:cargo fmt --all -- --check"
     "clippy:cargo clippy --workspace --all-targets --all-features -- -D warnings"
-    "test:cargo test --workspace"
+    "test:cargo test --workspace --all-features"
 )
 
 # Optional Rust checks. Skipped via --skip or by name.
 OPTIONAL_CARGO_CHECKS=(
     "doc:cargo doc --workspace --no-deps -q"
-    "audit:cargo audit"
 )
 
 # Tool-gated checks. Each entry maps a display name to the binary that
@@ -79,8 +77,8 @@ TOOL_CHECKS=(
 
 # Tools that have no work to do on elang-rs because the repo has no
 # JS/TS source. Listed for menu parity with elang-hub (which lists the
-# inverse set). The local script reports each as "not applicable"
-# rather than attempting to run it.
+# inverse set). The local script verifies that no source is present
+# before reporting each tool as "not applicable".
 JS_ONLY_TOOLS=(
     "knip"
 )
@@ -89,8 +87,9 @@ JS_ONLY_TOOLS=(
 # These get their own gate because the binary is `cargo hack`,
 # `cargo mutants`, etc., which `command -v` cannot find.
 CARGO_PLUGIN_CHECKS=(
+    "audit:cargo audit"
     "cargo-hack:cargo hack check --workspace --each-feature --no-dev-deps"
-    "cargo-mutants:cargo mutants -p elang-core --timeout 60 --no-shallow"
+    "cargo-mutants:cargo mutants -p elang-core --timeout 60"
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -280,8 +279,25 @@ for entry in "${CARGO_PLUGIN_CHECKS[@]}"; do
     run_check "${name}" "${cmd}" || true
 done
 
+js_source_guard() {
+    # Keep the source patterns and generated-directory exclusions in sync
+    # with validation.yml's _js-source-guard.
+    if find . \
+        \( -name node_modules -o -name target -o -name 'fuzz/target' -o -name '.jscpd-report' \) -prune -false \
+        -o -type f \( -name '*.js' -o -name '*.ts' -o -name '*.svelte' -o -name 'package.json' \
+        -o -name '*.jsx' -o -name '*.tsx' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.mts' \) \
+        -print -quit | grep -q .; then
+        echo '::error::JS source detected; install Knip and remove this guard before proceeding.'
+        return 1
+    fi
+}
+
 for name in "${JS_ONLY_TOOLS[@]}"; do
-    na_check "${name}" "no JS/TS source in this repo (see RockyDevWorks/elang-hub)"
+    if js_source_guard; then
+        na_check "${name}" "no JS/TS source in this repo (see RockyDevWorks/elang-hub)"
+    else
+        run_check "${name}" "false" || true
+    fi
 done
 
 # ─────────────────────────────────────────────────────────────────────────────

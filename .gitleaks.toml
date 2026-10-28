@@ -2,11 +2,10 @@
 #
 # `gitleaks detect --source .` is run by the validation workflow
 # (and locally via `scripts/validate-local.sh`) against the full
-# git history, not just the diff. The allowlist paths cover
-# everything that lives in this repo's tree but is not application
-# source: build outputs, generated docs site, vendored toolchains,
-# and the spec/decision corpora. Any credential URL in source,
-# tests, or human-written docs is still flagged.
+# git history, not just the diff. Path exemptions cover generated
+# build outputs, the generated docs site, and fuzz/property-test
+# artifacts. Source, tests, specs, decisions, and human-written
+# documentation are scanned.
 #
 # The Hub's sister config (`RockyDevWorks/elang-hub/.gitleaks.toml`)
 # is the menu reference; this file mirrors its structure with
@@ -21,14 +20,9 @@ useDefault = true
 [allowlist]
 description = "ELANG-rs safe allowlist"
 paths = [
-	'''docs/public/.*''',
-	'''\.kiro/.*''',
-	'''README\.md''',
-	'''SECURITY\.md''',
-	'''CHANGELOG\.md''',
-	'''CODE_OF_CONDUCT\.md''',
-	'''decisions/.*''',
-	'''specs/.*''',
+	# Pinned public HTML snapshot (SHA-256 in specs/sources/SOURCES.md).
+	# Its embedded Drupal theme_token is public website metadata.
+	'''^specs/sources/ipa-association-full-chart\.html$''',
 	'''fuzz/corpus/.*''',
 	'''fuzz/artifacts/.*''',
 	'''crates/.*/proptest-regressions/.*''',
@@ -39,22 +33,18 @@ paths = [
 ]
 regexes = [
 	# `user:pass@host` test fixtures with obviously-fake credentials.
-	'''^https?://user:pass@(fake-host|host)\.invalid$''',
+	'''^https?://user:pass@(fake-host|host)\.invalid(?:$|[^@a-zA-Z0-9.:\[\]-])$''',
 	# The local scanner regression fixture uses this exact endpoint.
-	'''^http://user:pass@localhost:3000$'''
+	'''^http://user:pass@localhost:3000(?:$|[^@a-zA-Z0-9.:\[\]-])$'''
 ]
-# Allow a small set of intentional example URLs in docs and tests.
+# Exempt only these exact synthetic endpoints, including a consumed delimiter.
 regexTarget = "match"
-stopwords = [
-	"example",
-	"invalid",
-	"rs.example.com",
-	"staging.example.internal"
-]
 
 [[rules]]
 id = "credential-url"
 description = "HTTP URL containing credentials"
 # Escapes must be complete bytes. Include ports in the match so the
-# exact fixture allowlist cannot hide credentials on another port.
-regex = '''https?://(?:[a-zA-Z0-9._-]|%[a-fA-F0-9]{2})+:(?:[a-zA-Z0-9._-]|%[a-fA-F0-9]{2})+@(?:[a-zA-Z0-9.-]+|\[::1\])(?::[0-9]+)?'''
+# exact fixture allowlist cannot hide credentials on another port. Consume
+# chained @-hosts and a non-host/non-@ delimiter (or end of input) so a
+# truncated localhost match cannot hide a URL ending at an attacker host.
+regex = '''https?://(?:[a-zA-Z0-9._-]|%[a-fA-F0-9]{2})+:(?:[a-zA-Z0-9._-]|%[a-fA-F0-9]{2})+@(?:[a-zA-Z0-9.-]+|\[::1\])(?::[0-9]+)?(?:@(?:[a-zA-Z0-9.-]+|\[::1\])(?::[0-9]+)?)*(?:$|[^@a-zA-Z0-9.:\[\]-])'''

@@ -3,7 +3,7 @@ name: Validation
 # The "validation" suite complements `ci.yml` (lint / typecheck / build
 # / test) with the third-party code-quality, secret-scanning, link,
 # and SBOM tools the elang-rs / elang-hub org standardizes on. The
-# local equivalent is `scripts/validate-local.sh`.
+# local subset is `scripts/validate-local.sh`; see its header for omissions.
 #
 # This file mirrors `RockyDevWorks/elang-hub/.github/workflows/validation.yml`
 # (merged as elang-hub PR #35) so the two repos stay aligned on the
@@ -53,6 +53,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '26'
@@ -101,6 +103,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12'
@@ -137,6 +141,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          persist-credentials: false
           # fuzz.yml uses a wider set of paths; reuse the same fetch
           # depth so `git log` reaches fuzz-corpus seed history.
           fetch-depth: 0
@@ -176,6 +181,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: stable
@@ -207,6 +214,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: stable
@@ -236,6 +245,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: stable
@@ -269,6 +280,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: nightly
@@ -276,11 +289,12 @@ jobs:
       - name: Miri setup
         run: cargo +nightly miri setup
       - name: Miri on elang-container
-        # Only `elang-container` uses `unsafe` in this workspace
-        # (the zstd FFI binding in frame.rs). Miri interprets MIR
-        # which is slow — scoping to the single unsafe crate keeps
-        # the job under 5 minutes. Nightly is required; the MSRV
-        # toolchain does not ship Miri.
+        # Keep the container's Rust unit tests under Miri. Frame tests
+        # call native libzstd through zstd-safe and are gated out with
+        # cfg(not(miri)). Allow host I/O for the retained tests that read
+        # committed fixtures. Nightly is required.
+        env:
+          MIRIFLAGS: -Zmiri-disable-isolation
         run: |
           cargo +nightly miri test -p elang-container
 
@@ -290,6 +304,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: stable
@@ -370,6 +386,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Generate SBOM
         run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/syft/v1.55.0/install.sh \

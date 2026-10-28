@@ -1204,13 +1204,15 @@ mod tests {
         // A buffer one byte over the ceiling, built with the correct
         // magic and version so the size check is what rejects it and
         // not a later structural check.
-        let mut b = Vec::with_capacity(ceiling + 1);
-        b.extend_from_slice(&INDEX_MAGIC);
-        b.extend_from_slice(&[0u8; 4]);
-        b.extend_from_slice(&INDEX_VERSION.to_le_bytes());
-        b.extend_from_slice(&ENTRY_FORMAT.to_le_bytes());
-        b.extend_from_slice(&0u32.to_le_bytes());
-        b.resize(ceiling + 1, 0u8);
+        let mut header = Vec::new();
+        header.extend_from_slice(&INDEX_MAGIC);
+        header.extend_from_slice(&[0u8; 4]);
+        header.extend_from_slice(&INDEX_VERSION.to_le_bytes());
+        header.extend_from_slice(&ENTRY_FORMAT.to_le_bytes());
+        header.extend_from_slice(&0u32.to_le_bytes());
+        // Zero-fill in one allocation; a per-byte resize loop is costly under Miri.
+        let mut b = vec![0u8; ceiling + 1];
+        b[..header.len()].copy_from_slice(&header);
         let e = Index::decode(&b).unwrap_err();
         assert_eq!(e.code(), "INDEX_SIZE_OUT_OF_RANGE");
     }
@@ -1219,13 +1221,15 @@ mod tests {
     /// `index decode accepts an index at exactly the ceiling`.
     fn index_decode_accepts_an_index_at_the_ceiling() {
         let ceiling = usize::try_from(elang_core::limits::MAX_INDEX_BYTES).unwrap_or(usize::MAX);
-        let mut b = Vec::with_capacity(ceiling);
-        b.extend_from_slice(&INDEX_MAGIC);
-        b.extend_from_slice(&[0u8; 4]);
-        b.extend_from_slice(&INDEX_VERSION.to_le_bytes());
-        b.extend_from_slice(&ENTRY_FORMAT.to_le_bytes());
-        b.extend_from_slice(&0u32.to_le_bytes());
-        b.resize(ceiling, 0u8);
+        let mut header = Vec::new();
+        header.extend_from_slice(&INDEX_MAGIC);
+        header.extend_from_slice(&[0u8; 4]);
+        header.extend_from_slice(&INDEX_VERSION.to_le_bytes());
+        header.extend_from_slice(&ENTRY_FORMAT.to_le_bytes());
+        header.extend_from_slice(&0u32.to_le_bytes());
+        // Zero-fill in one allocation; a per-byte resize loop is costly under Miri.
+        let mut b = vec![0u8; ceiling];
+        b[..header.len()].copy_from_slice(&header);
         // Zero entries means the entry cursor is at the header end and
         // the trailing bytes are a malformed index — which is the
         // *next* check, proving the size check did not fire first.

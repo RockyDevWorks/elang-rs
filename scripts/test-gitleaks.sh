@@ -13,13 +13,16 @@ printf '{{range .}}{{.Match}}{{end}}' > "${FIXTURE_ROOT}/report.tmpl"
 check_url() {
     local expected="$1" scheme="$2" username="$3" password="$4" host="$5"
     local url="${scheme}://${username}:${password}@${host}"
+    local fixture="${FIXTURE_ROOT}/input/${6:-credentials.txt}"
     local status=0 actual
-    printf '%s\n' "${url}" > "${FIXTURE_ROOT}/input/credentials.txt"
+    mkdir -p "$(dirname "${fixture}")"
+    printf '%s\n' "${url}" > "${fixture}"
     gitleaks dir "${FIXTURE_ROOT}/input" --config "${CONFIG}" \
         --no-banner --log-level error --enable-rule credential-url --exit-code 42 \
         --report-format template --report-template "${FIXTURE_ROOT}/report.tmpl" \
         --report-path "${FIXTURE_ROOT}/report.txt" || status=$?
     actual="$(cat "${FIXTURE_ROOT}/report.txt")"
+    rm "${fixture}"
     if [[ "${status}" -ne "${expected}" ]] || \
         { [[ "${expected}" -eq 42 ]] && [[ "${actual}" != "${url}" ]]; } || \
         { [[ "${expected}" -eq 0 ]] && [[ -n "${actual}" ]]; }; then
@@ -42,7 +45,9 @@ done
 # Only the exact local fixture is safe; other credentials/ports must leak.
 check_url 0 http user pass localhost:3000
 for host in localhost localhost:3001 localhost:30000 localhost.evil:3000 \
-    127.0.0.1:3000 0.0.0.0:3000 '[::1]:3000'; do
+    127.0.0.1:3000 0.0.0.0:3000 '[::1]:3000' \
+    localhost:3000@attacker.tld localhost:3000@attacker.tld@another.tld \
+    host.invalid@attacker.tld; do
     check_url 42 http user pass "${host}"
 done
 check_url 42 https user pass localhost:3000
@@ -53,5 +58,17 @@ check_url 42 http 'alice%40team' 'p%3Ass' 127.0.0.1:3000
 check_url 42 http 'alice%40team' 'p%3Ass' '[::1]:3000'
 check_url 0 http user pass host.invalid
 check_url 0 https user pass fake-host.invalid
+
+# Documentation and spec paths must be scanned, including nested READMEs.
+for path in README.md SECURITY.md CHANGELOG.md CODE_OF_CONDUCT.md \
+    docs/public/security.md .kiro/steering/example.md docs/decisions/example.md \
+    specs/example.md specs/sources/README.md nested/README.md; do
+    check_url 42 https alice plain-pass scanner.test "${path}"
+done
+
+# Example-looking substrings must not exempt unrelated credentials.
+for password in example-pass invalid-pass rs.example.com staging.example.internal; do
+    check_url 42 https alice "${password}" scanner.test
+done
 
 printf 'Gitleaks credential URL fixtures passed.\n'
