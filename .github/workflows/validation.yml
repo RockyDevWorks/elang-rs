@@ -113,8 +113,17 @@ jobs:
         # confidence) gets caught in review via the inline
         # annotations; a new cache-poisoning or artipacked finding
         # (low confidence) is a review item, not a CI failure.
+        #
+        # `--no-deps --require-hashes` pins the wheel by SHA-256 so
+        # the install cannot silently pick up a tampered release
+        # (zizmor has no transitive Python deps, so this is safe).
+        # The hash is the one published by PyPI for the
+        # manylinux_2_28_x86_64 wheel — the platform every
+        # github-hosted `ubuntu-latest` runner uses.
         run: |
-          pip install zizmor==1.9.0
+          python -m pip install --no-deps --require-hashes \
+            "zizmor==1.9.0" \
+            --hash=sha256:03e103d64367c265e32ce9122c7d6317eff6df9d04c399d988192d1925881ed1
           zizmor --persona=regular --no-exit-codes --format github .github/workflows
 
   cargo-fuzz:
