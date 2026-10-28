@@ -10,7 +10,7 @@ finding record must satisfy before the lifecycle can move past
 
 1. **No finding record without a committed reproduction.** Every
    `fuzz/findings/<NNNN>-<slug>.md` entry must link to a `git`-pinned
-   corpus entry in `fuzz/corpus/` that crashes on a clean checkout of
+   corpus entry in `fuzz/regressions/` that crashes on a clean checkout of
    `main`. If the corpus cannot be reproduced, the finding is
    downgraded to a hypothesis and the record is closed without a fix.
 
