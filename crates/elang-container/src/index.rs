@@ -535,6 +535,7 @@ fn path_err(code: &'static str, msg: &'static str) -> Error {
 }
 
 #[cfg(test)]
+#[cfg(not(miri))]
 #[allow(
     clippy::unwrap_used,
     clippy::expect_used,
