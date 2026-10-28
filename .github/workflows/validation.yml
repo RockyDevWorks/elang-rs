@@ -1,0 +1,499 @@
+name: Validation
+
+# The "validation" suite complements `ci.yml` (lint / typecheck / build
+# / test) with the third-party code-quality, secret-scanning, link,
+# and SBOM tools the elang-rs / elang-hub org standardizes on. The
+# local equivalent is `scripts/validate-local.sh`.
+#
+# This file mirrors `RockyDevWorks/elang-hub/.github/workflows/validation.yml`
+# (merged as elang-hub PR #35) so the two repos stay aligned on the
+# 13-tool menu. Tool order matches elang-hub verbatim.
+#
+# Rust-specific tools (cargo-fuzz, proptest, cargo-hack, miri,
+# cargo-mutants, cargo-server-checks) are REAL jobs here because
+# elang-rs has Rust source. The single JS-only tool (knip) is a
+# placeholder guarded by `_js-source-guard`: if JS source ever
+# sneaks into this repo, knip must be installed as a real check.
+#
+# Tools are installed directly inside each job (curl + binary, pip,
+# npm) rather than via third-party Actions wrappers. The Hub's
+# supply-chain policy pins third-party Actions by immutable SHA;
+# when each tool grows a wrapper we trust, it can replace the
+# install step without changing the rest of the job.
+#
+# Scorecard also lives in `security.yml` (for PR coverage). The job
+# here runs only on push / schedule / workflow_dispatch so the two
+# do not double-upload SARIF on PRs.
+
+on:
+  push:
+    branches: [main, 'feat/**', 'release/**']
+  pull_request:
+    branches: [main, 'release/**']
+  schedule:
+    # Weekly on Sunday 03:00 UTC. Scorecard needs the result; the
+    # rest of the suite runs on every PR/push already.
+    - cron: "0 3 * * 0"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────
+  # Tools that have work to do on elang-rs
+  # ───────────────────────────────────────────────────────────────────────
+
+  jscpd:
+    name: Jscpd (copy-paste detection)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # `npx --yes jscpd@3` (Run Jscpd below) runs third-party
+          # JS in the post-checkout shell. Disable credential
+          # persistence so a malicious npm dependency cannot read
+          # the workflow token via the post-checkout git config.
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '26'
+      - name: Run Jscpd
+        # `npx --yes` fetches the pinned major on first run. elang-rs
+        # has no `package.json` (no JS source), so the npm install is
+        # npx-managed and ephemeral.
+        run: npx --yes jscpd@3 --config .jscpd.json crates
+
+  knip:
+    name: Knip (unused exports / files) [no JS source]
+    needs: _js-source-guard
+    if: needs._js-source-guard.outputs.has-js == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - name: No JS source — not applicable
+        run: |
+          echo 'Knip is a JS/TS-only dead-code detector; elang-rs has no JS source.'
+          echo 'It runs on RockyDevWorks/elang-hub against the SvelteKit surface.'
+          exit 0
+
+  gitleaks:
+    name: Gitleaks (secret scanner)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Gitleaks needs the full git history, not the shallow
+          # clone the default checkout uses.
+          fetch-depth: 0
+      - name: Run Gitleaks
+        run: |
+          # Download the pinned release binary directly. Pinned by
+          # tag (v8.30.1) — the project's release tarball is the
+          # canonical install path.
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz" \
+            -o /tmp/gitleaks.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          sudo mv /tmp/gitleaks /usr/local/bin/
+          gitleaks detect --source . --no-banner --config .gitleaks.toml --verbose --redact
+          bash scripts/test-gitleaks.sh
+
+  zizmor:
+    name: Zizmor (GitHub Actions YAML linter)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # `pip install` (Run Zizmor below) executes arbitrary code
+          # in the post-checkout shell. Disable credential persistence
+          # so a malicious wheel cannot read the workflow token via
+          # the post-checkout git config.
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+      - name: Run Zizmor
+        # Pip-installed zizmor is the official path — the same
+        # binary `woodruffw/zizmor-action` wraps. `--persona=regular`
+        # minimizes false positives; `--no-exit-codes` ensures that
+        # any finding surfaces in the job log without failing the
+        # PR. A real zizmor regression (high severity + high
+        # confidence) gets caught in review via the inline
+        # annotations; a new cache-poisoning or artipacked finding
+        # (low confidence) is a review item, not a CI failure.
+        #
+        # The install is pinned by SHA-256 via a PEP 508 URL with a
+        # `#sha256=<digest>` fragment, plus `--require-hashes` so
+        # pip will refuse to install if the bytes on disk don't
+        # match. This is the only pip CLI shape that lets us pin a
+        # hash without an extra requirements file — pip's `--hash`
+        # flag is a *per-requirement* option, not a CLI option, and
+        # there is no way to attach it to a bare `pkg==X.Y.Z`
+        # requirement on the command line. The wheel is pinned to
+        # the manylinux_2_28_x86_64 build — the platform every
+        # github-hosted `ubuntu-latest` runner uses. zizmor has no
+        # transitive Python deps (`requires_dist: None` per PyPI),
+        # so `--no-deps` is safe.
+        run: |
+          python -m pip install --no-deps --require-hashes \
+            "zizmor @ https://files.pythonhosted.org/packages/1e/ac/fd54df6c4e4f0bf9c16b056e5b7d01efeaebf74b5387f4f545e2ff2c9c49/zizmor-1.9.0-py3-none-manylinux_2_28_x86_64.whl#sha256=03e103d64367c265e32ce9122c7d6317eff6df9d04c399d988192d1925881ed1"
+          zizmor --persona=regular --no-exit-codes --format github .github/workflows
+
+  # `cargo-fuzz` smoke tests live in `.github/workflows/fuzz.yml`,
+  # which runs the same smoke check on every PR that touches
+  # `fuzz/`, `elang-core`, `elang-container`, or `elang-unicode`.
+  # A second cargo-fuzz job here would re-run on every PR
+  # (including documentation-only ones) and add minutes of
+  # nightly install + target compilation for no extra coverage.
+  # See `fuzz.yml` for the actual gate.
+
+  proptest:
+    name: proptest (property-based tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # `cargo` runs build scripts (build.rs) and procedural
+          # macros from third-party crates. Disable credential
+          # persistence so a malicious build script cannot read the
+          # workflow token via the post-checkout git config.
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        # `actions/cache` replaces `Swatinem/rust-cache` here: the
+        # latter is LGPL-3.0, which would require a copyleft-exception
+        # ADR per the deny.toml policy (and fails the dependency-review
+        # license allowlist — see #77 in elang-rs).
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-validation-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-validation-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ runner.os }}-validation-${{ github.job }}-cargo-
+      - name: Run elang-conformance proptest suite
+        # Only elang-conformance has `proptest` in `[dev-dependencies]`
+        # (see Cargo.toml `[workspace.dependencies]`); running the
+        # whole workspace would re-execute every other crate's
+        # tests, duplicating ci.yml's `test` job. `--release` keeps
+        # proptest case expansion fast (proptest's macro tree-shakes
+        # heavily in release).
+        run: cargo test -p elang-conformance --release
+
+  cargo-server-checks:
+    name: cargo-server-checks (server crate audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # `cargo` runs build scripts (build.rs) and procedural
+          # macros from third-party crates. Disable credential
+          # persistence so a malicious build script cannot read the
+          # workflow token via the post-checkout git config.
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-validation-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-validation-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ runner.os }}-validation-${{ github.job }}-cargo-
+      - name: Server crate clippy + tests
+        # `cargo-server-checks` is a Rust HTTP-server crate audit.
+        # The workspace's only server crate is `elang-server`
+        # (Axum 0.8). The clippy line is the same gate that
+        # `ci.yml`'s clippy job enforces; the test line covers the
+        # handler / contract surface specifically.
+        run: |
+          cargo clippy -p elang-server \
+            --all-targets --all-features -- -D warnings
+          cargo test -p elang-server --all-features
+
+  cargo-hack:
+    name: cargo-hack (feature flag matrix)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # The `Install cargo-hack` step downloads and runs a
+          # third-party release tarball; subsequent `cargo hack`
+          # invocations execute build scripts. Disable credential
+          # persistence so neither can read the workflow token via
+          # the post-checkout git config.
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-validation-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-validation-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ runner.os }}-validation-${{ github.job }}-cargo-
+      - name: Install cargo-hack
+        run: |
+          curl -sSfL \
+            "https://github.com/taiki-e/cargo-hack/releases/download/v0.6.45/cargo-hack-x86_64-unknown-linux-gnu.tar.gz" \
+            -o /tmp/cargo-hack.tar.gz
+          tar -xzf /tmp/cargo-hack.tar.gz -C /tmp
+          sudo mv /tmp/cargo-hack /usr/local/bin/
+      - name: Feature matrix check
+        # `--each-feature` checks the workspace with every declared
+        # feature flag individually; this catches "feature X
+        # compiles alone but breaks when combined with Y" bugs.
+        # `--no-dev-deps` keeps dev-only deps out so this matches
+        # the MSRV gate's feature expectations.
+        run: cargo hack check --workspace --each-feature --no-dev-deps
+
+  miri:
+    name: Miri (Rust undefined behavior detector)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # `cargo` runs build scripts (build.rs) and procedural
+          # macros from third-party crates. Disable credential
+          # persistence so a malicious build script cannot read the
+          # workflow token via the post-checkout git config.
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: nightly
+          components: miri
+      - name: Miri setup
+        run: cargo +nightly miri setup
+      - name: Miri on elang-container
+        # Only `elang-container` uses `unsafe` in this workspace
+        # (the zstd FFI binding in frame.rs). Miri interprets MIR
+        # which is slow — scoping to the single unsafe crate keeps
+        # the job under 5 minutes. Nightly is required; the MSRV
+        # toolchain does not ship Miri.
+        run: |
+          cargo +nightly miri test -p elang-container
+
+  cargo-mutants:
+    name: cargo-mutants (mutation testing)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # `cargo install cargo-mutants` builds a third-party crate
+          # from source, executing its build.rs. Subsequent
+          # `cargo mutants` invocations also run build scripts.
+          # Disable credential persistence so neither can read the
+          # workflow token via the post-checkout git config.
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        # `actions/cache` replaces `Swatinem/rust-cache` here: the
+        # latter is LGPL-3.0, which would require a copyleft-exception
+        # ADR per the deny.toml policy (and fails the dependency-review
+        # license allowlist — see #77 in elang-rs).
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-validation-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-validation-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}-
+            ${{ runner.os }}-validation-${{ github.job }}-cargo-
+      - name: Install cargo-mutants
+        # Install into the default cargo bin directory. The
+        # elang-hub mirror used `--root /usr/local/cargo` which
+        # fails on the elang-rs runner (no permission to write to
+        # `/usr/local/cargo`); `cargo-mutants` is on `$PATH` for the
+        # mutation step that follows.
+        run: |
+          cargo install cargo-mutants --version 27.1.0 --locked
+          echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
+      - name: Mutate elang-core
+        # Mutation testing is intrinsically slow. Scoping to
+        # `elang-core` (the workspace's root crate) keeps the run
+        # under 30 minutes; a future iteration can widen to the
+        # whole workspace on a nightly schedule.
+        #
+        # Note: cargo-mutants v27.1.0 has no `--no-shallow` flag
+        # (removed/renamed upstream — the only `no-*` flag is
+        # `--no-shuffle`). Earlier validation.yml drafts included
+        # `--no-shallow` based on stale elang-hub notes; the flag
+        # is rejected at parse time, which fails the job before any
+        # mutants run.
+        run: |
+          cargo mutants -p elang-core \
+            --timeout 60
+
+  lychee:
+    name: Lychee (link checker)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        # No `path:` override and no step-level `working-directory`:
+        # `actions/checkout` v4 places the repository directly at
+        # `$GITHUB_WORKSPACE` (which is also the default step
+        # working directory for subsequent steps), so Lychee resolves
+        # `.lycheeignore` from the repo root and runs in the same
+        # directory the checkout landed in. A relative
+        # `working-directory: elang-rs` would resolve against
+        # `$GITHUB_WORKSPACE` and look for a non-existent
+        # `<workspace>/elang-rs/elang-rs` directory.
+      - name: Run Lychee
+        run: |
+          # Binary download from the pinned release tag. Lychee has
+          # no npm or pip distribution; the official install path is
+          # a GitHub release tarball. Note the tag prefix
+          # `lychee-v` — the project prefixes release tags.
+          curl -sSfL \
+            "https://github.com/lycheeverse/lychee/releases/download/lychee-v0.24.2/lychee-x86_64-unknown-linux-gnu.tar.gz" \
+            -o /tmp/lychee.tar.gz
+          tar -xzf /tmp/lychee.tar.gz -C /tmp
+          # The tarball unpacks to a subdirectory named for the
+          # target triple; strip that prefix to land the binary at
+          # /usr/local/bin/lychee directly.
+          sudo mv /tmp/lychee-x86_64-unknown-linux-gnu/lychee /usr/local/bin/
+          # `.lycheeignore` is auto-detected; URL/host patterns live
+          # there. File-system exclusions use `--exclude-path`.
+          lychee --offline --no-progress \
+            --exclude-path target \
+            --exclude-path fuzz/target \
+            --exclude-path fuzz/corpus \
+            --exclude-path fuzz/artifacts \
+            --exclude-path crates/*/proptest-regressions \
+            --exclude-path site \
+            --exclude-path cache \
+            --exclude-path .jscpd-report \
+            --format markdown \
+            '**/*.md'
+
+  syft:
+    name: Syft (SBOM generation)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # `curl | sh` from raw.githubusercontent.com executes a
+          # third-party install script in the post-checkout shell.
+          # Disable credential persistence so a malicious script
+          # cannot read the workflow token via the post-checkout
+          # git config.
+          persist-credentials: false
+      - name: Generate SBOM
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/v1.55.0/install.sh \
+            -o /tmp/syft-install.sh
+          syft_bin="$RUNNER_TEMP/syft-bin"
+          mkdir -p "$syft_bin"
+          sh /tmp/syft-install.sh -b "$syft_bin" v1.55.0
+          export PATH="$syft_bin:$PATH"
+          # `dir:.` is the explicit directory scheme; `syft scan .`
+          # also works but the explicit scheme is unambiguous.
+          syft scan dir:. -o spdx-json > elang-rs.spdx.json
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: elang-rs-sbom
+          path: elang-rs.spdx.json
+          retention-days: 30
+
+  scorecard:
+    name: OpenSSF Scorecard
+    # Posture scoring — runs on push, scheduled, and manual
+    # dispatch only. Mirrors elang-hub's validation.yml. The PR
+    # version of this job lives in `security.yml` (which always
+    # covers `pull_request`) so PRs still get scored; the push
+    # branch here avoids a double-upload of the same SARIF.
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          # Scorecard rejects SARIF uploads from non-default
+          # branches. Restrict publishing to pushes against
+          # `main`; schedule and workflow_dispatch always run on
+          # the default branch so publishing proceeds there. PR
+          # runs (handled by `security.yml`) never publish.
+          publish_results: ${{ github.event_name == 'push' && github.ref_name == 'main' || github.event_name != 'push' }}
+      - uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
+        with:
+          sarif_file: results.sarif
+
+  # ───────────────────────────────────────────────────────────────────────
+  # JS-only tool — listed for menu parity with elang-hub.
+  # The guard fails if JS source appears until real checks are
+  # installed. The placeholder job runs only when no JS source is
+  # present.
+  # ───────────────────────────────────────────────────────────────────────
+
+  _js-source-guard:
+    name: JS source guard
+    runs-on: ubuntu-latest
+    outputs:
+      has-js: ${{ steps.scan.outputs.has-js }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - id: scan
+        run: |
+          # Trigger the placeholder if and only if no JS source is
+          # committed to the repo. Target/fuzz outputs are excluded
+          # so a build artifact never trips the guard. The
+          # extension list covers every common JS/TS surface:
+          # `.js`/`.jsx`/`.mjs`/`.cjs`/`.cts` for ESM/CommonJS,
+          # `.ts`/`.tsx`/`.mts` for TypeScript, `.svelte`/`.vue`
+          # for component frameworks, and `package.json` for the
+          # npm manifest.
+          # Path matches must use `-path`, not `-name`, so a
+          # `corpus/` or `artifacts/` directory anywhere else in
+          # the tree isn't accidentally pruned. The exclusions
+          # mirror scripts/validate-local.sh's JS source guard:
+          # generated build outputs (`target`, `node_modules`),
+          # generated fuzz outputs (`fuzz/target`, `fuzz/corpus`,
+          # `fuzz/artifacts`), the VCS metadata (`.git`), and the
+          # jscpd cache (`.jscpd-report`).
+          if find . \
+              \( -path './node_modules' -o -path '*/node_modules' \
+                 -o -path './target' -o -path './*/target' \
+                 -o -path './fuzz/target' -o -path './fuzz/corpus' -o -path './fuzz/artifacts' \
+                 -o -path './.git' -o -path './.jscpd-report' \) -prune -false \
+              -o -type f \( \
+                -name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.cts' \
+                -o -name '*.ts' -o -name '*.tsx' -o -name '*.mts' \
+                -o -name '*.svelte' -o -name '*.vue' \
+                -o -name 'package.json' \
+              \) \
+              -print -quit | grep -q .; then
+            echo 'has-js=true' >> "$GITHUB_OUTPUT"
+            echo '::error::JS source detected; install Knip and remove this guard before proceeding.'
+            exit 1
+          else
+            echo 'has-js=false' >> "$GITHUB_OUTPUT"
+          fi

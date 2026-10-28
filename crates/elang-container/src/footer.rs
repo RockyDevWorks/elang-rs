@@ -267,6 +267,7 @@ fn index_err(code: &'static str, msg: &'static str) -> Error {
 }
 
 #[cfg(test)]
+#[cfg(not(miri))]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing)]
 mod tests {
     use super::*;
@@ -281,17 +282,21 @@ mod tests {
         0x00, 0x00, 0x00, 0x00,
     ];
 
-    /// The 237-byte reference index from `index.bin`.
+    /// The 237-byte reference index from `fixtures/valid/container/minimal-archive/index.bin`.
+    ///
+    /// Embedded at compile time via `include_bytes!` so the bytes are
+    /// available under Miri (which forbids runtime file I/O) and the
+    /// fixture is guaranteed to be present regardless of the working
+    /// directory at test time. The path is resolved relative to this
+    /// source file (`crates/elang-container/src/footer.rs`), so three
+    /// `..` are needed to reach the workspace root before descending into
+    /// `fixtures/`.
     fn reference_index() -> Vec<u8> {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../fixtures/valid/container/minimal-archive/index.bin");
-        std::fs::read(&path).expect("index.bin fixture present")
+        include_bytes!("../../../fixtures/valid/container/minimal-archive/index.bin").to_vec()
     }
 
     fn reference_archive() -> Vec<u8> {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../fixtures/valid/container/minimal-archive/archive.elang");
-        std::fs::read(&path).expect("archive fixture present")
+        include_bytes!("../../../fixtures/valid/container/minimal-archive/archive.elang").to_vec()
     }
 
     // ---- T0304: decode ----
@@ -495,10 +500,16 @@ mod tests {
 
     #[test]
     fn matches_the_committed_footer_and_archive_fixtures() {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../fixtures/valid/container/minimal-archive");
-        let footer_bytes = std::fs::read(path.join("footer.bin")).unwrap();
-        let archive = std::fs::read(path.join("archive.elang")).unwrap();
+        // Embed the committed fixtures at compile time so this test
+        // is reproducible under Miri (which forbids runtime file I/O)
+        // and from any working directory. Paths are resolved
+        // relative to this source file (see `reference_index` for the
+        // directory-walk rationale).
+        let footer_bytes: Vec<u8> =
+            include_bytes!("../../../fixtures/valid/container/minimal-archive/footer.bin").to_vec();
+        let archive: Vec<u8> =
+            include_bytes!("../../../fixtures/valid/container/minimal-archive/archive.elang")
+                .to_vec();
 
         assert_eq!(footer_bytes, GOLDEN_FOOTER.to_vec(), "footer.bin drifted");
         assert_eq!(

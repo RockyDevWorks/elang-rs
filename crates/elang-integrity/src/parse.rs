@@ -26,10 +26,11 @@ use elang_core::limits::MAX_INTEGRITY_BYTES;
 use elang_kdl::ast::{KdlDocument, KdlEntry};
 use elang_kdl::budget::BudgetTracker;
 use elang_kdl::parse_with_budgets as kdl_parse_with_budgets;
+use elang_kdl::span::to_kdl_span;
 use elang_kdl::KdlValue;
 use elang_unicode::UnicodeViolation;
 
-use crate::error::{from_kdl, integrity_err, integrity_err_at, span_to_kdl};
+use crate::error::{from_kdl, integrity_err, integrity_err_at};
 use crate::manifest::{parse_hex64, Algorithm, IntegrityEntry, IntegrityManifest, SHA_256_LITERAL};
 
 /// Build a `LIMIT` diagnostic pointing at the integrity input size cap
@@ -342,7 +343,7 @@ pub fn parse_document(doc: &KdlDocument) -> Result<IntegrityManifest, Error> {
                 let digest = parse_hex64(hex_str).map_err(|e| {
                     // Re-stage any parse_hex64 error to point at the property span.
                     let mut d = e.diagnostic;
-                    d.span = span_to_kdl(*hex_span);
+                    d.span = to_kdl_span(*hex_span);
                     Error { diagnostic: d }
                 })?;
 
@@ -414,11 +415,7 @@ fn unicode_to_error(violation: UnicodeViolation, span: elang_kdl::span::SourceSp
             scalar as u32
         ),
     };
-    let mut d = elang_core::error::Diagnostic::new(code, Category::Unicode, message).with_stage(9);
-    if let Some(s) = span_to_kdl(span) {
-        d = d.with_span(s);
-    }
-    Error { diagnostic: d }
+    elang_core::error::diagnostic_at(code, Category::Unicode, 9, message, to_kdl_span(span))
 }
 
 fn span_of(v: &KdlValue) -> elang_kdl::span::SourceSpan {
@@ -777,15 +774,6 @@ integrity {
         let first = algorithm.args().next().expect("algorithm arg");
         let span = span_of(first);
         assert!(!span.is_invalid());
-    }
-
-    #[test]
-    fn span_to_kdl_returns_none_for_invalid_span() {
-        // Direct exercise of the private `span_to_kdl` helper:
-        // an invalid `SourceSpan` (no source location) maps to `None`,
-        // so the diagnostic is built without a span.
-        let invalid = elang_kdl::span::SourceSpan::INVALID;
-        assert_eq!(span_to_kdl(invalid), None);
     }
 
     #[test]

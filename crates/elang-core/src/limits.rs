@@ -101,4 +101,34 @@ mod tests {
         assert_eq!(MIN_INDEX_BYTES, 16);
         assert_eq!(MAX_INDEX_BYTES, 33_554_432);
     }
+
+    /// Every multi-byte constant in this module is asserted at its literal
+    /// value so a cargo-mutants `* → +` or `* → /` substitution on any
+    /// factor becomes a test failure. The values mirror the doc comments
+    /// above each constant (GiB / MiB / KiB conversions of the byte budgets
+    /// from steering §3.5, §10, §11).
+    #[test]
+    fn per_resource_and_budget_ceilings_have_expected_values() {
+        // Binary container ceilings (steering §3.5).
+        assert_eq!(RECOMMENDED_COMPRESSED_ARCHIVE_BYTES, 2_147_483_648);
+        assert_eq!(MAX_INDEX_BYTES, 33_554_432);
+        // Per-resource uncompressed maxima (steering §2, §3.5).
+        assert_eq!(MAX_BOOTSTRAP_RESOURCE_BYTES, 64);
+        assert_eq!(MAX_EPF_BYTES, 1_048_576);
+        assert_eq!(MAX_INTEGRITY_BYTES, 16_777_216);
+        assert_eq!(MAX_ELD_BYTES, 1_073_741_824);
+        assert_eq!(MAX_GENERIC_RESOURCE_BYTES, 1_073_741_824);
+        // KDL parser budgets (steering §10).
+        assert_eq!(MAX_ENCODED_TOKEN_BYTES, 1_048_576);
+        assert_eq!(MAX_DECODED_STRING_BYTES, 1_048_576);
+        assert_eq!(MAX_NAME_BYTES, 256);
+        assert_eq!(MAX_ARGS_PER_NODE, 256);
+        assert_eq!(MAX_PROPS_PER_NODE, 256);
+        assert_eq!(MAX_NODES_PER_RESOURCE, 2_000_000);
+        assert_eq!(MAX_NODES_PER_ARCHIVE, 10_000_000);
+        assert_eq!(MAX_COMMENT_BYTES, 1_048_576);
+        assert_eq!(MAX_COMMENT_BYTES_PER_RESOURCE, 16_777_216);
+        assert_eq!(MAX_DECODED_STRING_BYTES_PER_RESOURCE, 268_435_456);
+        assert_eq!(MAX_DECODED_STRING_BYTES_PER_ARCHIVE, 1_073_741_824);
+    }
 }

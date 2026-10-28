@@ -428,6 +428,7 @@ impl ArchiveListing {
     clippy::arithmetic_side_effects,
     clippy::cast_possible_truncation
 )]
+#[cfg(not(miri))]
 mod tests {
     use super::*;
     use crate::testdata::layout as fix;

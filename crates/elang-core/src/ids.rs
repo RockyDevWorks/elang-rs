@@ -287,6 +287,22 @@ mod tests {
         );
     }
 
+    /// Boundary case: a slug of exactly the maximum 32 characters must
+    /// be accepted. cargo-mutants mutates the length check
+    /// `s.len() > 32` in `valid_group_slug` to `>=`; the boundary
+    /// case (exactly 32 chars) distinguishes the two forms. The
+    /// existing `group_name_rules` test only covers 33 chars, which
+    /// does not catch the off-by-one mutation.
+    #[test]
+    fn group_name_accepts_exactly_max_length_slug() {
+        let slug = "a".repeat(32);
+        assert_eq!(slug.len(), 32);
+        assert!(
+            GroupName::new_custom(&slug).is_ok(),
+            "32-char slug must be accepted (the cap is exclusive: len > 32 rejects)"
+        );
+    }
+
     #[test]
     fn romanization_rules_and_fold() {
         assert!(Romanization::new("th").is_ok());

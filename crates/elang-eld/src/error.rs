@@ -6,24 +6,20 @@
 //! `elang_kdl::error::ErrorCode::category`), IPA errors (category `IPA` or
 //! `UNICODE`), and romanization errors (category `ROMAN`).
 
-use elang_core::error::{Category, Diagnostic, Error, KdlSpan};
-use elang_kdl::span::SourceSpan;
+use elang_core::error::{diagnostic_at, Category, Error};
+use elang_kdl::span::{to_kdl_span, SourceSpan};
 
 /// Build an `ELD_SCHEMA` diagnostic pointing at `span`.
 ///
 /// The category is always [`Category::EldSchema`] and the stage is `12`; the
 /// span is dropped when it is [`SourceSpan::INVALID`] (synthetic nodes) or
-/// cannot be expressed as a [`KdlSpan`].
+/// cannot be expressed as a `KdlSpan` (see [`elang_kdl::span::to_kdl_span`]).
 pub(crate) fn eld_err_at(
     code: &'static str,
     message: impl Into<String>,
     span: SourceSpan,
 ) -> Error {
-    let mut d = Diagnostic::new(code, Category::EldSchema, message).with_stage(12);
-    if let Some(s) = span_to_kdl(span) {
-        d = d.with_span(s);
-    }
-    Error { diagnostic: d }
+    diagnostic_at(code, Category::EldSchema, 12, message, to_kdl_span(span))
 }
 
 /// Build an `ELD_SCHEMA` diagnostic without a source span.
@@ -37,29 +33,7 @@ pub(crate) fn roman_err_at(
     message: impl Into<String>,
     span: SourceSpan,
 ) -> Error {
-    let mut d = Diagnostic::new(code, Category::Roman, message).with_stage(12);
-    if let Some(s) = span_to_kdl(span) {
-        d = d.with_span(s);
-    }
-    Error { diagnostic: d }
-}
-
-/// Map a KDL `SourceSpan` onto the `KdlSpan` carried by `Diagnostic`.
-///
-/// Returns `None` for any invalid span (one whose endpoints carry the
-/// `Position::INVALID` sentinel); the KDL span records 1-based line/column
-/// plus byte length, which is what every other diagnostic in the reference
-/// implementation uses.
-fn span_to_kdl(span: SourceSpan) -> Option<KdlSpan> {
-    if span.is_invalid() {
-        return None;
-    }
-    let length = span.len();
-    Some(KdlSpan {
-        line: span.start.line,
-        column: span.start.column,
-        length,
-    })
+    diagnostic_at(code, Category::Roman, 12, message, to_kdl_span(span))
 }
 
 /// Translate a `ParseError` from `elang-kdl` into the crate-wide `Error` type
@@ -67,14 +41,8 @@ fn span_to_kdl(span: SourceSpan) -> Option<KdlSpan> {
 pub(crate) fn from_kdl(err: elang_kdl::ParseError) -> Error {
     let code = err.code().as_str();
     let category = err.category();
-    let span = err.span();
-    let span_kdl = span_to_kdl(span);
     let message = err.message.to_string();
-    let mut d = Diagnostic::new(code, category, message).with_stage(12);
-    if let Some(s) = span_kdl {
-        d = d.with_span(s);
-    }
-    Error { diagnostic: d }
+    diagnostic_at(code, category, 12, message, to_kdl_span(err.span()))
 }
 
 /// Translate an `IpaError` from `elang-repertoire` into the crate-wide `Error`
@@ -91,13 +59,13 @@ pub(crate) fn from_ipa(err: elang_repertoire::ipa::IpaError, span: SourceSpan) -
     } else {
         Category::Unicode
     };
-    let span_kdl = span_to_kdl(span);
-    let mut d =
-        Diagnostic::new(code, category, format!("IPA validation error: {code}")).with_stage(12);
-    if let Some(s) = span_kdl {
-        d = d.with_span(s);
-    }
-    Error { diagnostic: d }
+    diagnostic_at(
+        code,
+        category,
+        12,
+        format!("IPA validation error: {code}"),
+        to_kdl_span(span),
+    )
 }
 
 /// Translate an `Error` returned by `elang-core` constructors (e.g.
@@ -107,11 +75,10 @@ pub(crate) fn from_ipa(err: elang_repertoire::ipa::IpaError, span: SourceSpan) -
 /// (`ROMAN_BAD_FORMAT`, `ELD_GROUP_DUPLICATE`, `ELD_GROUP_INVALID`) with the
 /// right categories. This helper sets stage 12 and attaches the span.
 pub(crate) fn from_core(err: Error, span: SourceSpan) -> Error {
-    let span_kdl = span_to_kdl(span);
     let mut d = err.diagnostic;
     d.stage = Some(12);
-    if let Some(s) = span_kdl {
-        d = d.with_span(s);
+    if let Some(s) = to_kdl_span(span) {
+        d.span = Some(s);
     }
     Error { diagnostic: d }
 }
@@ -125,31 +92,6 @@ pub(crate) fn from_core(err: Error, span: SourceSpan) -> Error {
 mod tests {
     use super::*;
     use elang_kdl::span::Position;
-
-    #[test]
-    fn span_to_kdl_invalid_returns_none() {
-        assert!(span_to_kdl(SourceSpan::INVALID).is_none());
-    }
-
-    #[test]
-    fn span_to_kdl_valid_preserves_position() {
-        let s = SourceSpan {
-            start: Position {
-                byte: 4,
-                line: 2,
-                column: 3,
-            },
-            end: Position {
-                byte: 9,
-                line: 2,
-                column: 8,
-            },
-        };
-        let k = span_to_kdl(s).unwrap();
-        assert_eq!(k.line, 2);
-        assert_eq!(k.column, 3);
-        assert_eq!(k.length, 5);
-    }
 
     #[test]
     fn from_ipa_routes_ipa_codes() {

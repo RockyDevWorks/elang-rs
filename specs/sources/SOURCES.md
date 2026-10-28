@@ -130,7 +130,7 @@ automated chart transcription that covers the base-symbol set
 distinct human. Any change to the diacritic or spacing-modifier
 inventories after this sign-off voids it and requires a fresh sign-off
 recorded here and in
-[ADR 0008 §6](../docs/decisions/0008-ipa-repertoire-v1.md).
+[ADR 0008 §6](../../docs/decisions/0008-ipa-repertoire-v1.md).
 
 Review method: every row of `specs/schema/ipa-v1.json` was opened next to
 the pinned chart and the comparison was performed row-by-row. Combining
@@ -148,7 +148,7 @@ The sign-off above covers the **contents of the two ratified inventories**
 (27 combining diacritics, 9 spacing modifiers) against the pinned chart.
 Separately, steering §7 requires NFC precomposed characters to be interpreted
 by canonical decomposition for base+modifier counting, and
-[ADR 0008 §7](../docs/decisions/0008-ipa-repertoire-v1.md) fixes how that
+[ADR 0008 §7](../../docs/decisions/0008-ipa-repertoire-v1.md) fixes how that
 applies:
 
 - An approved **base** is interpreted through its canonical decomposition for

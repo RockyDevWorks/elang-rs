@@ -468,4 +468,23 @@ mod tests {
         assert!(r.is_err());
         assert_eq!(agg.used(), 0, "a rejected reserve must not debit");
     }
+
+    /// `ResourceEntry::digest` must return the exact bytes the entry was
+    /// constructed with. cargo-mutants mutates the getter to return
+    /// `Box::leak(Box::new([0; SHA256_LEN]))` or
+    /// `Box::leak(Box::new([1; SHA256_LEN]))`; only an assertion on the
+    /// actual byte contents distinguishes the round-tripped value from
+    /// both substitute literals.
+    #[test]
+    fn resource_entry_digest_round_trips() {
+        let e = entry("a.eld", 10, 100, 500);
+        assert_eq!(*e.digest(), [7u8; 32]);
+
+        // A non-uniform digest must also round-trip — a substitution to
+        // all-zeros or all-ones cannot accidentally match. Indices 0..32
+        // fit in `u8`; the `try_from` keeps clippy happy without an allow.
+        let mixed: [u8; 32] = std::array::from_fn(|i| u8::try_from(i).unwrap());
+        let e2 = ResourceEntry::new(path("b.eld"), 0, 10, 100, mixed, 1000).unwrap();
+        assert_eq!(*e2.digest(), mixed);
+    }
 }

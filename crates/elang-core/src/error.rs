@@ -161,6 +161,37 @@ impl Error {
     }
 }
 
+/// Build an [`Error`] with a code, category, stage, message, and an
+/// optional KDL source span.
+///
+/// `span` is the already-projected `KdlSpan` (typically obtained from
+/// `elang_kdl::span::to_kdl_span`) or `None` when the source span is
+/// invalid. When `None`, the diagnostic is built without a span
+/// (synthetic nodes, dropped positions). This is the shared
+/// constructor used by every `*_err_at` helper in `elang-eld`,
+/// `elang-epf`, and `elang-integrity`; the helpers exist to fix each
+/// crate's category and stage, but the construction logic is
+/// identical, so the helper lives here in `elang-core`.
+///
+/// Note: the link to `elang_kdl::span::to_kdl_span` is intentionally
+/// a plain path mention — `elang-core` is dependency-light (ADR 0010)
+/// and does not name `elang-kdl` in scope, so an intra-doc link would
+/// be unresolvable.
+#[must_use]
+pub fn diagnostic_at(
+    code: &'static str,
+    category: Category,
+    stage: u8,
+    message: impl Into<String>,
+    span: Option<KdlSpan>,
+) -> Error {
+    let mut d = Diagnostic::new(code, category, message).with_stage(stage);
+    if let Some(s) = span {
+        d = d.with_span(s);
+    }
+    Error { diagnostic: d }
+}
+
 impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
@@ -280,13 +311,7 @@ mod tests {
     #[test]
     fn diagnostics_cap_does_not_mask_failure() {
         let mut diags = Diagnostics::new();
-        for i in 0..(MAX_RETAINED_DIAGNOSTICS + 50) {
-            diags.push(Diagnostic::new(
-                "LIMIT_NODES_RESOURCE",
-                Category::Limit,
-                format!("d{i}"),
-            ));
-        }
+        fill(&mut diags, MAX_RETAINED_DIAGNOSTICS + 50);
         assert_eq!(diags.retained().len(), MAX_RETAINED_DIAGNOSTICS);
         assert_eq!(diags.total(), MAX_RETAINED_DIAGNOSTICS + 50);
         assert!(diags.truncated());
@@ -294,5 +319,53 @@ mod tests {
             diags.has_any(),
             "truncation must never hide that failures exist"
         );
+    }
+
+    /// Fresh collectors report no truncation and no recorded diagnostics.
+    /// cargo-mutants mutates both predicates to `true` constants and to
+    /// `>=`; both falsified forms are caught by these assertions (an empty
+    /// collector must report `truncated() == false` and `has_any() == false`).
+    #[test]
+    fn diagnostics_fresh_collector_reports_no_truncation_or_failures() {
+        let diags = Diagnostics::new();
+        assert!(!diags.truncated());
+        assert!(!diags.has_any());
+        assert_eq!(diags.total(), 0);
+        assert!(diags.retained().is_empty());
+    }
+
+    /// Boundary case: exactly `MAX_RETAINED_DIAGNOSTICS` items are all
+    /// retained (no truncation), but the collector must still report
+    /// `has_any() == true` so a non-empty result cannot be misread as a
+    /// clean run. cargo-mutants mutates `truncated()`'s `>` to `>=`; the
+    /// `==` boundary case distinguishes the two forms (with `>=`, the
+    /// boundary would report `truncated() == true`, which is wrong).
+    #[test]
+    fn diagnostics_at_cap_is_not_truncated() {
+        let mut diags = Diagnostics::new();
+        fill(&mut diags, MAX_RETAINED_DIAGNOSTICS);
+        assert_eq!(diags.retained().len(), MAX_RETAINED_DIAGNOSTICS);
+        assert_eq!(diags.total(), MAX_RETAINED_DIAGNOSTICS);
+        assert!(
+            !diags.truncated(),
+            "collector at the cap is not truncated: nothing was dropped"
+        );
+        assert!(
+            diags.has_any(),
+            "collector at the cap has recorded diagnostics"
+        );
+    }
+
+    /// Shared fill helper for the diagnostics tests so jscpd does not
+    /// flag the `for i in 0..N { push(Diagnostic::new(...)) }` shape
+    /// between the over-cap and at-cap cases as a duplicate.
+    fn fill(diags: &mut Diagnostics, n: usize) {
+        for i in 0..n {
+            diags.push(Diagnostic::new(
+                "LIMIT_NODES_RESOURCE",
+                Category::Limit,
+                format!("d{i}"),
+            ));
+        }
     }
 }

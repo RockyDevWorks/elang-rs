@@ -18,25 +18,21 @@
 //! unchanged so a consumer filtering on those registry codes continues to
 //! match.
 
-use elang_core::error::{Category, Diagnostic, Error, KdlSpan};
-use elang_kdl::span::SourceSpan;
+use elang_core::error::{diagnostic_at, Category, Error};
+use elang_kdl::span::{to_kdl_span, SourceSpan};
 
 /// Build an `INTEGRITY` diagnostic pointing at `span`.
 ///
 /// The category is always [`Category::Integrity`] and the stage is `9` (the
 /// manifest is parsed at stage 9 of the 12-stage reader pipeline). The span is
 /// dropped when it is [`SourceSpan::INVALID`] (synthetic nodes) or cannot be
-/// expressed as a [`KdlSpan`].
+/// expressed as a `KdlSpan` (see [`elang_kdl::span::to_kdl_span`]).
 pub(crate) fn integrity_err_at(
     code: &'static str,
     message: impl Into<String>,
     span: SourceSpan,
 ) -> Error {
-    let mut d = Diagnostic::new(code, Category::Integrity, message).with_stage(9);
-    if let Some(s) = span_to_kdl(span) {
-        d = d.with_span(s);
-    }
-    Error { diagnostic: d }
+    diagnostic_at(code, Category::Integrity, 9, message, to_kdl_span(span))
 }
 
 /// Build an `INTEGRITY` diagnostic without a source span.
@@ -48,24 +44,6 @@ pub(crate) fn integrity_err(code: &'static str, message: impl Into<String>) -> E
     integrity_err_at(code, message, SourceSpan::INVALID)
 }
 
-/// Map a [`SourceSpan`] onto a diagnostic [`KdlSpan`].
-///
-/// Returns `None` for any invalid span (one whose endpoints carry the
-/// `Position::INVALID` sentinel); the KDL span records 1-based line/column
-/// plus byte length, matching every other diagnostic in the reference
-/// implementation.
-pub(crate) fn span_to_kdl(span: SourceSpan) -> Option<KdlSpan> {
-    if span.is_invalid() {
-        return None;
-    }
-    let length = span.len();
-    Some(KdlSpan {
-        line: span.start.line,
-        column: span.start.column,
-        length,
-    })
-}
-
 /// Translate a `ParseError` from `elang-kdl` into the crate-wide `Error` type
 /// with its span attached.
 ///
@@ -75,14 +53,8 @@ pub(crate) fn span_to_kdl(span: SourceSpan) -> Option<KdlSpan> {
 pub(crate) fn from_kdl(err: elang_kdl::ParseError) -> Error {
     let code = err.code().as_str();
     let category = err.category();
-    let span = err.span();
-    let span_kdl = span_to_kdl(span);
     let message = err.message.to_string();
-    let mut d = Diagnostic::new(code, category, message).with_stage(9);
-    if let Some(s) = span_kdl {
-        d = d.with_span(s);
-    }
-    Error { diagnostic: d }
+    diagnostic_at(code, category, 9, message, to_kdl_span(err.span()))
 }
 
 #[cfg(test)]

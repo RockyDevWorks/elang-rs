@@ -1,0 +1,21 @@
+# Lychee link-checker ignore file.
+#
+# Each non-comment line is a regex matched against the full URL
+# (scheme + host + path + fragment). A URL is skipped if the regex
+# matches it. Comments start with `#`.
+#
+# The validation workflow and `scripts/validate-local.sh` run lychee
+# against `**/*.md` with `--offline`. Use this file for URL / host
+# patterns; pass file-system exclusions via `--exclude-path` in the
+# workflow instead.
+
+# Localhost / loopback hosts.
+^https?://(localhost|127\.0\.0\.1|0\.0\.0\.0|\[?::1\]?)(:\d+)?(/|$|\?|#)
+
+# Mailto links cannot be checked offline.
+^mailto:
+#
+# Ignore entries are regular expressions. We intentionally do not
+# exclude file:// URLs: missing local targets cause lychee to exit 2.
+# Parse failures (invalid URL syntax) also fail with exit 2 and should
+# be fixed.

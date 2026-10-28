@@ -101,9 +101,9 @@ presented as ratified (steering §0.3; [ADR 0003](../docs/decisions/0003-open-no
   artifacts byte-for-byte. No digest is hand-written (steering §0.3;
   ADR 0003).
 - **Profile** — the canonicalization rules these vectors lock are steering
-  §9/§9.1 and [ADR 0009](../../docs/decisions/0009-residual-eld-canonicalization-edge-cases.md);
+  §9/§9.1 and [ADR 0009](../docs/decisions/0009-residual-eld-canonicalization-edge-cases.md);
   the public description is in
-  [`docs/public/format/canonical.md`](../../docs/public/format/canonical.md).
+  [`docs/public/format/canonical.md`](../docs/public/format/canonical.md).
 - **Cases** — minimal inventory; group order; root order; allophone order;
   bare allophone; nested condition tree; duplicate/contradictory predicates;
   authored tie-bar variant; romanization case; permitted Unicode preserved;

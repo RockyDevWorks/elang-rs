@@ -459,4 +459,52 @@ mod tests {
         .unwrap_err();
         assert_eq!(e.code(), "EPF_VERSION_MISMATCH");
     }
+
+    /// Boundary case: a URN of exactly `MAX_IDENTIFIER_BYTES` (512) bytes
+    /// must parse successfully. cargo-mutants mutates the length check
+    /// `urn.len() > MAX_IDENTIFIER_BYTES` to `>=`; the boundary case
+    /// (exactly 512 bytes) distinguishes the two forms. The previous
+    /// "too long" test only covers lengths strictly greater than the cap,
+    /// so it does not catch the off-by-one mutation.
+    #[test]
+    fn language_identifier_accepts_exactly_max_bytes() {
+        // 19 ("urn:elang:language:") + 100 (namespace) + 1 (':') + 386
+        // (language-name) + 1 (':') + 5 ("1.0.0") = 512 bytes — exactly
+        // MAX_IDENTIFIER_BYTES.
+        let urn = format!(
+            "urn:elang:language:{}:{}:1.0.0",
+            "a".repeat(100),
+            "a".repeat(386),
+        );
+        assert_eq!(urn.len(), 512);
+        let id = LanguageIdentifier::parse(urn).unwrap();
+        assert_eq!(id.namespace().len(), 100);
+        assert_eq!(id.language_name().len(), 386);
+    }
+
+    /// `Metadata::description` must round-trip the value set at
+    /// construction. cargo-mutants mutates the getter to return `None`,
+    /// `Some("")`, or `Some("xyzzy")`; only an assertion on the actual
+    /// returned value catches all three substitutions.
+    #[test]
+    fn metadata_description_round_trips() {
+        let id = LanguageIdentifier::parse("urn:elang:language:rocky:aelith:1.0.0").unwrap();
+        let m = Metadata::new(
+            id.clone(),
+            "Aelith",
+            Some("A small constructed language.".to_string()),
+        )
+        .unwrap();
+        assert_eq!(m.description(), Some("A small constructed language."));
+
+        // Absent description must surface as `None`, not as a substitute.
+        let m_no_desc = Metadata::new(id, "Aelith", None).unwrap();
+        assert_eq!(m_no_desc.description(), None);
+
+        // Empty (but present) description must surface as `Some("")`,
+        // not as `None` and not as some substituted literal.
+        let id2 = LanguageIdentifier::parse("urn:elang:language:rocky:aelith:1.0.0").unwrap();
+        let m_empty_desc = Metadata::new(id2, "Aelith", Some(String::new())).unwrap();
+        assert_eq!(m_empty_desc.description(), Some(""));
+    }
 }

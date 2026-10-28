@@ -320,6 +320,10 @@ fn decode_rejects_a_corrupted_checksum() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "exercises libzstd FFI (ZSTD_createCCtx), which Miri cannot execute"
+)]
 fn decode_rejects_output_exceeding_a_lowered_declared_size_mid_stream() {
     // T0421: a small window lets libzstd recycle its streaming buffer rather
     // than size it to the declaration. Multiple blocks then reach our output
@@ -613,6 +617,10 @@ fn decode_rejects_a_frame_whose_declared_size_contradicts_its_body() {
 }
 
 #[test]
+#[cfg_attr(
+    miri,
+    ignore = "exercises libzstd FFI (ZSTD_createCCtx), which Miri cannot execute"
+)]
 fn apply_reports_a_parameter_libzstd_refuses() {
     // `windowLog` is bounded by libzstd; an out-of-range value is rejected by
     // the parameter setter, which `apply` has to translate into the
