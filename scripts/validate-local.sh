@@ -310,14 +310,18 @@ for entry in "${NIGHTLY_CHECKS[@]}"; do
     # `nightly` alias that `cargo +nightly` selects; fall back to
     # the most recent `nightly-YYYY-MM-DD` toolchain if only pinned
     # nightly is installed (a common setup for reproducible builds).
-    # `rustup toolchain list` returns one line per installed toolchain.
+    # `rustup toolchain list` returns one line per installed
+    # toolchain. When nightly is also the default toolchain, the
+    # line ends with " (default)"; the awk step strips everything
+    # from the first space so we can match the bare toolchain name
+    # and use it without the annotation leaking into `cargo +NAME`.
     nightly_name="$(rustup toolchain list 2>/dev/null \
-        | grep -E '^(nightly-x86_64-unknown-linux-gnu|nightly)$' \
-        | head -1 | tr -d ' ')"
+        | grep -E '^(nightly-x86_64-unknown-linux-gnu|nightly)( |$)' \
+        | head -1 | awk '{print $1}')"
     if [[ -z "${nightly_name}" ]]; then
         nightly_name="$(rustup toolchain list 2>/dev/null \
             | grep -E '^nightly-' \
-            | head -1 | tr -d ' ')"
+            | head -1 | awk '{print $1}')"
     fi
     if [[ -z "${nightly_name}" ]]; then
         skip_check "${name}" "no nightly toolchain installed (run: rustup toolchain install nightly --profile minimal --component miri --component rust-src)"
@@ -328,8 +332,12 @@ for entry in "${NIGHTLY_CHECKS[@]}"; do
     # `rustup component add miri`) or cargo-fuzz (a `cargo install`
     # on the nightly toolchain). Without this probe, a missing
     # component or plugin produces a confusing "no such subcommand"
-    # or "binary not found" failure instead of a clean skip.
-    subcmd="$(echo "${cmd}" | awk '{print $2}')"
+    # or "binary not found" failure instead of a clean skip. The
+    # subcommand is the *third* whitespace-separated token — the
+    # command shape is `cargo +TOOLCHAIN <subcmd> ...`, so token 1
+    # is `cargo`, token 2 is `+TOOLCHAIN`, and token 3 is the
+    # subcommand (`miri` or `fuzz`).
+    subcmd="$(echo "${cmd}" | awk '{print $3}')"
     if ! cargo "+${nightly_name}" "${subcmd}" --version >/dev/null 2>&1; then
         case "${subcmd}" in
             miri)
@@ -358,11 +366,16 @@ done
 # without counting as project source. The `fuzz/` directory itself
 # is *not* pruned — only its generated subdirectories (`target`,
 # `corpus`, `artifacts`) are excluded, so a real JS or TS fixture
-# inside a fuzz harness directory is still detected.
+# inside a fuzz harness directory is still detected. Match the
+# generated subdirectories by full path (`-path`) rather than
+# basename (`-name`), otherwise a `corpus/` or `artifacts/`
+# directory anywhere in the tree (not just under `fuzz/`) would
+# be pruned by accident.
 js_source=$(find . \
-    -type d \( -name target -o -name node_modules -o -name 'fuzz/target' \
-               -o -name 'fuzz/corpus' -o -name 'fuzz/artifacts' -o -name '.git' \
-               -o -name '.jscpd-report' \) -prune -o \
+    -type d \( -path './target' -o -path './*/target' -o -path './node_modules' \
+               -o -path './fuzz/target' -o -path './fuzz/corpus' -o -path './fuzz/artifacts' \
+               -o -path './.git' -o -path './.jscpd-report' \
+               -o -path '*/node_modules' \) -prune -o \
     -type f \( \
         -name '*.js' -o -name '*.jsx' -o -name '*.ts' -o -name '*.tsx' \
         -o -name '*.mjs' -o -name '*.cjs' -o -name '*.mts' -o -name '*.cts' \

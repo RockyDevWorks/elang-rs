@@ -471,8 +471,19 @@ jobs:
           # `.ts`/`.tsx`/`.mts` for TypeScript, `.svelte`/`.vue`
           # for component frameworks, and `package.json` for the
           # npm manifest.
+          # Path matches must use `-path`, not `-name`, so a
+          # `corpus/` or `artifacts/` directory anywhere else in
+          # the tree isn't accidentally pruned. The exclusions
+          # mirror scripts/validate-local.sh's JS source guard:
+          # generated build outputs (`target`, `node_modules`),
+          # generated fuzz outputs (`fuzz/target`, `fuzz/corpus`,
+          # `fuzz/artifacts`), the VCS metadata (`.git`), and the
+          # jscpd cache (`.jscpd-report`).
           if find . \
-              \( -name node_modules -o -name target -o -name 'fuzz/target' -o -name '.jscpd-report' \) -prune -false \
+              \( -path './node_modules' -o -path '*/node_modules' \
+                 -o -path './target' -o -path './*/target' \
+                 -o -path './fuzz/target' -o -path './fuzz/corpus' -o -path './fuzz/artifacts' \
+                 -o -path './.git' -o -path './.jscpd-report' \) -prune -false \
               -o -type f \( \
                 -name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.cts' \
                 -o -name '*.ts' -o -name '*.tsx' -o -name '*.mts' \
