@@ -3,10 +3,12 @@
 # `gitleaks detect --source .` is run by the validation workflow
 # (and locally via `scripts/validate-local.sh`) against the full
 # git history, not just the diff. The allowlist paths cover
-# everything that lives in this repo's tree but is not application
-# source: build outputs, generated docs site, vendored toolchains,
-# and the spec/decision corpora. Any credential URL in source,
-# tests, or human-written docs is still flagged.
+# generated content only — build outputs, generated docs site,
+# vendored toolchains, fuzz runtime data, and proptest regression
+# fixtures. Human-written content (source, tests, ADRs, specs,
+# steering files, README, CHANGELOG, etc.) is always scanned; any
+# intentional example URL in those surfaces must be matched by an
+# explicit allowlist regex below, not by a broad stopword.
 #
 # The Hub's sister config (`RockyDevWorks/elang-hub/.gitleaks.toml`)
 # is the menu reference; this file mirrors its structure with
@@ -20,15 +22,13 @@ useDefault = true
 
 [allowlist]
 description = "ELANG-rs safe allowlist"
+# Generated / machine-produced content only. Anything human-written
+# (source, tests, ADRs, specs, .kiro, README, CHANGELOG, etc.) is
+# scanned; broad stopwords that suppress any secret containing a
+# substring like "example" are intentionally absent so a real
+# credential containing that substring is not silently dropped.
 paths = [
 	'''docs/public/.*''',
-	'''\.kiro/.*''',
-	'''README\.md''',
-	'''SECURITY\.md''',
-	'''CHANGELOG\.md''',
-	'''CODE_OF_CONDUCT\.md''',
-	'''decisions/.*''',
-	'''specs/.*''',
 	'''fuzz/corpus/.*''',
 	'''fuzz/artifacts/.*''',
 	'''crates/.*/proptest-regressions/.*''',
@@ -37,19 +37,15 @@ paths = [
 	'''site/.*''',
 	'''cache/.*'''
 ]
+# Exact, anchored fixture URLs. Anything that is *not* matched here
+# is reported, including intentional-looking examples that share a
+# substring with these fixtures. To allow a new fixture, add its
+# exact full URL with `^...$` anchors — never a substring match.
 regexes = [
 	# `user:pass@host` test fixtures with obviously-fake credentials.
 	'''^https?://user:pass@(fake-host|host)\.invalid$''',
 	# The local scanner regression fixture uses this exact endpoint.
 	'''^http://user:pass@localhost:3000$'''
-]
-# Allow a small set of intentional example URLs in docs and tests.
-regexTarget = "match"
-stopwords = [
-	"example",
-	"invalid",
-	"rs.example.com",
-	"staging.example.internal"
 ]
 
 [[rules]]
@@ -57,4 +53,9 @@ id = "credential-url"
 description = "HTTP URL containing credentials"
 # Escapes must be complete bytes. Include ports in the match so the
 # exact fixture allowlist cannot hide credentials on another port.
-regex = '''https?://(?:[a-zA-Z0-9._-]|%[a-fA-F0-9]{2})+:(?:[a-zA-Z0-9._-]|%[a-fA-F0-9]{2})+@(?:[a-zA-Z0-9.-]+|\[::1\])(?::[0-9]+)?'''
+# Consume any additional `@host[:port]` segments so a URL-confusion
+# attack like `http://user:pass@localhost:3000@attacker.tld` is
+# captured as a single finding (the trailing host makes the URL no
+# longer match the anchored `^http://user:pass@localhost:3000$`
+# allowlist entry above, so the finding is reported).
+regex = '''https?://(?:[a-zA-Z0-9._-]|%[a-fA-F0-9]{2})+:(?:[a-zA-Z0-9._-]|%[a-fA-F0-9]{2})+@(?:[a-zA-Z0-9.-]+|\\[::1\\])(?::[0-9]+)?(?:@[a-zA-Z0-9.-]+(?::[0-9]+)?)*(?:[^@]|$)'''
