@@ -1,0 +1,60 @@
+# Gitleaks configuration for ELANG-rs.
+#
+# `gitleaks detect --source .` is run by the validation workflow
+# (and locally via `scripts/validate-local.sh`) against the full
+# git history, not just the diff. The allowlist paths cover
+# everything that lives in this repo's tree but is not application
+# source: build outputs, generated docs site, vendored toolchains,
+# and the spec/decision corpora. Any credential URL in source,
+# tests, or human-written docs is still flagged.
+#
+# The Hub's sister config (`RockyDevWorks/elang-hub/.gitleaks.toml`)
+# is the menu reference; this file mirrors its structure with
+# paths swapped to the Rust workspace's actual directories.
+
+title = "elang-rs gitleaks"
+
+[extend]
+# Community default ruleset plus a single elang-rs rule below.
+useDefault = true
+
+[allowlist]
+description = "ELANG-rs safe allowlist"
+paths = [
+	'''docs/public/.*''',
+	'''\.kiro/.*''',
+	'''README\.md''',
+	'''SECURITY\.md''',
+	'''CHANGELOG\.md''',
+	'''CODE_OF_CONDUCT\.md''',
+	'''decisions/.*''',
+	'''specs/.*''',
+	'''fuzz/corpus/.*''',
+	'''fuzz/artifacts/.*''',
+	'''crates/.*/proptest-regressions/.*''',
+	'''target/.*''',
+	'''fuzz/target/.*''',
+	'''site/.*''',
+	'''cache/.*'''
+]
+regexes = [
+	# `user:pass@host` test fixtures with obviously-fake credentials.
+	'''^https?://user:pass@(fake-host|host)\.invalid$''',
+	# The local scanner regression fixture uses this exact endpoint.
+	'''^http://user:pass@localhost:3000$'''
+]
+# Allow a small set of intentional example URLs in docs and tests.
+regexTarget = "match"
+stopwords = [
+	"example",
+	"invalid",
+	"rs.example.com",
+	"staging.example.internal"
+]
+
+[[rules]]
+id = "credential-url"
+description = "HTTP URL containing credentials"
+# Escapes must be complete bytes. Include ports in the match so the
+# exact fixture allowlist cannot hide credentials on another port.
+regex = '''https?://(?:[a-zA-Z0-9._-]|%[a-fA-F0-9]{2})+:(?:[a-zA-Z0-9._-]|%[a-fA-F0-9]{2})+@(?:[a-zA-Z0-9.-]+|\[::1\])(?::[0-9]+)?'''
