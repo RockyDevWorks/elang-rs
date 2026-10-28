@@ -59,7 +59,7 @@ jobs:
           # persistence so a malicious npm dependency cannot read
           # the workflow token via the post-checkout git config.
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '26'
       - name: Run Jscpd
