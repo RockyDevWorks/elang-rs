@@ -4,8 +4,9 @@
 # then read release hashes from https://pypi.org/pypi/<package>/<version>/json.
 # Include universal wheels and CPython 3.11+ manylinux x86_64 wheels.
 
-click==8.5.0 \
-    --hash=sha256:255bc9599cf7748b4b1a446ccc735421bd08a2ae529a8b88597d3de5664ee360
+click==8.5.1 \
+    --hash=sha256:8bb5376d2006950386f8c6427613334a2acadc5f559cb80e638d00b4df957e37 \
+    --hash=sha256:9bbfada76703fd1d784b83eea012e3e8c6a001a876543ef104fa56aaaeb072b4
 deepmerge==4.0.0 \
     --hash=sha256:a36dd5810fc3b90bd3e0b681158221361d6a31a6109411b27b211b371fed6d5b
 jinja2==3.1.6 \
