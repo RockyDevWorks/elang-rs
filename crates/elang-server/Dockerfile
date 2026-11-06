@@ -21,7 +21,7 @@
 # `renovate.json` discovers both ARG values and proposes tag and digest
 # updates. The defaults remain overridable via
 # `docker build --build-arg RUST_IMAGE=...` for local experiments.
-ARG RUST_IMAGE=rust:1.99-bookworm@sha256:e9da6f6c3ed5095fd5d33bf7cdf309830a178a8147888f1b2f76d5769bd9306c
+ARG RUST_IMAGE=rust:1.99-bookworm@sha256:e6f2cff35d0f309acf8433b4f05878ed77092602c5065cc81801177da0bb3a9c
 # Use the numeric Debian alias so Renovate can order tag upgrades.
 ARG DEBIAN_IMAGE=debian:13-slim@sha256:89c1ea91e897f0fe0a3731595330bc45b8bdef4047464a07116f891a94054b31
 
