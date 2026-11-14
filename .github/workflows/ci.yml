@@ -216,7 +216,7 @@ jobs:
             ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}-
             ${{ runner.os }}-${{ github.job }}-cargo-
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@f9ee2b3488b5862cca1caf86effaa61f55953001  # cargo-llvm-cov
+        uses: taiki-e/install-action@9299c56f1fb893650f348425bb02c3acf492ebd2  # cargo-llvm-cov
       - name: Generate coverage (lcov)
         run: cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
       - name: Upload to Codecov
